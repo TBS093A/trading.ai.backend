@@ -3,3 +3,5 @@
 
 pump.*
 !pump.py
+
+*.session
