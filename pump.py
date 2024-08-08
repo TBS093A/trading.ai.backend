@@ -52,8 +52,8 @@ def main() -> None:
     telethon_api_id = os.environ.get("TELETHON_API_ID", default="")
     telethon_api_hash = os.environ.get("TELETHON_API_HASH", default="")
 
-    user_id = 6687530364
-    bot_id = 7411839891
+    user_id = int(os.environ.get("TELETHON_USER_ID", default=""))
+    bot_id = int(os.environ.get("TELETHON_BOT_ID", default=""))
 
     kucoin_api_key = os.environ.get("KUCOIN_API_KEY", default="")
     kucoin_api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
