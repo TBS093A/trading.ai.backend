@@ -23,6 +23,7 @@ from pprint import pprint
 from telethon import TelegramClient, events, sync
 
 from api.kucoin import KucoinAPI
+from api.transactions.strategies import DistributedRiskSummationTransactionStrategy
 
 
 logging.basicConfig(
@@ -36,7 +37,11 @@ logger = logging.getLogger(__name__)
 pattern = r"[^:]+:\s*([^\r\n]+)"
 
 async def send_as_bot(api_id, api_hash, bot_session, user, message):
-    await bot_session.send_message(user, message)
+    print(message)
+    await bot_session.send_message(
+        user,
+        "[BOT] " + message
+    )
 
 
 def main() -> None:
@@ -57,39 +62,63 @@ def main() -> None:
     kucoin_api = KucoinAPI(
         api_key = kucoin_api_key,
         api_secret = kucoin_api_secret,
-        api_key_passphrase = kocoin_api_key_passphrase
+        api_key_passphrase = kucoin_api_key_passphrase
     )
 
-    with TelegramClient("user_session", telethon_api_id, telethon_api_hash).start(phone=telethon_api_phone) as client:
-        bot = TelegramClient("bot_session", telethon_api_id, telethon_api_hash).start(bot_token=telethon_bot_token)
-        # Register the update handler so that it gets called
-        # client.add_event_handler(handler)
+    with TelegramClient(
+        "user_session",
+        telethon_api_id,
+        telethon_api_hash
+    ).start(
+        phone=telethon_api_phone
+    ) as client:
+
+        bot = TelegramClient(
+            "bot_session",
+            telethon_api_id,
+            telethon_api_hash
+        ).start(
+            bot_token=telethon_bot_token
+        )
+
         @client.on(events.NewMessage(pattern="(.*)"))
         async def handler_coin(event):
             captured_message = event.message.message
-            if "[BOT]" not in captured_message or "Captured Message:" not in captured_message or "Captured Coin:" not in captured_message:
-                print(f"Recivied Message: {captured_message}")
+            if "[BOT]" not in captured_message:
                 await send_as_bot(
                     telethon_api_id,
                     telethon_api_hash,
                     bot,
                     user=user_id,
-                    message=f"[BOT] Captured Message: {captured_message}"
+                    message=f"Captured Message: {captured_message}"
                 )
-                #await client.send_message("tbs_pump_bot", f"Catched Message: {catched_message}")
+
                 match_coin = re.match(pattern, captured_message)
                 if match_coin:
                     captured_coin = match_coin.group(1)
-                    print(f"Recivied Coin: {captured_coin}")
                     await send_as_bot(
                         telethon_api_id,
                         telethon_api_hash,
                         bot,
                         user=user_id,
-                        message=f"[BOT] Captured Coin: {captured_coin}"
+                        message=f"Captured Coin: {captured_coin}"
                     )
-                    #await client.send_message("tbs_pump_bot", f"Coin Which Will Pumped: {captured_coin}")
-                #await event.respond('Hey!')
+
+                    transaction_strategy = DistributedRiskSummationTransactionStrategy(
+                        api = kucoin_api,
+                        telegram_client_credentials = {
+                            "api_id": telethon_api_id,
+                            "api_hash": telethon_api_hash,
+                            "bot_session": bot,
+                            "user": user_id
+                        },
+                        telegram_sending_method = send_as_bot
+                    )
+
+                    await transaction_strategy.invoke(
+                        coin = captured_coin,
+                        currency = "USDT"
+                    )
 
         # Run the client until Ctrl+C is pressed, or the client disconnects
         print('(Press Ctrl+C to stop)')

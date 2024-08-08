@@ -1,7 +1,11 @@
 import time
+
+import base64
+import hmac
+import hashlib
 from uuid import uuid4
 
-from abstract import AbstractAPI, RequestsFactory
+from .abstract import AbstractAPI, RequestsFactory
 
 
 class KucoinAPI(
@@ -9,16 +13,16 @@ class KucoinAPI(
 ):
 
     __general_endpoint = "https://api.kucoin.com"
-    __buy_endpoint = "/api/v1/order"
-    __sell_endpoint = "/api/v1/order"
+    __buy_endpoint = "/api/v1/order/test"
+    __sell_endpoint = "/api/v1/order/test"
 
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
-            general_endpoint = self.__general_endpoint,
+            general_url = self.__general_endpoint,
             buy_endpoint = self.__buy_endpoint,
             sell_endpoint = self.__sell_endpoint
         )
-        self.__api_key = str(api_key),
+        self.__api_key = str(api_key)
         self.__api_secret = api_secret
         self.__api_key_passphrase = api_key_passphrase
         self.headers = {
@@ -70,7 +74,7 @@ class KucoinAPI(
         passphrase = base64.b64encode(
             hmac.new(
                 self.__api_secret.encode('utf-8'),
-                self.__api_passphrase.encode('utf-8'),
+                self.__api_key_passphrase.encode('utf-8'),
                 hashlib.sha256
             ).digest()
         )

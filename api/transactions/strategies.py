@@ -5,10 +5,27 @@ from time import sleep
 
 class AbstractTransactionStrategy:
 
-    def __init__(self, api: AbstractAPI) -> None:
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method
+    ) -> None:
         self.api = api
+        self.__telegram_client_credentials = telegram_client_credentials
+        self.__telegram_sending_method = telegram_sending_method
 
-    def invoke(self):
+    async def _send_message_to_telegram(self, message: str):
+        return await self.__telegram_sending_method(
+            **dict(
+                self.__telegram_client_credentials,
+                **{
+                    "message": message
+                }
+            )
+        )
+
+    async def invoke(self):
 
         pass
 
@@ -17,51 +34,120 @@ class SingleShotTransactionStrategy(
     AbstractTransactionStrategy
 ):
 
-    def invoke(self, coin: str, currency: str, sell_time_after_buy: int = 30):
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method,
+        sell_time_after_buy: int = 30
+    ):
+        super().__init__(
+            api = api,
+            telegram_client_credentials = telegram_client_credentials,
+            telegram_sending_method = telegram_sending_method
+        )
+        self.sell_time_after_buy = sell_time_after_buy
+
+
+    async def invoke(
+        self,
+        coin: str,
+        currency: str = "USDT",
+        buy_amount: float = 1.0,
+        last_sell_amount: float = 1.0
+    ):
 
         self.api.buy(
            coin = coin,
-           currency_size = 1.0,
+           currency_size = buy_amount,
            used_currency = currency
         )
 
-        sleep(sell_time_after_buy)
+        await self._send_message_to_telegram(
+            message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nWaiting { self.sell_time_after_buy }s for single shot sell..."
+        )
+
+        sleep(sell.sell_time_after_buy)
 
         self.api.sell(
            coin = coin,
-           coin_size = 1.0,
+           coin_size = last_sell_amount,
            used_currency = currency
         )
+
+        await self._send_message_to_telegram(
+            message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }"
+        )
+
 
 
 class DistributedRiskBalancedTransactionStrategy(
     AbstractTransactionStrategy
 ):
 
-    def invoke(self, coin: str, currency: str, sell_time_after_buy: int = 5, sell_repeats: int = 10, sell_percent_per_transaction: float: 0.25, time_between_sells: int = 1,):
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method,
+        sell_time_after_buy: int = 5,
+        sell_repeats: int = 10,
+        sell_percent_per_transaction: float = 0.25,
+        time_between_sells: int = 1
+    ):
+        super().__init__(
+            api = api,
+            telegram_client_credentials = telegram_client_credentials,
+            telegram_sending_method = telegram_sending_method
+        )
+        self.sell_time_after_buy = sell_time_after_buy
+        self.sell_repeats = sell_repeats
+        self.sell_percent_per_transaction = sell_percent_per_transaction
+        self.time_between_sells = time_between_sells
+
+
+    async def invoke(
+        self,
+        coin: str,
+        currency: str = "USDT",
+        buy_amount: float = 1.0,
+        last_sell_amount: float = 1.0
+    ):
 
         self.api.buy(
            coin = coin,
-           currency_size = 1.0,
+           currency_size = buy_amount,
            used_currency = currency
         )
 
-        sleep(sell_time_after_buy)
+        await self._send_message_to_telegram(
+            message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nWaiting { self.sell_time_after_buy }s for balanced distributed risk sell loop..."
+        )
 
-        for repeat_index in range(0, sell_repeats):
+        sleep(self.sell_time_after_buy)
+
+        for repeat_index in range(0, self.sell_repeats):
 
             self.api.sell(
                coin = coin,
-               coin_size = sell_percent_per_transaction,
+               coin_size = self.sell_percent_per_transaction,
                used_currency = currency
             )
 
-            sleep(time_between_sells)
+            await self._send_message_to_telegram(
+                message = f"Sell { int(self.sell_percent_per_transaction * 100) }% of available { coin } for { currency }\n\nWaiting { self.time_between_sells }s for next repeat... (actual repeat: { repeat_index }/{ self.sell_repeats } )"
+            )
+
+            sleep(self.time_between_sells)
 
         self.api.sell(
             coin = coin,
-            coin_size = 1.0,
+            coin_size = last_sell_amount,
             used_currency = currency
+        )
+
+        await self._send_message_to_telegram(
+            message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }"
         )
 
 
@@ -69,31 +155,71 @@ class DistributedRiskSummationTransactionStrategy(
     AbstractTransactionStrategy
 ):
 
-    def invoke(self, coin: str, currency: str, sell_time_after_buy: int = 5, sell_percent_per_transaction: int = 0.05, time_between_sells: int = 1):
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method,
+        sell_time_after_buy: int = 5,
+        sell_percent_per_transaction: float = 0.05,
+        time_between_sells: int = 10
+    ):
+        super().__init__(
+            api = api,
+            telegram_client_credentials = telegram_client_credentials,
+            telegram_sending_method = telegram_sending_method
+        )
+        self.sell_time_after_buy = sell_time_after_buy
+        self.sell_percent_per_transaction = sell_percent_per_transaction
+        self.time_between_sells = time_between_sells
 
-        self.api.buy(
+
+    async def invoke(
+        self,
+        coin: str,
+        currency: str = "USDT",
+        buy_amount: float = 1.0,
+        last_sell_amount: float = 1.0
+    ):
+
+        buy_info = self.api.buy(
            coin = coin,
-           currency_size = 1.0,
+           currency_size = buy_amount,
            used_currency = currency
         )
 
-        sleep(sell_time_after_buy)
+        await self._send_message_to_telegram(
+                message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for summation distributed risk sell loop..."
+        )
 
-        while sell_percent_per_transaction < 1.0:
+        sleep(self.sell_time_after_buy)
 
-            sell_percent_per_transaction += sell_percent_per_transaction
+        while self.sell_percent_per_transaction < 1.0:
 
-            self.api.sell(
+            self.sell_percent_per_transaction += self.sell_percent_per_transaction
+
+            if self.sell_percent_per_transaction >= 1.0:
+
+                break
+
+            sell_info = self.api.sell(
                coin = coin,
-               coin_size = sell_percent_per_transaction,
+               coin_size = self.sell_percent_per_transaction,
                used_currency = currency
             )
 
-            sleep(time_between_sells)
+            await self._send_message_to_telegram(
+                    message = f"Sell { int(self.sell_percent_per_transaction * 100) }% of available { coin } for { currency }\n\nSell Information:\n\n{ sell_info }\n\nWaiting { self.time_between_sells }s for next repeat..."
+            )
 
-        self.api.sell(
+            sleep(self.time_between_sells)
+
+        last_sell_info = self.api.sell(
             coin = coin,
-            coin_size = 1.0,
+            coin_size = last_sell_amount,
             used_currency = currency
         )
 
+        await self._send_message_to_telegram(
+                message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
+        )
