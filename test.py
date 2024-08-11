@@ -67,7 +67,7 @@ class TestKucoinAPI(unittest.TestCase):
     def test_buy_assset(self):
         status = self.__kucoin_api.buy(
            coin = "BTC",
-           currency_percent_size_to_buy = "1",
+           currency_percent_size_to_buy = "0",
            used_currency = "USDT"
         )
         print(status)
@@ -78,7 +78,7 @@ class TestKucoinAPI(unittest.TestCase):
     def test_sell_assset(self):
         status = self.__kucoin_api.sell(
            coin = "BTC",
-           coin_percent_size_to_sell = "1",
+           coin_percent_size_to_sell = "0",
            used_currency = "USDT"
         )
         print(status)
