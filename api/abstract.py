@@ -1,5 +1,7 @@
 import requests
 
+from pprint import pprint
+
 
 class AbstractAPI:
 
@@ -41,10 +43,8 @@ class RequestsFactory:
                     params = get_parameters,
                     json = post_parameters
                 )
-                print(response.text)
                 return response.json()
             except Exception as error:
-                print(error)
                 raise error
         raise Exception(
             message="Bad Request Method"

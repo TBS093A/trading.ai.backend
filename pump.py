@@ -57,7 +57,7 @@ def main() -> None:
 
     kucoin_api_key = os.environ.get("KUCOIN_API_KEY", default="")
     kucoin_api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
-    kucoin_api_secret = os.environ.get("KUCOIN_API_HASH", default="")
+    kucoin_api_secret = os.environ.get("KUCOIN_API_SECRET", default="")
 
     kucoin_api = KucoinAPI(
         api_key = kucoin_api_key,

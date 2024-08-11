@@ -3,6 +3,7 @@ import time
 import base64
 import hmac
 import hashlib
+import json
 from uuid import uuid4
 
 from .abstract import AbstractAPI, RequestsFactory
@@ -22,10 +23,9 @@ class KucoinAPI(
         self.__api = RequestsFactory(
             general_url = self.__general_url
         )
-        self.__api_key = str(api_key)
+        self.__api_key = api_key
         self.__api_secret = api_secret
         self.__api_key_passphrase = api_key_passphrase
-        print(api_key_passphrase)
         self.headers = {
             "KC-API-KEY": self.__api_key,
             "KC-API-SIGN": "",
@@ -48,9 +48,11 @@ class KucoinAPI(
 
 
     def __ordinary_request(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
-        self.__prepare_headers(
+        self._prepare_headers(
             request_method = request_method,
             endpoint = used_endpoint,
+            get_params = get_params,
+            post_params = post_params
         )
         return self.__api.api_request(
             used_endpoint,
@@ -61,10 +63,6 @@ class KucoinAPI(
         )
 
     def __market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
-        self.__prepare_headers(
-            request_method = request_method,
-            endpoint = used_endpoint,
-        )
         post_params = {
             "clientOid": str(uuid4()),
             "side": transaction_side,
@@ -72,6 +70,11 @@ class KucoinAPI(
             "type": "market",
             "size": str(used_currency)
         }
+        self._prepare_headers(
+            request_method = request_method,
+            endpoint = used_endpoint,
+            post_params = post_params
+        )
         return self.__api.api_request(
             used_endpoint,
             request_method,
@@ -80,10 +83,6 @@ class KucoinAPI(
         )
 
     def __limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
-        self.__prepare_headers(
-            request_method = request_method,
-            endpoint = used_endpoint,
-        )
         post_params = {
             "clientOid": str(uuid4()),
             "side": transaction_side,
@@ -92,6 +91,11 @@ class KucoinAPI(
             "size": str(coin_size),
             "price": str(coin_price)
         }
+        self._prepare_headers(
+            request_method = request_method,
+            endpoint = used_endpoint,
+            post_params = post_params
+        )
         return self.__api.api_request(
             used_endpoint,
             request_method,
@@ -99,18 +103,34 @@ class KucoinAPI(
             post_parameters = post_params
         )
 
-    def __prepare_headers(self, request_method: str, endpoint: str):
-        now_time = self.__ordinary_request_without_headers(
+    def _prepare_headers(self, request_method: str, endpoint: str, get_params: dict = {}, post_params: dict = {}):
+        server_time = self.__ordinary_request_without_headers(
             used_endpoint = self.__server_timestamp
         )["data"]
+
+        local_time = int(time.time() * 1000)
+
+        now_time = local_time
+
         self.headers["KC-API-TIMESTAMP"] = str(now_time)
 
-        str_to_signature = str(now_time) + request_method + endpoint
+        get_parameters_str = ""
+        if len(get_params.keys()) > 0:
+            get_parameters_str = "?"
+            for key, value in get_params.items():
+                get_parameters_str += f"{ key }={ value }&"
+            get_parameters_str = get_parameters_str[:-1]
+
+        post_parameters_json = ""
+        if len(post_params) > 0:
+            post_parameters_json = json.dumps(post_params)
+
+        str_to_signature = str(now_time) + request_method + endpoint + get_parameters_str + post_parameters_json
 
         signature = base64.b64encode(
             hmac.new(
-                self.__api_secret.encode('utf-8'),
                 str_to_signature.encode('utf-8'),
+                self.__api_secret.encode('utf-8'),
                 hashlib.sha256
             ).digest()
         )
@@ -125,7 +145,7 @@ class KucoinAPI(
             ).digest()
         )
 
-        self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
+        self.headers["KC-API-PASSPHRASE"] = passphrase
 
     def check_assets_availability(self, currency: str = None, asset_type: str = None):
         get_params = {}
@@ -151,9 +171,6 @@ class KucoinAPI(
         available_assets = self.check_assets_availability(
             currency = used_currency
         )
-
-        print("available assets:")
-        print(available_assets)
 
         return self.__limit_order_request(
             transaction_side = "sell",
