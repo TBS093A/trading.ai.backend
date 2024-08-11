@@ -26,28 +26,25 @@ class RequestsFactory:
 
     def __init__(
         self,
-        general_url="",
-        buy_endpoint="",
-        sell_endpoint=""
+        general_url=""
     ) -> None:
         self.general_url = general_url
-        self.buy_endpoint = buy_endpoint
-        self.sell_endpoint = sell_endpoint
 
-
-    def api_request(self, request_method: str, headers: dict, *get_parameters, **post_parameters) -> dict:
+    def api_request(self, endpoint: str, request_method: str, headers: dict, get_parameters: dict = {}, post_parameters: dict = {}) -> dict:
         response = ""
         if request_method in self.__api_methods:
             try:
                 response = requests.request(
                     request_method,
-                    self.general_url + self.buy_endpoint,
+                    self.general_url + endpoint,
                     headers = headers,
                     params = get_parameters,
                     json = post_parameters
                 )
+                print(response.text)
                 return response.json()
             except Exception as error:
+                print(error)
                 raise error
         raise Exception(
             message="Bad Request Method"

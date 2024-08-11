@@ -182,9 +182,15 @@ class DistributedRiskSummationTransactionStrategy(
         last_sell_amount: float = 1.0
     ):
 
+        assets_availbility_before_buy = self.api.check_assets_availability()
+
+        await self._send_message_to_telegram(
+                message = f"Available assets:\n\n{ assets_availbility_before_buy }"
+        )
+
         buy_info = self.api.buy(
            coin = coin,
-           currency_size = buy_amount,
+           currency_percent_size_to_buy = buy_amount,
            used_currency = currency
         )
 
@@ -204,7 +210,7 @@ class DistributedRiskSummationTransactionStrategy(
 
             sell_info = self.api.sell(
                coin = coin,
-               coin_size = self.sell_percent_per_transaction,
+               coin_percent_size_to_sell = self.sell_percent_per_transaction,
                used_currency = currency
             )
 
@@ -216,7 +222,7 @@ class DistributedRiskSummationTransactionStrategy(
 
         last_sell_info = self.api.sell(
             coin = coin,
-            coin_size = last_sell_amount,
+            coin_percent_size_to_sell = last_sell_amount,
             used_currency = currency
         )
 

@@ -12,19 +12,20 @@ class KucoinAPI(
     AbstractAPI
 ):
 
-    __general_endpoint = "https://api.kucoin.com"
-    __buy_endpoint = "/api/v1/order/test"
-    __sell_endpoint = "/api/v1/order/test"
+    __general_url = "https://api.kucoin.com"
+    __buy_endpoint = "/api/v1/orders"
+    __sell_endpoint = "/api/v1/orders"
+    __assets_availability = "/api/v1/accounts"
+    __server_timestamp = "/api/v1/timestamp"
 
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
-            general_url = self.__general_endpoint,
-            buy_endpoint = self.__buy_endpoint,
-            sell_endpoint = self.__sell_endpoint
+            general_url = self.__general_url
         )
         self.__api_key = str(api_key)
         self.__api_secret = api_secret
         self.__api_key_passphrase = api_key_passphrase
+        print(api_key_passphrase)
         self.headers = {
             "KC-API-KEY": self.__api_key,
             "KC-API-SIGN": "",
@@ -34,29 +35,74 @@ class KucoinAPI(
             "Content-Type": "application/json"
         }
 
-    def __order_request(self, transaction_type: str, coin: str, size: float, used_currency: str, used_endpoint_for_header_creation: str):
-        request_method = "POST"
+    def __ordinary_request_without_headers(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
+        return self.__api.api_request(
+            used_endpoint,
+            request_method,
+            {
+                "Content-Type": "application/json"
+            },
+            get_parameters = get_params,
+            post_parameters = post_params
+        )
+
+
+    def __ordinary_request(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
         self.__prepare_headers(
             request_method = request_method,
-            endpoint = used_endpoint_for_header_creation,
+            endpoint = used_endpoint,
+        )
+        return self.__api.api_request(
+            used_endpoint,
+            request_method,
+            self.headers,
+            get_parameters = get_params,
+            post_parameters = post_params
+        )
+
+    def __market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
+        self.__prepare_headers(
+            request_method = request_method,
+            endpoint = used_endpoint,
         )
         post_params = {
             "clientOid": str(uuid4()),
-            "side": transaction_type,
+            "side": transaction_side,
             "symbol": f"{ coin }-{ used_currency }",
             "type": "market",
-            "size": str(size)
+            "size": str(used_currency)
         }
         return self.__api.api_request(
+            used_endpoint,
             request_method,
             self.headers,
-            *(),
-            **post_params
+            post_parameters = post_params
         )
 
+    def __limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
+        self.__prepare_headers(
+            request_method = request_method,
+            endpoint = used_endpoint,
+        )
+        post_params = {
+            "clientOid": str(uuid4()),
+            "side": transaction_side,
+            "symbol": f"{ coin }-{ used_currency }",
+            "type": "market",
+            "size": str(coin_size),
+            "price": str(coin_price)
+        }
+        return self.__api.api_request(
+            used_endpoint,
+            request_method,
+            self.headers,
+            post_parameters = post_params
+        )
 
     def __prepare_headers(self, request_method: str, endpoint: str):
-        now_time = int(time.time() * 1000)
+        now_time = self.__ordinary_request_without_headers(
+            used_endpoint = self.__server_timestamp
+        )["data"]
         self.headers["KC-API-TIMESTAMP"] = str(now_time)
 
         str_to_signature = str(now_time) + request_method + endpoint
@@ -79,24 +125,42 @@ class KucoinAPI(
             ).digest()
         )
 
-        self.headers["KC-API-PASSPHRASE"] = passphrase
+        self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
 
-
-    def buy(self, coin: str, currency_size: float, used_currency: str = "USDT"):
-        return self.__order_request(
-            transaction_type = "buy",
-            coin = coin,
-            size = currency_size,
-            used_currency = used_currency,
-            used_endpoint_for_header_creation = self.__buy_endpoint
+    def check_assets_availability(self, currency: str = None, asset_type: str = None):
+        get_params = {}
+        if currency != None and type(currency) == str:
+            get_params["currency"] = currency
+        if asset_type != None and type(asset_type) == str:
+            get_params["type"] = asset_type
+        return self.__ordinary_request(
+            used_endpoint = self.__assets_availability,
+            get_params = get_params
         )
 
-    def sell(self, coin: str, coin_size: float, used_currency: str = "USDT"):
-        return self.__order_request(
-            transaction_type = "sell",
+    def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
+        return self.__market_order_request(
+            transaction_side = "buy",
             coin = coin,
-            size = coin_size,
+            currency_size = currency_percent_size_to_buy,
             used_currency = used_currency,
-            used_endpoint_for_header_creation = self.__sell_endpoint
+            used_endpoint = self.__buy_endpoint
+        )
+
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
+        available_assets = self.check_assets_availability(
+            currency = used_currency
+        )
+
+        print("available assets:")
+        print(available_assets)
+
+        return self.__limit_order_request(
+            transaction_side = "sell",
+            coin = coin,
+            coin_size = coin_percent_size_to_sell,
+            coin_price = 0,
+            used_currency = used_currency,
+            used_endpoint = self.__sell_endpoint
         )
 
