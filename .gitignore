@@ -4,4 +4,4 @@
 pump.*
 !pump.py
 
-*.session
+*.session-journal
