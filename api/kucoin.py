@@ -129,8 +129,8 @@ class KucoinAPI(
 
         signature = base64.b64encode(
             hmac.new(
-                str_to_signature.encode('utf-8'),
                 self.__api_secret.encode('utf-8'),
+                str_to_signature.encode('utf-8'),
                 hashlib.sha256
             ).digest()
         )
