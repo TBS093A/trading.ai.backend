@@ -110,7 +110,7 @@ class KucoinAPI(
 
         local_time = int(time.time() * 1000)
 
-        now_time = server_time
+        now_time = local_time
 
         self.headers["KC-API-TIMESTAMP"] = str(now_time)
 
