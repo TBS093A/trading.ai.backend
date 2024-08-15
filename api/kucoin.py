@@ -18,7 +18,7 @@ class KucoinAPI(
     __sell_endpoint = "/api/v1/orders"
     __assets_availability = "/api/v1/accounts"
     __server_timestamp = "/api/v1/timestamp"
-    __lot_size_check = "/api/v1/contracts/"
+    __lot_size_check = "/api/v1/symbols"
 
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
@@ -36,7 +36,7 @@ class KucoinAPI(
             "Content-Type": "application/json"
         }
 
-    def __ordinary_request_without_headers(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
+    def _ordinary_request_without_headers(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
         return self.__api.api_request(
             used_endpoint,
             request_method,
@@ -48,7 +48,7 @@ class KucoinAPI(
         )
 
 
-    def __ordinary_request(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
+    def _ordinary_request(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
         self._prepare_headers(
             request_method = request_method,
             endpoint = used_endpoint,
@@ -63,7 +63,7 @@ class KucoinAPI(
             post_parameters = post_params
         )
 
-    def __market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
+    def _market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
         post_params = {
             "clientOid": str(uuid4()),
             "side": transaction_side,
@@ -83,7 +83,7 @@ class KucoinAPI(
             post_parameters = post_params
         )
 
-    def __limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
+    def _limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str, used_endpoint: str, request_method: str = "POST"):
         post_params = {
             "clientOid": str(uuid4()),
             "side": transaction_side,
@@ -116,7 +116,7 @@ class KucoinAPI(
         self.headers["KC-API-TIMESTAMP"] = str(now_time)
 
         get_parameters_str = ""
-        if len(get_params.keys()) > 0:
+        if len(get_params) > 0:
             get_parameters_str = "?"
             for key, value in get_params.items():
                 get_parameters_str += f"{ key }={ value }&"
@@ -125,6 +125,9 @@ class KucoinAPI(
         post_parameters_json = ""
         if len(post_params) > 0:
             post_parameters_json = json.dumps(post_params)
+
+        if len(get_params) == 0 and len(post_params) == 0:
+            endpoint += "/"
 
         str_to_signature = str(now_time) + request_method + endpoint + get_parameters_str + post_parameters_json
 
@@ -154,7 +157,7 @@ class KucoinAPI(
             get_params["currency"] = currency
         if asset_type != None and type(asset_type) == str:
             get_params["type"] = asset_type
-        available_assets = self.__ordinary_request(
+        available_assets = self._ordinary_request(
             used_endpoint = self.__assets_availability,
             get_params = get_params
         )
@@ -166,13 +169,29 @@ class KucoinAPI(
                         float(asset["available"]) * float(percent_size)
                     )
 
-    def check_lot_size_for_symbol(self, symbol: str = "BTCUSDT"):
-        return self.__ordinary_request(
-            used_endpoint = self.__lot_size_check + symbol
+    def get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+        symbol_list = self._ordinary_request(
+            used_endpoint = self.__lot_size_check
         )
+        for symbol in symbol_list:
+            if symbol["baseCurrency"] = base_currency:
+                if symbol["quoteCurrency"] = quote_currency:
+                    return {
+                        "base_min_size": symbol["baseMinSize"],
+                        "base_max_size": symbol["baseMaxSize"],
+                        "base_increment": symbol["baseIncrement"],
+
+                        "quote_min_size": symbol["quoteMinSize"],
+                        "quote_max_size": symbol["quoteMaxSize"],
+                        "quote_increment": symbol["quoteIncrement"],
+
+                        "price_min_size": symbol["priceMinSize"],
+                        "price_max_size": symbol["priceMaxSize"],
+                        "price_increment": symbol["priceIncrement"],
+                    }
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
-        return self.__market_order_request(
+        return self._market_order_request(
             transaction_side = "buy",
             coin = coin,
             currency_size = currency_percent_size_to_buy,
@@ -186,11 +205,12 @@ class KucoinAPI(
             currency = coin,
         )
 
-        symbol_lot_size = self.check_lot_size_for_symbol(
-            symbol = f"{ coin }{ used_currency }"
+        symbol_lot_size = self.get_lot_size(
+            base_currency = coin,
+            quote_currency = used_currency,
         )
 
-        return self.__limit_order_request(
+        return self._limit_order_request(
             transaction_side = "sell",
             coin = coin,
             coin_size = symbol_lot_size["data"]["lotSize"],
