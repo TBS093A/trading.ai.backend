@@ -175,7 +175,7 @@ class KucoinAPI(
         )
         for symbol in symbol_list:
             if symbol["baseCurrency"] == base_currency:
-                if symbol["quoteCurrency"] = quote_currency:
+                if symbol["quoteCurrency"] == quote_currency:
                     return {
                         "base_min_size": symbol["baseMinSize"],
                         "base_max_size": symbol["baseMaxSize"],
