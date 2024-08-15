@@ -41,7 +41,7 @@ class RequestsFactory:
                     self.general_url + endpoint,
                     headers = headers,
                     params = get_parameters,
-                    json = post_parameters
+                    #json = post_parameters
                 )
                 if int(response.json()["code"][:-3]) >= 400:
                     raise Exception(
