@@ -148,7 +148,7 @@ class KucoinAPI(
 
         self.headers["KC-API-PASSPHRASE"] = passphrase
 
-    def get_available_currency_percent_price(self, currency: str = None, percent_size: float, asset_type: str = None):
+    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = None):
         get_params = {}
         if currency != None and type(currency) == str:
             get_params["currency"] = currency
@@ -182,8 +182,8 @@ class KucoinAPI(
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
         coin_sell_price = self.get_available_currency_percent_price(
-            currency = coin,
             percent_size = coin_percent_size_to_sell,
+            currency = coin,
         )
 
         symbol_lot_size = self.check_lot_size_for_symbol(

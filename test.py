@@ -50,8 +50,8 @@ class TestKucoinAPI(unittest.TestCase):
 
     def test_get_available_currency_percent_price(self):
         status = self.__kucoin_api.get_available_currency_percent_price(
-            currency = "USDT",
-            percent_size = 0.5
+            percent_size = 0.5,
+            currency = "USDT"
         )
         print(status)
         self.assertTrue(
@@ -60,8 +60,8 @@ class TestKucoinAPI(unittest.TestCase):
 
     def test_get_available_currency_percent_price(self):
         status = self.__kucoin_api.get_available_currency_percent_price(
-            currency = "USDT",
-            percent_size = 1.0
+            percent_size = 1.0,
+            currency = "USDT"
         )
         print(status)
         self.assertTrue(
