@@ -70,7 +70,7 @@ class TestKucoinAPI(unittest.TestCase):
 
     def test_assets_check_lot_size(self):
         status = self.__kucoin_api.get_lot_size(
-            base_currency = "BTC"
+            base_currency = "BTC",
             quote_currency = "USDT"
         )
         print(status)
@@ -80,7 +80,7 @@ class TestKucoinAPI(unittest.TestCase):
 
     def test_assets_check_lot_size(self):
         status = self.__kucoin_api.get_lot_size(
-            base_currency = "ETH"
+            base_currency = "ETH",
             quote_currency = "USDT"
         )
         print(status)
