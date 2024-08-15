@@ -126,10 +126,11 @@ class KucoinAPI(
 
         get_parameters_str = ""
         if len(get_params) > 0:
-            get_parameters_str = "?"
-            for key, value in get_params.items():
-                get_parameters_str += f"{ key }={ value }&"
-            get_parameters_str = get_parameters_str[:-1]
+            #get_parameters_str = "?"
+            #for key, value in get_params.items():
+            #    get_parameters_str += f"{ key }={ value }&"
+            #get_parameters_str = get_parameters_str[:-1]
+            get_parameters_str = json.dumps(get_params)
 
         post_parameters_json = ""
         if len(post_params) > 0:
