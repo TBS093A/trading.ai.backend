@@ -139,7 +139,7 @@ class KucoinAPI(
             ).digest()
         )
 
-        self.headers["KC-API-SIGN"] = signature
+        self.headers["KC-API-SIGN"] = signature.decode("utf-8")
 
         if is_v1_api == False:
 
@@ -151,7 +151,7 @@ class KucoinAPI(
                 ).digest()
             )
 
-            self.headers["KC-API-PASSPHRASE"] = passphrase
+            self.headers["KC-API-PASSPHRASE"] = passphrase.decode("utf-8")
 
         if is_v1_api == True:
 
