@@ -47,6 +47,10 @@ class RequestsFactory:
                     raise Exception(
                         str(response.json())
                     )
+                if "data" not in response.json().keys():
+                    raise Exception(
+                        str(response.json())
+                    )
                 return response.json()["data"]
             except Exception as error:
                 raise error
