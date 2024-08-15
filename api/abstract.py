@@ -36,13 +36,35 @@ class RequestsFactory:
         response = ""
         if request_method in self.__api_methods:
             try:
-                response = requests.request(
-                    request_method,
-                    self.general_url + endpoint,
-                    headers = headers,
-                    params = get_parameters,
-                    #json = post_parameters
+                response = None
+                if len(get_parameters) == 0 and len(post_parameters) == 0:
+                    response = requests.request(
+                        request_method,
+                        self.general_url + endpoint,
+                        headers = headers
                 )
+                if len(get_parameters) > 0 and len(post_parameters) == 0:
+                    response = requests.request(
+                        request_method,
+                        self.general_url + endpoint,
+                        headers = headers,
+                        params = get_parameters
+                )
+                if len(get_parameters) == 0 and len(post_parameters) > 0:
+                    response = requests.request(
+                        request_method,
+                        self.general_url + endpoint,
+                        headers = headers,
+                        json = post_parameters
+                    )
+                if len(get_parameters) > 0 and len(post_parameters) > 0:
+                    response = requests.request(
+                        request_method,
+                        self.general_url + endpoint,
+                        headers = headers,
+                        params = get_parameters,
+                        json = post_parameters
+                    )
                 if int(response.json()["code"][:-3]) >= 400:
                     raise Exception(
                         str(response.json())
