@@ -107,7 +107,7 @@ class KucoinAPI(
     def _prepare_headers(self, request_method: str, endpoint: str, get_params: dict = {}, post_params: dict = {}):
         server_time = self._ordinary_request_without_headers(
             used_endpoint = self.__server_timestamp
-        )["data"]
+        )
 
         local_time = int(time.time() * 1000)
 
