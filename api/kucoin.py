@@ -16,9 +16,18 @@ class KucoinAPI(
     __general_url = "https://api.kucoin.com"
     __buy_endpoint = "/api/v1/orders"
     __sell_endpoint = "/api/v1/orders"
-    __assets_availability = "/api/v1/accounts"
+    __assets_availability = "/api/v1/sub-accounts"
     __server_timestamp = "/api/v1/timestamp"
     __lot_size_check = "/api/v1/symbols"
+    __all_orders = "/api/v1/limit/orders"
+    __get_ticker = "/api/v1/market/orderbook/level1"
+
+    __buy_transaction = {}
+
+    __actual_size = 0.0
+    __actual_price = 0.0
+
+    __sell_transactions = {}
 
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
@@ -158,17 +167,19 @@ class KucoinAPI(
             self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
 
 
-    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "trade"):
+    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "tradeAccounts"):
         available_assets = self._ordinary_request(
             used_endpoint = self.__assets_availability
         )
 
-        for asset in available_assets:
-            if asset["currency"] == currency:
-                if asset["type"] == asset_type:
-                    return str(
-                        float(asset["available"]) * float(percent_size)
-                    )
+        for account in available_accounts:
+            if "mainAccounts" in account:
+                if len(account[asset_type]) > 0:
+                    for asset in account[asset_type].items():
+                        if asset["currency"] == currency:
+                            return str(
+                                float(asset["available"]) * float(percent_size)
+                            )
 
     def get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         symbol_list = self._ordinary_request(
@@ -190,31 +201,75 @@ class KucoinAPI(
                         "price_increment": symbol["priceIncrement"],
                     }
 
-    def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
-        return self._market_order_request(
-            transaction_side = "buy",
-            coin = coin,
-            currency_size = currency_percent_size_to_buy,
-            used_currency = used_currency,
-            used_endpoint = self.__buy_endpoint
+    def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+        return self._ordinary_request(
+            used_endpoint = self.__get_ticker
+            get_params = {
+                "symbol": f"{ base_currency }-{ qoute_currency }"
+            }
         )
 
-    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
-        # coin_sell_price = self.get_available_currency_percent_price(
-        #     percent_size = coin_percent_size_to_sell,
-        #     currency = coin,
-        # )
+    def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
+
+        # get available usdt amount for compute how much coin size will be buy
+        # it will be good for small shitcoins beacuse BTC always gets all usdt
+        # if size is 1.0 - shitcoin should get smaller amount than 500$
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
             quote_currency = used_currency,
         )
 
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
+
+        available_currency_assets = self.get_available_currency_percent_price(
+            percent_size = currency_percent_size_to_buy,
+            currency = used_currency
+        )
+
+        coin_size_to_buy = (available_currency_assets / float(ticker_data["price"])) * float(ticker_data["size"])
+
+        buy_request = self._market_order_request(
+            transaction_side = "buy",
+            coin = coin,
+            currency_size = coin_size_to_buy,
+            used_currency = used_currency,
+            used_endpoint = self.__buy_endpoint
+        )
+
+        buy_transaction_id = buy_request["orderId"]
+
+        transactions_details_list = self._ordinary_request(
+            used_endpoint = self.__all_orders
+        )
+
+        for transaction in transactions_details_list:
+            if transaction["id"] == buy_transaction:
+                self.__buy_transaction = transaction
+                self.__actual_size = transaction["size"]
+                self.__actual_price = transaction["price"]
+
+        return buy_request
+
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
+
+        symbol_lot_size = self.get_lot_size(
+            base_currency = coin,
+            quote_currency = used_currency,
+        )
+
+        coin_sell_size = self.__actual_size * coin_percent_size_to_sell
+
+        self.__actual_size -= sell_size
+
         return self._limit_order_request(
             transaction_side = "sell",
             coin = coin,
-            coin_size = symbol_lot_size["base_max_size"],
-            coin_price = coin_percent_size_to_sell, #coin_sell_price,
+            coin_size = coin_sell_size,
+            coin_price = self.__actual_price,
             used_currency = used_currency,
             used_endpoint = self.__sell_endpoint
         )
