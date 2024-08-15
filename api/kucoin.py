@@ -213,8 +213,8 @@ class KucoinAPI(
         return self._limit_order_request(
             transaction_side = "sell",
             coin = coin,
-            coin_size = symbol_lot_size["lotSize"],
-            coin_price = coin_sell_price,
+            coin_size = symbol_lot_size["base_min_size"],
+            coin_price = coin_percent_size_to_sell, #coin_sell_price,
             used_currency = used_currency,
             used_endpoint = self.__sell_endpoint
         )
