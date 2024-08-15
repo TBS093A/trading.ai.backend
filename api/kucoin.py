@@ -272,7 +272,7 @@ class KucoinAPI(
             quote_currency = used_currency
         )
 
-        coin_sell_proportion = float(self.__actual_size) * float(coin_percent_size_to_sell
+        coin_sell_proportion = float(self.__actual_size) * float(coin_percent_size_to_sell)
 
         coin_sell_size = self.__truncate_float(
             value = coin_sell_proportion,
