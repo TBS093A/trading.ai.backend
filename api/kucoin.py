@@ -131,8 +131,6 @@ class KucoinAPI(
 
         str_to_signature = str(server_time) + request_method.upper() + endpoint + get_parameters_str + post_parameters_json
 
-        print(str_to_signature)
-
         signature = base64.b64encode(
             hmac.new(
                 self.__api_secret.encode('utf-8'),
@@ -165,14 +163,16 @@ class KucoinAPI(
             used_endpoint = self.__assets_availability
         )
 
-        for account in available_accounts:
-            if asset_type in account:
-                if len(account[asset_type]) > 0:
-                    for asset in account[asset_type].items():
-                        if asset["currency"] == currency:
-                            return str(
-                                float(asset["available"]) * float(percent_size)
-                            )
+        return available_accounts
+
+        #for account in available_accounts:
+        #    if asset_type in account:
+        #        if len(account[asset_type]) > 0:
+        #            for asset in account[asset_type].items():
+        #                if asset["currency"] == currency:
+        #                    return str(
+        #                        float(asset["available"]) * float(percent_size)
+        #                    )
 
     def get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         symbol_list = self._ordinary_request(
