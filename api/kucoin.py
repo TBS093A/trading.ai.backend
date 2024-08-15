@@ -284,7 +284,7 @@ class KucoinAPI(
         coin_low_limit_price = float(ticker_data["price"]) - float(ticker_data["price"]) * 0.25
 
         coin_price = self.__truncate_float(
-            value = coin_limit_price,
+            value = coin_low_limit_price,
             precision = float(symbol_lot_size["price_limit_rate"])
         )
 
