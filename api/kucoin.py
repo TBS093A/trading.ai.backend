@@ -235,7 +235,7 @@ class KucoinAPI(
         )
 
         for transaction in transactions_details_list:
-            if transaction["id"] == buy_transaction:
+            if transaction["id"] == buy_transaction_id:
                 self.__buy_transaction = transaction
                 self.__actual_size = transaction["size"]
                 self.__actual_price = transaction["price"]
