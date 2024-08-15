@@ -84,6 +84,7 @@ class TestKucoinAPI(unittest.TestCase):
         print(status)
         self.assertTrue(
             "200" in status["code"]
+        )
 
     def test_buy_assset(self):
         status = self.__kucoin_api.buy(
