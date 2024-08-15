@@ -157,22 +157,30 @@ class KucoinAPI(
 
             self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
 
+    def __truncate_float(value: float, precision: float) -> float:
+        """
+        Truncates a floating-point number to a specific precision.
 
-    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "tradeAccounts"):
-        available_accounts = self._ordinary_request(
+        :param value: The floating-point number to truncate.
+        :param precision: The precision to truncate to (e.g., 0.0001).
+        :return: The truncated floating-point number.
+        """
+        factor = 1 / precision
+        truncated_value = int(value * factor) / factor
+        return truncated_value
+
+    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "trade"):
+        available_assets = self._ordinary_request(
             used_endpoint = self.__assets_availability
         )
 
-        return available_accounts
-
-        #for account in available_accounts:
-        #    if asset_type in account:
-        #        if len(account[asset_type]) > 0:
-        #            for asset in account[asset_type].items():
-        #                if asset["currency"] == currency:
-        #                    return str(
-        #                        float(asset["available"]) * float(percent_size)
-        #                    )
+        for asset in available_assets:
+            if asset["currency"] == currency:
+                if asset["type"] == asset_type:
+                    return str(
+                        float(asset["available"]) * float(percent_size)
+                    )
+        return 0.0
 
     def get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         symbol_list = self._ordinary_request(
@@ -218,7 +226,15 @@ class KucoinAPI(
             quote_currency = used_currency
         )
 
-        coin_size_to_buy = symbol_lot_size["base_max_size"] # (available_currency_assets / float(ticker_data["price"])) * float(ticker_data["size"])
+        available_currency_assets = self.get_available_currency_percent_price(
+            percent_size = currency_percent_size_to_buy,
+            currency = used_currency
+        )
+
+        coin_size_to_buy = self.__truncate_float(
+            value = (available_currency_assets / float(ticker_data["price"])) * float(ticker_data["size"]),
+            precision = float(symbol_lot_size["base_min_size"])
+        )
 
         buy_request = self._market_order_request(
             transaction_side = "buy",
@@ -249,15 +265,28 @@ class KucoinAPI(
             quote_currency = used_currency,
         )
 
-        coin_sell_size = float(self.__actual_size) * float(coin_percent_size_to_sell)
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
+
+        coin_sell_size = self.__truncate_float(
+            value = float(self.__actual_size) * float(coin_percent_size_to_sell),
+            precision = float(symbol_lot_size["base_min_size"])
+        )
 
         self.__actual_size -= coin_sell_size
+
+        coin_price = self.__truncate_float(
+            value = float(ticker["price"]) - float(ticker["price"] * 0.25,
+            precision = float(symbol_lot_size["price_limit_rate"])
+        )
 
         return self._limit_order_request(
             transaction_side = "sell",
             coin = coin,
             coin_size = coin_sell_size,
-            coin_price = self.__actual_price,
+            coin_price = coin_price,
             used_currency = used_currency,
             used_endpoint = self.__sell_endpoint
         )
