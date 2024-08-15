@@ -104,7 +104,7 @@ class KucoinAPI(
             post_parameters = post_params
         )
 
-    def _prepare_headers(self, request_method: str, endpoint: str, get_params: dict = {}, post_params: dict = {}):
+    def _prepare_headers(self, request_method: str, endpoint: str, get_params: dict = {}, post_params: dict = {}, is_v1_api: bool = False):
         server_time = self._ordinary_request_without_headers(
             used_endpoint = self.__server_timestamp
         )
@@ -131,6 +131,8 @@ class KucoinAPI(
 
         str_to_signature = str(now_time) + request_method + endpoint + get_parameters_str + post_parameters_json
 
+        print(str_to_signature)
+
         signature = base64.b64encode(
             hmac.new(
                 self.__api_secret.encode('utf-8'),
@@ -141,30 +143,31 @@ class KucoinAPI(
 
         self.headers["KC-API-SIGN"] = signature
 
-        passphrase = base64.b64encode(
-            hmac.new(
-                self.__api_secret.encode('utf-8'),
-                self.__api_key_passphrase.encode('utf-8'),
-                hashlib.sha256
-            ).digest()
-        )
+        if is_v1_api == False:
 
-        self.headers["KC-API-PASSPHRASE"] = passphrase
+            passphrase = base64.b64encode(
+                hmac.new(
+                    self.__api_secret.encode('utf-8'),
+                    self.__api_key_passphrase.encode('utf-8'),
+                    hashlib.sha256
+                ).digest()
+            )
 
-    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = None):
-        get_params = {}
-        if currency != None and type(currency) == str:
-            get_params["currency"] = currency
-        if asset_type != None and type(asset_type) == str:
-            get_params["type"] = asset_type
+            self.headers["KC-API-PASSPHRASE"] = passphrase
+
+        if is_v1_api == True:
+
+            self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
+
+
+    def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "trade"):
         available_assets = self._ordinary_request(
-            used_endpoint = self.__assets_availability,
-            get_params = get_params
+            used_endpoint = self.__assets_availability
         )
 
         for asset in available_assets:
-            if asset["currency"] == coin:
-                if asset["type"] == "trade":
+            if asset["currency"] == currency:
+                if asset["type"] == asset_type:
                     return str(
                         float(asset["available"]) * float(percent_size)
                     )
