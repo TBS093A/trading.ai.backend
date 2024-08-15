@@ -174,7 +174,7 @@ class KucoinAPI(
             used_endpoint = self.__lot_size_check
         )
         for symbol in symbol_list:
-            if symbol["baseCurrency"] = base_currency:
+            if symbol["baseCurrency"] == base_currency:
                 if symbol["quoteCurrency"] = quote_currency:
                     return {
                         "base_min_size": symbol["baseMinSize"],
