@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import json
 from uuid import uuid4
+import urllib.parse
 
 from .abstract import AbstractAPI, RequestsFactory
 
@@ -118,25 +119,17 @@ class KucoinAPI(
             used_endpoint = self.__server_timestamp
         )
 
-        local_time = int(time.time() * 1000)
-
-        now_time = local_time
-
-        self.headers["KC-API-TIMESTAMP"] = str(now_time)
+        self.headers["KC-API-TIMESTAMP"] = str(server_time)
 
         get_parameters_str = ""
         if len(get_params) > 0:
-            get_parameters_str = "?"
-            for key, value in get_params.items():
-                get_parameters_str += f"{ key }={ value }&"
-            get_parameters_str = get_parameters_str[:-1]
+            get_parameters_str = "?" + urllib.parse.urlencode(get_params)
 
         post_parameters_json = ""
         if len(post_params) > 0:
             post_parameters_json = json.dumps(post_params)
 
-
-        str_to_signature = str(now_time) + request_method + endpoint + get_parameters_str + post_parameters_json
+        str_to_signature = str(server_time) + request_method.upper() + endpoint + get_parameters_str + post_parameters_json
 
         print(str_to_signature)
 
@@ -146,9 +139,9 @@ class KucoinAPI(
                 str_to_signature.encode('utf-8'),
                 hashlib.sha256
             ).digest()
-        )
+        ).decode('utf-8')
 
-        self.headers["KC-API-SIGN"] = signature.decode("utf-8")
+        self.headers["KC-API-SIGN"] = signature
 
         if is_v1_api == False:
 
@@ -158,9 +151,9 @@ class KucoinAPI(
                     self.__api_key_passphrase.encode('utf-8'),
                     hashlib.sha256
                 ).digest()
-            )
+            ).decode("utf-8")
 
-            self.headers["KC-API-PASSPHRASE"] = passphrase.decode("utf-8")
+            self.headers["KC-API-PASSPHRASE"] = passphrase
 
         if is_v1_api == True:
 
