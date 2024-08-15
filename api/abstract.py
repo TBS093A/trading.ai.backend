@@ -47,7 +47,7 @@ class RequestsFactory:
                     raise Exception(
                         str(response.json())
                     )
-                return response.json()
+                return response.json()["data"]
             except Exception as error:
                 raise error
         raise Exception(

@@ -173,7 +173,7 @@ class KucoinAPI(
         symbol_list = self._ordinary_request(
             used_endpoint = self.__lot_size_check
         )
-        return symbol_list
+        return symbol_list.keys()
         #for symbol in symbol_list:
         #    if symbol["baseCurrency"] == base_currency:
         #        if symbol["quoteCurrency"] == quote_currency:
