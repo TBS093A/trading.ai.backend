@@ -43,6 +43,10 @@ class RequestsFactory:
                     params = get_parameters,
                     json = post_parameters
                 )
+                if "200" not in response.json()["code"]:
+                    raise Exception(
+                        message = response.json()
+                    )
                 return response.json()
             except Exception as error:
                 raise error
