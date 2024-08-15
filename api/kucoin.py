@@ -157,7 +157,7 @@ class KucoinAPI(
 
             self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
 
-    def __truncate_float(value: float, precision: float) -> float:
+    def __truncate_float(self, value: float, precision: float) -> float:
         """
         Truncates a floating-point number to a specific precision.
 
