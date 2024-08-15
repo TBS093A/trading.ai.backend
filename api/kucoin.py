@@ -69,7 +69,7 @@ class KucoinAPI(
             "side": transaction_side,
             "symbol": f"{ coin }-{ used_currency }",
             "type": "market",
-            "size": str(used_currency)
+            "size": str(concurrency_size)
         }
         self._prepare_headers(
             request_method = request_method,
