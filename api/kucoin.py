@@ -173,23 +173,22 @@ class KucoinAPI(
         symbol_list = self._ordinary_request(
             used_endpoint = self.__lot_size_check
         )
-        return symbol_list.keys()
-        #for symbol in symbol_list:
-        #    if symbol["baseCurrency"] == base_currency:
-        #        if symbol["quoteCurrency"] == quote_currency:
-        #            return {
-        #                "base_min_size": symbol["baseMinSize"],
-        #                "base_max_size": symbol["baseMaxSize"],
-        #                "base_increment": symbol["baseIncrement"],
+        for symbol in symbol_list:
+            if symbol["baseCurrency"] == base_currency:
+                if symbol["quoteCurrency"] == quote_currency:
+                    return {
+                        "base_min_size": symbol["baseMinSize"],
+                        "base_max_size": symbol["baseMaxSize"],
+                        "base_increment": symbol["baseIncrement"],
 
-        #                "quote_min_size": symbol["quoteMinSize"],
-        #                "quote_max_size": symbol["quoteMaxSize"],
-        #                "quote_increment": symbol["quoteIncrement"],
+                        "quote_min_size": symbol["quoteMinSize"],
+                        "quote_max_size": symbol["quoteMaxSize"],
+                        "quote_increment": symbol["quoteIncrement"],
 
-        #                "price_min_size": symbol["priceMinSize"],
-        #                "price_max_size": symbol["priceMaxSize"],
-        #                "price_increment": symbol["priceIncrement"],
-        #            }
+                        "price_min_size": symbol["priceMinSize"],
+                        "price_max_size": symbol["priceMaxSize"],
+                        "price_increment": symbol["priceIncrement"],
+                    }
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
         return self._market_order_request(
