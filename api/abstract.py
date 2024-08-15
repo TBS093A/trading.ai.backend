@@ -45,12 +45,12 @@ class RequestsFactory:
                 )
                 if "200" not in response.json()["code"]:
                     raise Exception(
-                        message = response.json()
+                        str(response.json())
                     )
                 return response.json()
             except Exception as error:
                 raise error
         raise Exception(
-            message="Bad Request Method"
+            "Bad Request Method"
         )
 
