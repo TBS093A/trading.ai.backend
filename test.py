@@ -96,7 +96,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            "orderId" in status
         )
 
     def test_sell_assset_0(self):
@@ -107,7 +107,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            "orderId" in status
         )
 
 if __name__ == '__main__':
