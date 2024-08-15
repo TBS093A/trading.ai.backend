@@ -203,7 +203,7 @@ class KucoinAPI(
 
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         return self._ordinary_request(
-            used_endpoint = self.__get_ticker
+            used_endpoint = self.__get_ticker,
             get_params = {
                 "symbol": f"{ base_currency }-{ qoute_currency }"
             }
@@ -217,7 +217,7 @@ class KucoinAPI(
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
-            quote_currency = used_currency,
+            quote_currency = used_currency
         )
 
         ticker_data = self.get_ticker(
