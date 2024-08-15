@@ -200,10 +200,10 @@ class KucoinAPI(
         )
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
-        coin_sell_price = self.get_available_currency_percent_price(
-            percent_size = coin_percent_size_to_sell,
-            currency = coin,
-        )
+        # coin_sell_price = self.get_available_currency_percent_price(
+        #     percent_size = coin_percent_size_to_sell,
+        #     currency = coin,
+        # )
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
