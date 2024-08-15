@@ -55,7 +55,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            type(float(status)) == float
         )
 
     def test_get_available_currency_percent_price(self):
@@ -65,7 +65,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            type(float(status)) == float
         )
 
     def test_assets_check_lot_size(self):
@@ -75,7 +75,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            "base_increment" in status
         )
 
     def test_assets_check_lot_size(self):
@@ -85,7 +85,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "200" in status["code"]
+            "base_increment" in status
         )
 
     def test_buy_assset(self):
