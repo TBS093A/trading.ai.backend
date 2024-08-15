@@ -185,8 +185,7 @@ class KucoinAPI(
                         "quote_max_size": symbol["quoteMaxSize"],
                         "quote_increment": symbol["quoteIncrement"],
 
-                        "price_min_size": symbol["priceMinSize"],
-                        "price_max_size": symbol["priceMaxSize"],
+                        "price_limit_rate": symbol["priceLimitRate"],
                         "price_increment": symbol["priceIncrement"],
                     }
 
