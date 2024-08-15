@@ -43,7 +43,7 @@ class RequestsFactory:
                     params = get_parameters,
                     json = post_parameters
                 )
-                if int(response.json()["code"][:-3]) < 200 and int(response.json()["code"][:-3]) >= 400:
+                if int(response.json()["code"][:-3]) >= 400:
                     raise Exception(
                         str(response.json())
                     )
