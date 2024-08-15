@@ -161,7 +161,7 @@ class KucoinAPI(
 
 
     def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "tradeAccounts"):
-        available_assets = self._ordinary_request(
+        available_accounts = self._ordinary_request(
             used_endpoint = self.__assets_availability
         )
 
