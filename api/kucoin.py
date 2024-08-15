@@ -17,7 +17,7 @@ class KucoinAPI(
     __general_url = "https://api.kucoin.com"
     __buy_endpoint = "/api/v1/orders"
     __sell_endpoint = "/api/v1/orders"
-    __assets_availability = "/api/v1/sub-accounts"
+    __assets_availability = "/api/v1/accounts"
     __server_timestamp = "/api/v1/timestamp"
     __lot_size_check = "/api/v1/symbols"
     __all_orders = "/api/v1/limit/orders"
