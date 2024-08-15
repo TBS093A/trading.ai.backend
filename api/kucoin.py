@@ -263,7 +263,7 @@ class KucoinAPI(
 
         coin_sell_size = float(self.__actual_size) * float(coin_percent_size_to_sell)
 
-        self.__actual_size -= sell_size
+        self.__actual_size -= coin_sell_size
 
         return self._limit_order_request(
             transaction_side = "sell",
