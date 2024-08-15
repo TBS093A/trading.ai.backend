@@ -166,7 +166,7 @@ class KucoinAPI(
         )
 
         for account in available_accounts:
-            if "mainAccounts" in account:
+            if asset_type in account:
                 if len(account[asset_type]) > 0:
                     for asset in account[asset_type].items():
                         if asset["currency"] == currency:
@@ -237,8 +237,8 @@ class KucoinAPI(
         for transaction in transactions_details_list:
             if transaction["id"] == buy_transaction_id:
                 self.__buy_transaction = transaction
-                self.__actual_size = transaction["size"]
-                self.__actual_price = transaction["price"]
+                self.__actual_size = float(transaction["size"])
+                self.__actual_price = float(transaction["price"])
 
         return buy_request
 
