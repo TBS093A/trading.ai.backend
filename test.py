@@ -21,7 +21,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
     )
 
-    def test_capture_api_key(self):
+    def test_capture_api_key_0(self):
         api_key = os.environ.get(
             "KUCOIN_API_KEY",
             default=""
@@ -30,7 +30,7 @@ class TestKucoinAPI(unittest.TestCase):
             api_key, ""
         )
 
-    def test_capture_api_key_passphrase(self):
+    def test_capture_api_key_passphrase_0(self):
         api_key_passphrase = os.environ.get(
             "KUCOIN_API_KEY_PASSPHRASE",
             default=""
@@ -39,7 +39,7 @@ class TestKucoinAPI(unittest.TestCase):
             api_key_passphrase, ""
         )
 
-    def test_capture_api_secret(self):
+    def test_capture_api_secret_0(self):
         api_secret = os.environ.get(
             "KUCOIN_API_SECRET",
             default=""
@@ -48,7 +48,7 @@ class TestKucoinAPI(unittest.TestCase):
             api_secret, ""
         )
 
-    def test_get_available_currency_percent_price(self):
+    def test_get_available_currency_percent_price_0(self):
         status = self.__kucoin_api.get_available_currency_percent_price(
             percent_size = 0.5,
             currency = "USDT"
@@ -58,7 +58,7 @@ class TestKucoinAPI(unittest.TestCase):
             type(float(status)) == float
         )
 
-    def test_get_available_currency_percent_price(self):
+    def test_get_available_currency_percent_price_1(self):
         status = self.__kucoin_api.get_available_currency_percent_price(
             percent_size = 1.0,
             currency = "USDT"
@@ -68,7 +68,7 @@ class TestKucoinAPI(unittest.TestCase):
             type(float(status)) == float
         )
 
-    def test_assets_check_lot_size(self):
+    def test_assets_check_lot_size_0(self):
         status = self.__kucoin_api.get_lot_size(
             base_currency = "BTC",
             quote_currency = "USDT"
@@ -78,7 +78,7 @@ class TestKucoinAPI(unittest.TestCase):
             "base_increment" in status
         )
 
-    def test_assets_check_lot_size(self):
+    def test_assets_check_lot_size_1(self):
         status = self.__kucoin_api.get_lot_size(
             base_currency = "ETH",
             quote_currency = "USDT"
@@ -88,7 +88,7 @@ class TestKucoinAPI(unittest.TestCase):
             "base_increment" in status
         )
 
-    def test_buy_assset(self):
+    def test_buy_assset_0(self):
         status = self.__kucoin_api.buy(
            coin = "BTC",
            currency_percent_size_to_buy = "1.0",
@@ -99,7 +99,7 @@ class TestKucoinAPI(unittest.TestCase):
             "200" in status["code"]
         )
 
-    def test_sell_assset(self):
+    def test_sell_assset_0(self):
         status = self.__kucoin_api.sell(
            coin = "BTC",
            coin_percent_size_to_sell = "1.0",
