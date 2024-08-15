@@ -205,7 +205,7 @@ class KucoinAPI(
         return self._ordinary_request(
             used_endpoint = self.__get_ticker,
             get_params = {
-                "symbol": f"{ base_currency }-{ qoute_currency }"
+                "symbol": f"{ base_currency }-{ quote_currency }"
             }
         )
 
@@ -261,7 +261,7 @@ class KucoinAPI(
             quote_currency = used_currency,
         )
 
-        coin_sell_size = self.__actual_size * coin_percent_size_to_sell
+        coin_sell_size = float(self.__actual_size) * float(coin_percent_size_to_sell)
 
         self.__actual_size -= sell_size
 
