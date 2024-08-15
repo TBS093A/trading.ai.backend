@@ -126,8 +126,6 @@ class KucoinAPI(
         if len(post_params) > 0:
             post_parameters_json = json.dumps(post_params)
 
-        if len(get_params) == 0 and len(post_params) == 0:
-            endpoint += "/"
 
         str_to_signature = str(now_time) + request_method + endpoint + get_parameters_str + post_parameters_json
 
