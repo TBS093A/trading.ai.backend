@@ -18,6 +18,7 @@ class KucoinAPI(
     __sell_endpoint = "/api/v1/orders"
     __assets_availability = "/api/v1/accounts"
     __server_timestamp = "/api/v1/timestamp"
+    __lot_size_check = "/api/v1/contracts/"
 
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
@@ -147,15 +148,27 @@ class KucoinAPI(
 
         self.headers["KC-API-PASSPHRASE"] = passphrase
 
-    def check_assets_availability(self, currency: str = None, asset_type: str = None):
+    def get_available_currency_percent_price(self, currency: str = None, percent_size: float, asset_type: str = None):
         get_params = {}
         if currency != None and type(currency) == str:
             get_params["currency"] = currency
         if asset_type != None and type(asset_type) == str:
             get_params["type"] = asset_type
-        return self.__ordinary_request(
+        available_assets = self.__ordinary_request(
             used_endpoint = self.__assets_availability,
             get_params = get_params
+        )
+
+        for asset in available_assets:
+            if asset["currency"] == coin:
+                if asset["type"] == "trade":
+                    return str(
+                        float(asset["available"]) * float(percent_size)
+                    )
+
+    def check_lot_size_for_symbol(self, symbol: str = "BTCUSDT"):
+        return self.__ordinary_request(
+            used_endpoint = self.__lot_size_check + symbol
         )
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT"):
@@ -168,15 +181,20 @@ class KucoinAPI(
         )
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
-        available_assets = self.check_assets_availability(
-            currency = used_currency
+        coin_sell_price = self.get_available_currency_percent_price(
+            currency = coin,
+            percent_size = coin_percent_size_to_sell,
+        )
+
+        symbol_lot_size = self.check_lot_size_for_symbol(
+            symbol = f"{ coin }{ used_currency }"
         )
 
         return self.__limit_order_request(
             transaction_side = "sell",
             coin = coin,
-            coin_size = coin_percent_size_to_sell,
-            coin_price = 0,
+            coin_size = symbol_lot_size["data"]["lotSize"],
+            coin_price = coin_sell_price,
             used_currency = used_currency,
             used_endpoint = self.__sell_endpoint
         )
