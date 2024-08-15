@@ -37,27 +37,27 @@ class RequestsFactory:
         if request_method in self.__api_methods:
             try:
                 response = None
-                if len(get_parameters) == 0 and len(post_parameters) == 0:
+                if len(get_parameters.keys()) == 0 and len(post_parameters.keys()) == 0:
                     response = requests.request(
                         request_method,
                         self.general_url + endpoint,
                         headers = headers
                 )
-                if len(get_parameters) > 0 and len(post_parameters) == 0:
+                if len(get_parameters.keys()) > 0 and len(post_parameters.keys()) == 0:
                     response = requests.request(
                         request_method,
                         self.general_url + endpoint,
                         headers = headers,
                         params = get_parameters
                 )
-                if len(get_parameters) == 0 and len(post_parameters) > 0:
+                if len(get_parameters.keys()) == 0 and len(post_parameters.keys()) > 0:
                     response = requests.request(
                         request_method,
                         self.general_url + endpoint,
                         headers = headers,
                         json = post_parameters
                     )
-                if len(get_parameters) > 0 and len(post_parameters) > 0:
+                if len(get_parameters.keys()) > 0 and len(post_parameters.keys()) > 0:
                     response = requests.request(
                         request_method,
                         self.general_url + endpoint,
