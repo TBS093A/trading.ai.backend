@@ -231,8 +231,10 @@ class KucoinAPI(
             currency = used_currency
         )
 
+        coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"])) * float(ticker_data["size"])
+
         coin_size_to_buy = self.__truncate_float(
-            value = (float(available_currency_assets) / float(ticker_data["price"])) * float(ticker_data["size"]),
+            value = coin_buy_proportion,
             precision = float(symbol_lot_size["base_min_size"])
         )
 
@@ -270,15 +272,19 @@ class KucoinAPI(
             quote_currency = used_currency
         )
 
+        coin_sell_proportion = float(self.__actual_size) * float(coin_percent_size_to_sell
+
         coin_sell_size = self.__truncate_float(
-            value = (float(self.__actual_size) * float(coin_percent_size_to_sell)),
+            value = coin_sell_proportion,
             precision = float(symbol_lot_size["base_min_size"])
         )
 
         self.__actual_size -= coin_sell_size
 
+        coin_low_limit_price = float(ticker["price"]) - float(ticker["price"]) * 0.25
+
         coin_price = self.__truncate_float(
-            value = (float(ticker["price"]) - float(ticker["price"]) * 0.25),
+            value = coin_limit_price,
             precision = float(symbol_lot_size["price_limit_rate"])
         )
 
