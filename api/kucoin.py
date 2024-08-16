@@ -264,6 +264,8 @@ class KucoinAPI(
         )
 
         for transaction in transactions_details_list:
+            print("historic transaction:")
+            print(f"\t{transaction}")
             if transaction["id"] == buy_transaction_id:
                 self.__buy_transaction = transaction
                 self.__actual_size = float(transaction["size"])
