@@ -233,6 +233,8 @@ class KucoinAPI(
 
         coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"]))
 
+        self.__actual_price = float(ticker_data["price"]))
+
         print("pre-buy:")
         print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']}))")
 
@@ -241,6 +243,8 @@ class KucoinAPI(
             value = coin_buy_proportion,
             precision = float(symbol_lot_size["base_increment"])
         )
+
+        self.__actual_size = coin_size_to_buy
 
         print()
         print("buy:")
@@ -256,23 +260,6 @@ class KucoinAPI(
             used_currency = used_currency,
             used_endpoint = self.__buy_endpoint
         )
-
-        buy_transaction_id = buy_request["orderId"]
-
-        transactions_details_list = self._ordinary_request(
-            used_endpoint = self.__all_orders
-        )
-
-        for transaction in transactions_details_list:
-            print("historic transaction:")
-            print(f"\t{transaction}")
-            if transaction["id"] == buy_transaction_id:
-                self.__buy_transaction = transaction
-                self.__actual_size = float(transaction["size"])
-                self.__actual_price = float(transaction["price"])
-                print()
-                print("buy transaction:")
-                print(f"\t{transaction}")
 
         return buy_request
 
@@ -296,16 +283,23 @@ class KucoinAPI(
 
         coin_sell_size = self.__truncate_float(
             value = coin_sell_proportion,
-            precision = float(symbol_lot_size["base_min_size"])
+            precision = float(symbol_lot_size["base_increment"])
         )
 
         self.__actual_size -= coin_sell_size
 
-        coin_low_limit_price = self.__actual_price
+        price_difference_between_now_and_last_buy_trans = (float(ticker_data["price"]) - self.__actual_price)
 
+        if price_difference_between_now_and_last_buy_trans < 0:
+            price_difference_between_now_and_last_buy_trans = 0
+        else:
+            price_difference_between_now_and_last_buy_trans = price_difference_between_now_and_last_buy_trans / 1.5
+
+        coin_low_limit_price = self.__actual_price + price_difference_between_now_and_last_buy_trans
 
         print(f"\tself.__actual_size ({self.__actual_size}) = self.actual_size ({self.__actual_size + coin_sell_size}) - coin_sell_size ({coin_sell_size})")
 
+        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = self.actual_price ({self.__actual_price}) + price_difference_between_now_and_last_buy_trans ({price_difference_between_now_and_last_buy_trans})")
 
         coin_price = self.__truncate_float(
             value = coin_low_limit_price,
