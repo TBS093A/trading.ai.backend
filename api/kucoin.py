@@ -234,7 +234,7 @@ class KucoinAPI(
         coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"])) * float(ticker_data["size"])
 
         print("pre-buy:")
-        print(f"\tcoin buy size /coin buy proportion = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']})) * ticker_data['size'] ({ticker_data['size']})")
+        print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']})) * ticker_data['size'] ({ticker_data['size']})")
 
 
         coin_size_to_buy = self.__truncate_float(
@@ -290,7 +290,7 @@ class KucoinAPI(
 
         print()
         print("pre-sell")
-        print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = self.__actual_size ({self.__actual_size}) * coin_percent_size ({coin_percent_size})")
+        print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = self.__actual_size ({self.__actual_size}) * coin_percent_size_to_sell ({coin_percent_size_to_sell})")
 
         coin_sell_size = self.__truncate_float(
             value = coin_sell_proportion,
@@ -302,7 +302,8 @@ class KucoinAPI(
         coin_low_limit_price = self.__actual_price
 
 
-        print(f"\t")
+        print(f"\tself.__actual_size ({self.__actual_size}) = self.actual_size ({self.__actual_size + coin_sell_size}) - coin_sell_size ({coin_sell_size})")
+
 
         coin_price = self.__truncate_float(
             value = coin_low_limit_price,
