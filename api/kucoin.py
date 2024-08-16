@@ -233,7 +233,7 @@ class KucoinAPI(
 
         coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"]))
 
-        self.__actual_price = float(ticker_data["price"]))
+        self.__actual_price = float(ticker_data["price"])
 
         print("pre-buy:")
         print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']}))")
