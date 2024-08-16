@@ -238,6 +238,13 @@ class KucoinAPI(
             precision = float(symbol_lot_size["base_min_size"])
         )
 
+        print()
+        print("buy:")
+        print(f"\tcoin: {coin}")
+        print(f"\tcoin buy size: {coin_size_to_buy}")
+        print(f"\tused currency: {used_currency}")
+        print(f"\tused endpoint: {self.__buy_endpoint}")
+
         buy_request = self._market_order_request(
             transaction_side = "buy",
             coin = coin,
@@ -257,6 +264,9 @@ class KucoinAPI(
                 self.__buy_transaction = transaction
                 self.__actual_size = float(transaction["size"])
                 self.__actual_price = float(transaction["price"])
+                print()
+                print("buy transaction:")
+                print(f"\t{transaction}")
 
         return buy_request
 
@@ -281,12 +291,20 @@ class KucoinAPI(
 
         self.__actual_size -= coin_sell_size
 
-        coin_low_limit_price = float(ticker_data["price"]) - float(ticker_data["price"]) * 0.25
+        coin_low_limit_price = self.__actual_price
 
         coin_price = self.__truncate_float(
             value = coin_low_limit_price,
             precision = float(symbol_lot_size["price_limit_rate"])
         )
+
+        print()
+        print("sell:")
+        print(f"\tcoin: {coin}")
+        print(f"\tcoin sell size: {coin_sell_size}")
+        print(f"\tcoin price: {coin_price}")
+        print(f"\tused currency: {used_currency}")
+        print(f"\tused endpoint: {self.__sell_endpoint}")
 
         return self._limit_order_request(
             transaction_side = "sell",
