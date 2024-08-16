@@ -165,7 +165,7 @@ class KucoinAPI(
         :param precision: The precision to truncate to (e.g., 0.0001).
         :return: The truncated floating-point number.
         """
-        factor = 1 / precision
+        factor = int(1 / precision)
         truncated_value = int(value * factor) / factor
         return truncated_value
 
@@ -239,7 +239,7 @@ class KucoinAPI(
 
         coin_size_to_buy = self.__truncate_float(
             value = coin_buy_proportion,
-            precision = float(symbol_lot_size["base_min_size"])
+            precision = float(symbol_lot_size["base_increment"])
         )
 
         print()
