@@ -306,14 +306,7 @@ class KucoinAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        price_difference_between_now_and_last_buy_trans = (float(ticker_data["price"]) - self.__actual_price)
-
-        if price_difference_between_now_and_last_buy_trans < 0:
-            price_difference_between_now_and_last_buy_trans = 0
-        else:
-            price_difference_between_now_and_last_buy_trans = price_difference_between_now_and_last_buy_trans / 1.5
-
-        coin_low_limit_price = self.__actual_price + price_difference_between_now_and_last_buy_trans
+        coin_low_limit_price = (float(ticker_data["price"]) - (float(symbol_lot_size["price_increment"]) * 10))
 
         print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
 
