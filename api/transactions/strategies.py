@@ -182,11 +182,14 @@ class DistributedRiskSummationTransactionStrategy(
         last_sell_amount: float = 1.0
     ):
 
-        buy_info = self.api.buy(
-           coin = coin,
-           currency_percent_size_to_buy = buy_amount,
-           used_currency = currency
-        )
+        try:
+            buy_info = self.api.buy(
+                coin = coin,
+                currency_percent_size_to_buy = buy_amount,
+                used_currency = currency
+            )
+        except Exception as error:
+            buy_info = error
 
         await self._send_message_to_telegram(
                 message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for summation distributed risk sell loop..."
@@ -202,11 +205,14 @@ class DistributedRiskSummationTransactionStrategy(
 
                 break
 
-            sell_info = self.api.sell(
-               coin = coin,
-               coin_percent_size_to_sell = self.sell_percent_per_transaction,
-               used_currency = currency
-            )
+            try:
+                sell_info = self.api.sell(
+                    coin = coin,
+                    coin_percent_size_to_sell = self.sell_percent_per_transaction,
+                    used_currency = currency
+                )
+            except Exception as error:
+                sell_info = error
 
             await self._send_message_to_telegram(
                     message = f"Sell { int(self.sell_percent_per_transaction * 100) }% of available { coin } for { currency }\n\nSell Information:\n\n{ sell_info }\n\nWaiting { self.time_between_sells }s for next repeat..."
@@ -214,11 +220,14 @@ class DistributedRiskSummationTransactionStrategy(
 
             sleep(self.time_between_sells)
 
-        last_sell_info = self.api.sell(
-            coin = coin,
-            coin_percent_size_to_sell = last_sell_amount,
-            used_currency = currency
-        )
+        try:
+            last_sell_info = self.api.sell(
+                coin = coin,
+                coin_percent_size_to_sell = last_sell_amount,
+                used_currency = currency
+            )
+        except Exception as error:
+            last_sell_info = error
 
         await self._send_message_to_telegram(
                 message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
