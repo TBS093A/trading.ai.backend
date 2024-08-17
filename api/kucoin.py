@@ -306,7 +306,7 @@ class KucoinAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        coin_low_limit_price = (float(ticker_data["price"])
+        coin_low_limit_price = float(ticker_data["price"])
 
         print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
 
