@@ -277,7 +277,7 @@ class KucoinAPI(
 
         available_coin_assets = self.get_available_currency_percent_price(
             percent_size = coin_percent_size_to_sell,
-            currency = coin_currency
+            currency = coin
         )
 
         coin_sell_proportion = float(available_coin_assets)
