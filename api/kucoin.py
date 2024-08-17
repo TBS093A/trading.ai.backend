@@ -306,11 +306,11 @@ class KucoinAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        coin_low_limit_price = (float(ticker_data["price"]) - (float(symbol_lot_size["price_limit_rate"]) * 10))
+        coin_low_limit_price = (float(ticker_data["price"])
 
         print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
 
-        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + symbol_lot_size['price_increment'] * 10 ({float(symbol_lot_size['price_increment']) * 10})")
+        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']})")
 
         coin_price = self.__truncate_float(
             value = coin_low_limit_price,
