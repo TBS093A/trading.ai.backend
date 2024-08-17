@@ -98,7 +98,7 @@ class KucoinAPI(
             "clientOid": str(uuid4()),
             "side": transaction_side,
             "symbol": f"{ coin }-{ used_currency }",
-            "type": "market",
+            "type": "limit",
             "size": str(coin_size),
             "price": str(coin_price)
         }
@@ -306,7 +306,7 @@ class KucoinAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        coin_low_limit_price = (float(ticker_data["price"]) - (float(symbol_lot_size["price_increment"]) * 10))
+        coin_low_limit_price = (float(ticker_data["price"]) - (float(symbol_lot_size["price_limit_rate"]) * 10))
 
         print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
 
