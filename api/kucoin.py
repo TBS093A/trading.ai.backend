@@ -275,18 +275,26 @@ class KucoinAPI(
             quote_currency = used_currency
         )
 
-        coin_sell_proportion = float(self.__actual_size) * float(coin_percent_size_to_sell)
+        available_coin_assets = self.get_available_currency_percent_price(
+            percent_size = coin_percent_size_to_sell,
+            currency = coin_currency
+        )
+
+        coin_sell_proportion = float(available_coin_assets)
 
         print()
         print("pre-sell")
-        print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = self.__actual_size ({self.__actual_size}) * coin_percent_size_to_sell ({coin_percent_size_to_sell})")
+        print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = available_coin_assets ({available_coin_assets})")
 
         coin_sell_size = self.__truncate_float(
             value = coin_sell_proportion,
             precision = float(symbol_lot_size["base_increment"])
         )
 
-        self.__actual_size -= coin_sell_size
+        self.__actual_size = self.__truncate_float(
+            value = available_coin_assets - coin_sell_size,
+            precision = float(symbol_lot_size["base_increment"])
+        )
 
         price_difference_between_now_and_last_buy_trans = (float(ticker_data["price"]) - self.__actual_price)
 
@@ -297,7 +305,7 @@ class KucoinAPI(
 
         coin_low_limit_price = self.__actual_price + price_difference_between_now_and_last_buy_trans
 
-        print(f"\tself.__actual_size ({self.__actual_size}) = self.actual_size ({self.__actual_size + coin_sell_size}) - coin_sell_size ({coin_sell_size})")
+        print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
 
         print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = self.actual_price ({self.__actual_price}) + price_difference_between_now_and_last_buy_trans ({price_difference_between_now_and_last_buy_trans})")
 
