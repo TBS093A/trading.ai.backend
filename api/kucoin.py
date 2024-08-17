@@ -292,7 +292,7 @@ class KucoinAPI(
         )
 
         self.__actual_size = self.__truncate_float(
-            value = available_coin_assets - coin_sell_size,
+            value = float(available_coin_assets) - float(coin_sell_size),
             precision = float(symbol_lot_size["base_increment"])
         )
 
