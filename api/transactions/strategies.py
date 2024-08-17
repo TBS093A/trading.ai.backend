@@ -162,7 +162,8 @@ class DistributedRiskSummationTransactionStrategy(
         telegram_sending_method,
         sell_time_after_buy: int = 5,
         sell_percent_per_transaction: float = 0.05,
-        time_between_sells: int = 10
+        time_between_sells: int = 10,
+        DEBUG: bool = False,
     ):
         super().__init__(
             api = api,
@@ -172,7 +173,7 @@ class DistributedRiskSummationTransactionStrategy(
         self.sell_time_after_buy = sell_time_after_buy
         self.sell_percent_per_transaction = sell_percent_per_transaction
         self.time_between_sells = time_between_sells
-
+        self.__DEBUG = DEBUG
 
     async def invoke(
         self,
@@ -191,9 +192,17 @@ class DistributedRiskSummationTransactionStrategy(
         except Exception as error:
             buy_info = error
 
-        await self._send_message_to_telegram(
+        if self.__DEBUG == False:
+
+            await self._send_message_to_telegram(
                 message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for summation distributed risk sell loop..."
-        )
+            )
+
+        if self.__DEBUG:
+
+            print(
+                f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for summation distributed risk sell loop..."
+            )
 
         sleep(self.sell_time_after_buy)
 
@@ -214,9 +223,17 @@ class DistributedRiskSummationTransactionStrategy(
             except Exception as error:
                 sell_info = error
 
-            await self._send_message_to_telegram(
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
                     message = f"Sell { int(self.sell_percent_per_transaction * 100) }% of available { coin } for { currency }\n\nSell Information:\n\n{ sell_info }\n\nWaiting { self.time_between_sells }s for next repeat..."
-            )
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    f"Sell { int(self.sell_percent_per_transaction * 100) }% of available { coin } for { currency }\n\nSell Information:\n\n{ sell_info }\n\nWaiting { self.time_between_sells }s for next repeat..."
+                )
 
             sleep(self.time_between_sells)
 
@@ -229,6 +246,14 @@ class DistributedRiskSummationTransactionStrategy(
         except Exception as error:
             last_sell_info = error
 
-        await self._send_message_to_telegram(
+        if self.__DEBUG == False:
+
+            await self._send_message_to_telegram(
                 message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
-        )
+            )
+
+        if self.__DEBUG:
+
+            print(
+                f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
+            )
