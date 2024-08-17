@@ -72,10 +72,13 @@ class RequestsFactory:
                 if "data" not in response.json().keys():
                     raise Exception(
                         str(response.json())
+
                     )
                 return response.json()["data"]
             except Exception as error:
-                raise error
+                raise Exception(
+                    str(error) + f"\nused params:\n\tget: {get_parameters}\n\tpost: {post_parameters}"
+                )
         raise Exception(
             "Bad Request Method"
         )
