@@ -350,9 +350,9 @@ class KucoinAPI(
 
         pretty_sell_profit = float(ticker_data["price"]) * coin_sell_size
 
-        pretty_coin_size_availability_after_sell = format(
-            float(available_coin_assets) - float(coin_sell_size),
-            f".{len(str(int(1 / float(symbol_lot_size['base_increment']))))}f"
+        pretty_coin_size_availability_after_sell = self.get_available_currency_percent_price(
+            percent_size = 1.0,
+            currency = coin
         )
 
         transaction_dict = dict(
