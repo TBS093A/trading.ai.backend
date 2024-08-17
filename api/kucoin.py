@@ -253,7 +253,7 @@ class KucoinAPI(
         print(f"\tused currency: {used_currency}")
         print(f"\tused endpoint: {self.__buy_endpoint}")
 
-        buy_request = self._market_order_request(
+        transaction_dict = self._market_order_request(
             transaction_side = "buy",
             coin = coin,
             currency_size = coin_size_to_buy,
@@ -261,7 +261,20 @@ class KucoinAPI(
             used_endpoint = self.__buy_endpoint
         )
 
-        return buy_request
+        transaction_dict = dict(
+            {
+                "side": "buy",
+                "coin": coin,
+                "coin_price_at_buy": ticker_data["price"],
+                "coin_buy_size": coin_size_to_buy,
+                "currency_used_to_buy_percent": float(currency_percent_size_to_buy) * 100,
+                "currency_used_to_buy": available_currency_assets,
+                "used_currency": used_currency,
+            },
+            **transaction_dict
+        )
+
+        return transaction_dict
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
 
@@ -322,7 +335,7 @@ class KucoinAPI(
         print(f"\tused currency: {used_currency}")
         print(f"\tused endpoint: {self.__sell_endpoint}")
 
-        return self._limit_order_request(
+        transaction_dict = self._limit_order_request(
             transaction_side = "sell",
             coin = coin,
             coin_size = coin_sell_size,
@@ -330,4 +343,20 @@ class KucoinAPI(
             used_currency = used_currency,
             used_endpoint = self.__sell_endpoint
         )
+
+        transaction_dict = dict(
+            {
+                "side": "sell",
+                "coin": coin,
+                "coin_price_at_sell": ticker_data["price"],
+                "coin_used_price_at_sell": coin_price,
+                "coin_sell_size": coin_sell_size,
+                "coin_sell_percent": float(coin_percent_size_to_sell) * 100,
+                "coin_size_availability_after_sell": self.__actual_size,
+                "used_currency": used_currency,
+            },
+            **transaction_dict
+        )
+
+        return transaction_dict
 
