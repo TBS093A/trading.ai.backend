@@ -304,10 +304,7 @@ class KucoinAPI(
             precision = float(symbol_lot_size["base_increment"])
         )
 
-        self.__actual_size = self.__truncate_float(
-            value = float(available_coin_assets) - float(coin_sell_size),
-            precision = float(symbol_lot_size["base_increment"])
-        )
+        self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
         price_difference_between_now_and_last_buy_trans = (float(ticker_data["price"]) - self.__actual_price)
 
@@ -344,15 +341,30 @@ class KucoinAPI(
             used_endpoint = self.__sell_endpoint
         )
 
+        pretty_coin_sell_size = format(
+            coin_sell_size,
+            f".{len(str(int(1 / float(symbol_lot_size['base_increment']))))}f"
+        )
+
+        pretty_coin_sell_percent = float(coin_percent_size_to_sell) * 100
+
+        pretty_sell_profit = float(ticker_data["price"]) * coin_sell_size
+
+        pretty_coin_size_availability_after_sell = format(
+            float(available_coin_assets) - float(coin_sell_size),
+            f".{len(str(int(1 / float(symbol_lot_size['base_increment']))))}f"
+        )
+
         transaction_dict = dict(
             {
                 "side": "sell",
                 "coin": coin,
                 "coin_price_at_sell": ticker_data["price"],
                 "coin_used_price_at_sell": coin_price,
-                "coin_sell_size": format(coin_sell_size, f".{len(str(int(1 / float(symbol_lot_size['base_increment']))))}f"),
-                "coin_sell_percent": float(coin_percent_size_to_sell) * 100,
-                "coin_size_availability_after_sell": self.__actual_size,
+                "coin_sell_size": pretty_coin_sell_size,
+                "coin_sell_percent": pretty_coin_sell_percent,
+                "coin_size_availability_after_sell": pretty_coin_size_availability_after_sell,
+                "sell_profit": pretty_sell_profit,
                 "used_currency": used_currency,
             },
             **transaction_dict
