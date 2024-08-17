@@ -23,13 +23,6 @@ class KucoinAPI(
     __all_orders = "/api/v1/limit/orders"
     __get_ticker = "/api/v1/market/orderbook/level1"
 
-    __buy_transaction = {}
-
-    __actual_size = 0.0
-    __actual_price = 0.0
-
-    __sell_transactions = {}
-
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
             general_url = self.__general_url
@@ -45,6 +38,11 @@ class KucoinAPI(
             "KC-API-KEY-VERSION": api_version,
             "Content-Type": "application/json"
         }
+
+        self.__buy_transaction = {}
+        self.__actual_size = 0.0
+        self.__actual_price = 0.0
+        self.__sell_transactions = {}
 
     def _ordinary_request_without_headers(self, used_endpoint: str, request_method: str = "GET", get_params: dict = {}, post_params: dict = {}):
         return self.__api.api_request(
@@ -158,16 +156,31 @@ class KucoinAPI(
             self.headers["KC-API-PASSPHRASE"] = self.__api_key_passphrase
 
     def __truncate_float(self, value: float, precision: float) -> float:
-        """
-        Truncates a floating-point number to a specific precision.
-
-        :param value: The floating-point number to truncate.
-        :param precision: The precision to truncate to (e.g., 0.0001).
-        :return: The truncated floating-point number.
-        """
         factor = int(1 / precision)
         truncated_value = int(value * factor) / factor
         return truncated_value
+
+    def __truncate_to_four_significant_digits(self, number: float, mode: str = "truncate") -> float:
+        full_number = format(number, '.16f')
+        num_str = full_number.split('.')
+
+        if len(num_str) > 1:
+            integer_part = num_str[0]
+            decimal_part = num_str[1]
+
+            non_zero_start = 0
+            for i, digit in enumerate(decimal_part):
+                if digit != '0':
+                    non_zero_start = i
+                    break
+
+            truncated_decimal_part = decimal_part[non_zero_start:non_zero_start + 4]
+
+            truncated_number_str = integer_part + '.' + decimal_part[:non_zero_start] + truncated_decimal_part
+
+            return float(truncated_number_str)
+
+        return number
 
     def get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "trade"):
         available_assets = self._ordinary_request(
@@ -276,16 +289,11 @@ class KucoinAPI(
 
         return transaction_dict
 
-    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT"):
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
             quote_currency = used_currency,
-        )
-
-        ticker_data = self.get_ticker(
-            base_currency = coin,
-            quote_currency = used_currency
         )
 
         available_coin_assets = self.get_available_currency_percent_price(
@@ -306,11 +314,40 @@ class KucoinAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        coin_low_limit_price = ticker_data["price"]
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
 
-        print(f"\tself.__actual_size ({self.__actual_size}) = available_coin_assets ({available_coin_assets}) - coin_sell_size ({coin_sell_size})")
+        price_one_houndred_percent = float(ticker_data["price"])
+        price_percent_balance = float(
+            format(
+                price_one_houndred_percent * float(price_sell_balance_percent),
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
 
-        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']})")
+        coin_high_limit_price = float(
+            format(
+                price_one_houndred_percent + price_percent_balance,
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
+
+        self.__actual_price = float(ticker_data["price"])
+
+        coin_low_limit_price = float(
+            format(
+                price_one_houndred_percent - price_percent_balance,
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
+
+        print(f"\tself.__actual_size ({self.__actual_size}) = ticker_data['price'] ({ticker_data['price']})")
+
+        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) - price_percent_balance ({price_percent_balance})")
+
+        print(f"\tcoin_high_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + price_percent_balance ({price_percent_balance})")
 
         coin_price = coin_low_limit_price
 
@@ -338,6 +375,8 @@ class KucoinAPI(
 
         pretty_coin_sell_percent = float(coin_percent_size_to_sell) * 100
 
+        pretty_price_sell_balance_percent = float(price_sell_balance_percent) * 100
+
         pretty_sell_profit = float(ticker_data["price"]) * coin_sell_size
 
         pretty_coin_size_availability_after_sell = format(
@@ -358,6 +397,8 @@ class KucoinAPI(
                 "coin_used_price_at_sell": coin_price,
                 "coin_sell_size": pretty_coin_sell_size,
                 "coin_sell_percent": pretty_coin_sell_percent,
+                "coin_price_sell_balance_percent": pretty_price_sell_balance_percent,
+                "coin_price_percent_balance": price_percent_balance,
                 "coin_size_availability_after_sell": pretty_coin_size_availability_after_sell,
                 "sell_profit": pretty_sell_profit,
                 "used_currency": used_currency,
