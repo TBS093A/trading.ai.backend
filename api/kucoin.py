@@ -350,7 +350,7 @@ class KucoinAPI(
                 "coin": coin,
                 "coin_price_at_sell": ticker_data["price"],
                 "coin_used_price_at_sell": coin_price,
-                "coin_sell_size": coin_sell_size,
+                "coin_sell_size": format(coin_sell_size, f".{len(str(int(1 / float(symbol_lot_size['base_increment']))))}f"),
                 "coin_sell_percent": float(coin_percent_size_to_sell) * 100,
                 "coin_size_availability_after_sell": self.__actual_size,
                 "used_currency": used_currency,
