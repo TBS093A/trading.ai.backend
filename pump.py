@@ -42,6 +42,9 @@ kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
 
 kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
+pump_is_invoked = False
+
+
 async def send_as_bot(api_id, api_hash, bot_session, user, message):
     print(message)
     await bot_session.send_message(
@@ -103,8 +106,6 @@ def main() -> None:
         api_secret = kucoin_api_secret,
         api_key_passphrase = kucoin_api_key_passphrase
     )
-
-    pump_is_invoked = False
 
     with TelegramClient(
         "user_session",
