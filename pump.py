@@ -42,8 +42,6 @@ kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
 
 kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
-pump_is_invoked = False
-
 
 async def send_as_bot(api_id, api_hash, bot_session, user, message):
     print(message)
@@ -139,8 +137,7 @@ def main() -> None:
                     captured_message
                 )
 
-                if match_coin != None and pump_is_invoked == False:
-                    pump_is_invoked = True
+                if match_coin != None:
                     captured_coin = match_coin["coin"]
                     await send_as_bot(
                         telethon_api_id,
@@ -165,8 +162,6 @@ def main() -> None:
                         coin = captured_coin,
                         currency = "USDT"
                     )
-
-                    pump_is_invoked = False
 
         # Run the client until Ctrl+C is pressed, or the client disconnects
         print('(Press Ctrl+C to stop)')
