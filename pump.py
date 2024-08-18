@@ -139,6 +139,7 @@ def main() -> None:
                 )
 
                 if match_coin != None and pump_is_invoked == False:
+                    pump_is_invoked = True
                     captured_coin = match_coin["coin"]
                     await send_as_bot(
                         telethon_api_id,
@@ -163,6 +164,8 @@ def main() -> None:
                         coin = captured_coin,
                         currency = "USDT"
                     )
+
+                    pump_is_invoked = False
 
         # Run the client until Ctrl+C is pressed, or the client disconnects
         print('(Press Ctrl+C to stop)')
