@@ -104,6 +104,8 @@ def main() -> None:
         api_key_passphrase = kucoin_api_key_passphrase
     )
 
+    pump_is_invoked = False
+
     with TelegramClient(
         "user_session",
         telethon_api_id,
@@ -119,8 +121,6 @@ def main() -> None:
         ).start(
             bot_token=telethon_bot_token
         )
-
-        pump_is_invoked = False
 
         @client.on(events.NewMessage(pattern="(.*)"))
         async def handler_coin(event):
