@@ -34,7 +34,13 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
-pattern = r"[^:]+:\s*([^\r\n]+)"
+colon_pattern = r"[^:]+:\s*([^\r\n]+)"
+
+kucoin_alone_token_in_string_pattern = r"^[A-Z0-9\$]+$"
+
+kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
+
+kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
 async def send_as_bot(api_id, api_hash, bot_session, user, message):
     print(message)
@@ -42,6 +48,39 @@ async def send_as_bot(api_id, api_hash, bot_session, user, message):
         user,
         "[BOT] " + message
     )
+
+def gather_coin_name(captured_message: str) -> str:
+
+    match_patterns = {
+        "match_coin_from_kucoin_pumps_binance_chat": re.match(
+            kucoin_pumps_binance_chat_pattern,
+            captured_message
+        ),
+        "match_coin_from_url": re.match(
+            kucoin_url_pattern,
+            captured_message
+        ),
+        "match_coin_from_one_word_message": re.match(
+            kucoin_alone_token_in_string_pattern,
+            captured_message
+        ),
+        "match_coin_after_colon": re.match(
+            colon_pattern,
+            captured_message
+        )
+    }
+
+    for match_pattern_name, match_coin in match_patterns.items():
+        if match_coin:
+            coin = match_coin.group(1)
+            if ' ' not in coin:
+                if '$' in coin:
+                    coin = coin.replace('$', '')
+                return {
+                    "match_pattern_name": match_pattern_name,
+                    "coin": coin
+                }
+    return None
 
 
 def main() -> None:
@@ -81,6 +120,8 @@ def main() -> None:
             bot_token=telethon_bot_token
         )
 
+        pump_is_invoked = False
+
         @client.on(events.NewMessage(pattern="(.*)"))
         async def handler_coin(event):
             captured_message = event.message.message
@@ -93,15 +134,18 @@ def main() -> None:
                     message=f"Captured Message: {captured_message}"
                 )
 
-                match_coin = re.match(pattern, captured_message)
-                if match_coin:
-                    captured_coin = match_coin.group(1)
+                match_coin = gather_coin_name(
+                    captured_message
+                )
+
+                if match_coin != None and pump_is_invoked == False:
+                    captured_coin = match_coin["coin"]
                     await send_as_bot(
                         telethon_api_id,
                         telethon_api_hash,
                         bot,
                         user=user_id,
-                        message=f"Captured Coin: {captured_coin}"
+                        message=f"Captured Coin: {captured_coin}\nUsed Match Pattern: { match_coin['match_pattern_name'] }"
                     )
 
                     transaction_strategy = DistributedRiskSummationTransactionStrategy(
