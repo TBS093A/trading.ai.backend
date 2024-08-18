@@ -56,19 +56,19 @@ def gather_coin_name(captured_message: str) -> str:
         "match_coin_from_kucoin_pumps_binance_chat": re.match(
             kucoin_pumps_binance_chat_pattern,
             captured_message
-        ),
-        "match_coin_from_url": re.match(
-            kucoin_url_pattern,
-            captured_message
-        ),
-        "match_coin_from_one_word_message": re.match(
-            kucoin_alone_token_in_string_pattern,
-            captured_message
-        ),
-        "match_coin_after_colon": re.match(
-            colon_pattern,
-            captured_message
         )
+        #"match_coin_from_url": re.match(
+        #    kucoin_url_pattern,
+        #    captured_message
+        #),
+        #"match_coin_from_one_word_message": re.match(
+        #    kucoin_alone_token_in_string_pattern,
+        #    captured_message
+        #),
+        #"match_coin_after_colon": re.match(
+        #    colon_pattern,
+        #    captured_message
+        #)
     }
 
     for match_pattern_name, match_coin in match_patterns.items():
