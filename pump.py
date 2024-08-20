@@ -23,6 +23,7 @@ from pprint import pprint
 from telethon import TelegramClient, events, sync
 
 from api.kucoin import KucoinAPI
+from api.mexc import MexcAPI
 from api.transactions.strategies import DistributedRiskSummationTransactionStrategy
 
 
@@ -99,10 +100,18 @@ def main() -> None:
     kucoin_api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
     kucoin_api_secret = os.environ.get("KUCOIN_API_SECRET", default="")
 
+    mexc_api_key = os.environ.get("MEXC_API_KEY", default="")
+    mexc_api_secret = os.environ.get("MEXC_API_SECRET", default="")
+
     kucoin_api = KucoinAPI(
         api_key = kucoin_api_key,
         api_secret = kucoin_api_secret,
         api_key_passphrase = kucoin_api_key_passphrase
+    )
+
+    mexc_api = MexcAPI(
+        api_key = mexc_api_key,
+        api_secret = mexc_api_secret
     )
 
     with TelegramClient(
@@ -148,7 +157,7 @@ def main() -> None:
                     )
 
                     transaction_strategy = DistributedRiskSummationTransactionStrategy(
-                        api = kucoin_api,
+                        api = mexc_api,
                         telegram_client_credentials = {
                             "api_id": telethon_api_id,
                             "api_hash": telethon_api_hash,
