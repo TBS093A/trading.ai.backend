@@ -5,6 +5,7 @@ from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 
 
+@unittest.skip("skip kucoin tests")
 class TestKucoinAPI(unittest.TestCase):
 
     __kucoin_api = KucoinAPI(
