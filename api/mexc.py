@@ -90,7 +90,7 @@ class MexcAPI(
 
                         "quote_precision": symbol["quotePrecision"],
                         "quote_asset_precision": symbol["quoteAssetPrecision"],
-                        "quote_commission_precision": symbol["qouteCommissionPrecision"],
+                        "quote_commission_precision": symbol["quoteCommissionPrecision"],
                         "quote_amount_precision": symbol["quoteAmountPrecision"],
                         "quote_max_amount": symbol["maxQuoteAmount"],
                     }
