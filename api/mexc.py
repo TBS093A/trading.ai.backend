@@ -79,19 +79,22 @@ class MexcAPI(
         symbol_info = self.__spot_client.exchange_info(
             symbol = f"{ base_currency }{ quote_currency }"
         )
-        if symbol_info["baseAsset"] == base_currency:
-            if symbol_info["quoteAsset"] == quote_currency:
-                return {
-                    "base_asset_precision": symbol["baseAssetPrecision"],
-                    "base_commission_precision": symbol["baseCommissionPrecision"],
-                    "base_size_precision": symbol["baseSizePrecision"],
 
-                    "quote_precision": symbol["quotePrecision"],
-                    "quote_asset_precision": symbol["quoteAssetPrecision"],
-                    "quote_commission_precision": symbol["qouteCommissionPrecision"],
-                    "quote_amount_precision": symbol["quoteAmountPrecision"],
-                    "quote_max_amount": symbol["maxQuoteAmount"],
-                }
+        return symbol_info
+
+        #if symbol_info["baseAsset"] == base_currency:
+        #    if symbol_info["quoteAsset"] == quote_currency:
+        #        return {
+        #            "base_asset_precision": symbol["baseAssetPrecision"],
+        #            "base_commission_precision": symbol["baseCommissionPrecision"],
+        #            "base_size_precision": symbol["baseSizePrecision"],
+
+        #            "quote_precision": symbol["quotePrecision"],
+        #            "quote_asset_precision": symbol["quoteAssetPrecision"],
+        #            "quote_commission_precision": symbol["qouteCommissionPrecision"],
+        #            "quote_amount_precision": symbol["quoteAmountPrecision"],
+        #            "quote_max_amount": symbol["maxQuoteAmount"],
+        #        }
 
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         return self.__spot_client.ticker_price(
