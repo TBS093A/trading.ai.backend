@@ -76,7 +76,7 @@ class MexcAPI(
         return 0.0
 
     def get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
-        symbol_info = self.__spot_client(
+        symbol_info = self.__spot_client.exchange_information(
             symbol = f"{ base_currency }{ quote_currency }"
         )
         if symbol["baseAsset"] == base_currency:
