@@ -79,8 +79,8 @@ class MexcAPI(
         symbol_info = self.__spot_client.exchange_info(
             symbol = f"{ base_currency }{ quote_currency }"
         )
-        if symbol["baseAsset"] == base_currency:
-            if symbol["quoteAsset"] == quote_currency:
+        if symbol_info["baseAsset"] == base_currency:
+            if symbol_info["quoteAsset"] == quote_currency:
                 return {
                     "base_asset_precision": symbol["baseAssetPrecision"],
                     "base_commission_precision": symbol["baseCommissionPrecision"],
