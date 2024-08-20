@@ -24,7 +24,7 @@ class MexcAPI(
         return self.__spot_client.new_order(
             symbol = f"{ coin }{ used_currency }",
             side = transaction_side,
-            type = "MARKET",
+            order_type = "MARKET",
             quantity = currency_size
         )
 
@@ -32,7 +32,7 @@ class MexcAPI(
         return self.__spot_client.new_order(
             symbol = f"{ coin }{ used_currency }",
             side = transaction_side,
-            type = "LIMIT",
+            order_type = "LIMIT",
             quantity = coin_size,
             price = coin_price,
         )
