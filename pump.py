@@ -60,6 +60,14 @@ async def send_as_bot(api_id, api_hash, bot_session, user, message):
         "[BOT] " + message
     )
 
+def remove_settings():
+    settings_file = 'settings.txt'
+    if os.path.exists(settings_file):
+        os.remove(settings_file)
+        print("Settings file removed.")
+    else:
+        print("Settings file does not exist.")
+
 def save_settings(settings_data):
     with open('settings.txt', 'w') as file:
         for key, value in settings_data.items():
@@ -129,6 +137,8 @@ def gather_coin_name(captured_message: str) -> str:
                     "allow_manual_sell": allow_manual_sell,
                 }
 
+                remove_settings()
+
                 save_settings(
                     settings_data = settings_data
                 )
@@ -149,6 +159,7 @@ def gather_coin_name(captured_message: str) -> str:
                         },
                         **load_settings()
                     )
+                    remove_settings()
                     save_settings(
                         settings_data = overrided_settings
                     )
