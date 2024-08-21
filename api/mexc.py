@@ -141,7 +141,7 @@ class MexcAPI(
         print()
         print("buy:")
         print(f"\tcoin: {coin}")
-        print(f"\tcoin buy size: {coin_size_to_buy}")
+        print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
         print(f"\tused currency: {used_currency}")
 
         transaction_dict = self._market_order_request(
@@ -226,15 +226,16 @@ class MexcAPI(
 
         print(f"\tcoin_high_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + price_percent_balance ({price_percent_balance})")
 
-        coin_price = self.__truncate_float(
-            value = coin_low_limit_price,
-            precision = float(symbol_lot_size["quote_amount_precision"])
-        )
+        coin_price = coin_low_limit_price
+        #self.__truncate_float(
+        #    value = coin_low_limit_price,
+        #    precision = float(symbol_lot_size["quote_amount_precision"])
+        #)
 
         print()
         print("sell:")
         print(f"\tcoin: {coin}")
-        print(f"\tcoin sell size: {coin_sell_size}")
+        print(f"\tcoin sell quantity (size): {coin_sell_size}")
         print(f"\tcoin price: {coin_price}")
         print(f"\tused currency: {used_currency}")
 
