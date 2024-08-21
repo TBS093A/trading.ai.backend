@@ -224,13 +224,9 @@ class MexcAPI(
 
         print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) - price_percent_balance ({price_percent_balance})")
 
-        print(f"\tcoin_high_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + price_percent_balance ({price_percent_balance})")
+        print(f"\tcoin_high_limit_price ({coin_high_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + price_percent_balance ({price_percent_balance})")
 
         coin_price = coin_low_limit_price
-        #self.__truncate_float(
-        #    value = coin_low_limit_price,
-        #    precision = float(symbol_lot_size["quote_amount_precision"])
-        #)
 
         print()
         print("sell:")
