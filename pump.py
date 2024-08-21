@@ -46,7 +46,7 @@ kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
 
 kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
-manual_pattern_settings = r'^/!settings exchange:(\w+) transaction_strategy:(\w+) used_currency:(\w+) allow_manual_sell=(\w+)$'
+manual_pattern_settings = r'^/!settings exchange:(\w+) transaction_strategy:(\w+) used_currency:(\w+) allow_manual_sell:(\w+)$'
 
 manual_pattern_buy = r'^/!buy coin:(\w+)$'
 
@@ -67,11 +67,21 @@ def save_settings(settings_data):
 
 def load_settings():
     settings_data = {}
-    with open('settings.txt', 'r') as file:
-        for line in file:
-            key, value = line.strip().split(': ')
-            settings_data[key] = value
-    return settings_data
+    try:
+        with open('settings.txt', 'r') as file:
+            for line in file:
+                key, value = line.strip().split(': ')
+                settings_data[key] = value
+        return settings_data
+    except Exception as error:
+        print(error)
+        print("invoke with defaults")
+        return {
+            "exchange": "MEXC",
+            "transaction_strategy": "DRSTS",
+            "used_currency": "USDT",
+            "allow_manual_sell": "FALSE",
+        }
 
 def gather_coin_name(captured_message: str) -> str:
 
