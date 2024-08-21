@@ -313,7 +313,7 @@ def main() -> None:
 
                     if match_results["action"] == "buy":
 
-                        await transaction_strategy.invoke(
+                        await used_transaction_strategy.invoke(
                             coin = captured_coin,
                             currency = match_results["used_currency"],
                             buy = True,
@@ -331,7 +331,7 @@ def main() -> None:
 
                     if match_results["action"] == "sell":
 
-                        await transaction_strategy.invoke(
+                        await used_transaction_strategy.invoke(
                             coin = captured_coin,
                             currency = match_results["used_currency"],
                             buy = False,
