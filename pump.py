@@ -153,12 +153,8 @@ def gather_coin_name(captured_message: str) -> str:
                 if ' ' not in coin:
                     if '$' in coin:
                         coin = coin.replace('$', '')
-                    overrided_settings = dict(
-                        {
-                            "coin": coin
-                        },
-                        **load_settings()
-                    )
+                    overrided_settings = load_settings()
+                    overrided_settings['coin'] = coin
                     remove_settings()
                     save_settings(
                         settings_data = overrided_settings
