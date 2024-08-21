@@ -6,3 +6,5 @@ pump.*
 !pump.py
 
 *.session-journal
+
+*.txt
