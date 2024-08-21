@@ -112,16 +112,18 @@ def gather_coin_name(captured_message: str) -> str:
 
                 exchange, strategy, currency, allow_manual_sell = match_pattern.groups()
 
+                settings_data = {
+                    "exchange": exchange,
+                    "transaction_strategy": strategy,
+                    "used_currency": currency,
+                    "allow_manual_sell": allow_manual_sell,
+                }
+
                 save_settings(
-                    settings_data = {
-                        "exchange": exchange,
-                        "transaction_strategy": strategy,
-                        "used_currency": currency,
-                        "allow_manual_sell": allow_manual_sell,
-                    }
+                    settings_data = settings_data
                 )
 
-                return None
+                return settings_data
 
         if match_pattern_name == "match_buy":
             if match_pattern:
