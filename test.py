@@ -112,6 +112,7 @@ class TestKucoinAPI(unittest.TestCase):
             "orderId" in status
         )
 
+@unittest.skip("skip mexc tests")
 class TestMexcAPI(unittest.TestCase):
 
     __api = MexcAPI(

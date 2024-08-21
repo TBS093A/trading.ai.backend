@@ -297,7 +297,7 @@ def main() -> None:
                             coin = captured_coin,
                             currency = match_results["used_currency"],
                             buy = True,
-                            sell = !allow_manual_sell,
+                            sell = not allow_manual_sell,
                         )
 
                         if allow_manual_sell:
