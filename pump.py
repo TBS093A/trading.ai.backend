@@ -296,8 +296,8 @@ def main() -> None:
                         await transaction_strategy.invoke(
                             coin = captured_coin,
                             currency = match_results["used_currency"],
-                            buy = True
-                            sell = !allow_manual_sell
+                            buy = True,
+                            sell = !allow_manual_sell,
                         )
 
                         if allow_manual_sell:
@@ -314,8 +314,8 @@ def main() -> None:
                         await transaction_strategy.invoke(
                             coin = captured_coin,
                             currency = match_results["used_currency"],
-                            buy = False
-                            sell = True
+                            buy = False,
+                            sell = True,
                         )
 
 
