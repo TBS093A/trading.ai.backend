@@ -202,13 +202,13 @@ def main() -> None:
             bot_token=telethon_bot_token
         )
 
-        await send_as_bot(
-            telethon_api_id,
-            telethon_api_hash,
-            bot,
-            user=user_id,
-            message=f"Bot Ready To Use!!!\n\nInstruction:\n\n\tSettings Init / Overriding Example:\n\n\t\t/!settings exchange:MEXC transaction_strategy:DRSTS used_currency:USDT allow_manual_sell=FALSE\n\n\tBuy Action Example:\n\n\t\t/!buy coin:ZZZ\n\n\tSell Action Example:\n\n\t\t/!sell"
-        )
+        #await send_as_bot(
+        #    telethon_api_id,
+        #    telethon_api_hash,
+        #    bot,
+        #    user=user_id,
+        #    message=f"Bot Ready To Use!!!\n\nInstruction:\n\n\tSettings Init / Overriding Example:\n\n\t\t/!settings exchange:MEXC transaction_strategy:DRSTS used_currency:USDT allow_manual_sell=FALSE\n\n\tBuy Action Example:\n\n\t\t/!buy coin:ZZZ\n\n\tSell Action Example:\n\n\t\t/!sell"
+        #)
 
         @client.on(events.NewMessage(pattern="(.*)"))
         async def handler_coin(event):
