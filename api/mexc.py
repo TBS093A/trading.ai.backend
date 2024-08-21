@@ -83,10 +83,16 @@ class MexcAPI(
         for symbol in symbol_info["symbols"]:
             if symbol["baseAsset"] == base_currency:
                 if symbol["quoteAsset"] == quote_currency:
+
+                    base_size_precision = float(symbol["baseSizePrecision"])
+
+                    if base_size_precision == 0:
+                        base_size_precision = 1
+
                     return {
                         "base_asset_precision": symbol["baseAssetPrecision"],
                         "base_commission_precision": symbol["baseCommissionPrecision"],
-                        "base_size_precision": symbol["baseSizePrecision"],
+                        "base_size_precision": str(base_size_precision),
 
                         "quote_precision": symbol["quotePrecision"],
                         "quote_asset_precision": symbol["quoteAssetPrecision"],
