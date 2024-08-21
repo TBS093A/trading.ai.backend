@@ -123,6 +123,8 @@ def gather_coin_name(captured_message: str) -> str:
                     settings_data = settings_data
                 )
 
+                print(f"Settings:\n\n{ settings_data }\n\nSaved!")
+
                 return settings_data
 
         if match_pattern_name == "match_buy":
@@ -140,6 +142,9 @@ def gather_coin_name(captured_message: str) -> str:
                     save_settings(
                         settings_data = overrided_settings
                     )
+
+                    print(f"Buy Action:\n\nLoaded Settings:\n\n{ overrided_settings }\n\nLoaded!")
+
                     return dict(
                         {
                             "action": "buy"
@@ -149,6 +154,9 @@ def gather_coin_name(captured_message: str) -> str:
         if match_pattern_name == "match_sell":
             if match_pattern:
                 loaded_settings = load_settings()
+
+                print(f"Sell Action:\n\nLoaded Settings:\n\n{ overrided_settings }\n\nLoaded!")
+
                 return dict(
                     {
                         "action": "sell"
