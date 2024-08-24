@@ -271,27 +271,71 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    #def test_buy_assset_1(self):
-    #    status = self.__api.buy(
-    #       coin = "LBTC",
-    #       currency_percent_size_to_buy = "1.0",
-    #       used_currency = "USDT"
-    #    )
-    #    print(status)
-    #    self.assertTrue(
-    #        "orderId" in status
-    #    )
+    def test_buy_assset_1(self):
+        status = self.__api.buy(
+           coin = "OX",
+           currency_percent_size_to_buy = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
 
-    #def test_sell_assset_1(self):
-    #    status = self.__api.sell(
-    #       coin = "LBTC",
-    #       coin_percent_size_to_sell = "1.0",
-    #       used_currency = "USDT"
-    #    )
-    #    print(status)
-    #    self.assertTrue(
-    #        "orderId" in status
-    #    )
+    def test_sell_assset_1(self):
+        status = self.__api.sell(
+           coin = "OX",
+           coin_percent_size_to_sell = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_buy_assset_2(self):
+        status = self.__api.buy(
+           coin = "MONKE",
+           currency_percent_size_to_buy = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_sell_assset_2(self):
+        status = self.__api.sell(
+           coin = "MONKE",
+           coin_percent_size_to_sell = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_buy_assset_3(self):
+        status = self.__api.buy(
+           coin = "ZZZ",
+           currency_percent_size_to_buy = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_sell_assset_3(self):
+        status = self.__api.sell(
+           coin = "ZZZ",
+           coin_percent_size_to_sell = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
 
 
 if __name__ == '__main__':
