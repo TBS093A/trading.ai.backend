@@ -114,7 +114,7 @@ class MexcAPI(
         )
 
         for symbol in symbol_ask_and_bid["symbols"]:
-            if symbol["symbol"] == f"{ base_currency }{ quote_currency }"
+            if symbol["symbol"] == f"{ base_currency }{ quote_currency }":
                 return {
                     "bid_price": symbol["bidPrice"],
                     "bid_size": symbol["bidQty"],
