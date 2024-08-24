@@ -177,7 +177,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_assets_check_lot_size_1(self):
         status = self.__api.get_lot_size(
-            base_currency = "BTC",
+            base_currency = "LBTC",
             quote_currency = "USDT"
         )
         print(status)

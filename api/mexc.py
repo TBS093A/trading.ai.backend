@@ -99,6 +99,9 @@ class MexcAPI(
                         "quote_commission_precision": symbol["quoteCommissionPrecision"],
                         "quote_amount_precision": symbol["quoteAmountPrecision"],
                         "quote_max_amount": symbol["maxQuoteAmount"],
+                        "is_spot_trading_allowed": symbol["isSpotTradingAllowed"].lower() == "true",
+                        "is_margin_trading_allowed": symbol["isMarginTradingAllowed"].lower() == "true",
+                        "quote_order_qty_market_allowed": symbol["quoteOrderQtyMarketAllowed"].lower() == "true"
                     }
 
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
@@ -166,7 +169,7 @@ class MexcAPI(
 
         return transaction_dict
 
-    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.05):
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
