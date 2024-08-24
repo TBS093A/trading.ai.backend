@@ -228,7 +228,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_assets_check_lot_size_5(self):
-        coin = "ZZZ"
+        coin = "SOLS"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
@@ -312,7 +312,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_assets_ask_and_bid_5(self):
-        coin = "ZZZ"
+        coin = "SOLS"
         quote = "USDT"
         status = self.__api.get_bid_and_ask_prices(
             base_currency = coin,
