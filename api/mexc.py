@@ -109,20 +109,17 @@ class MexcAPI(
             bid - best available buy price (the lowest)
             ask - best available sell price (the highest)
         """
-        symbol_ask_and_bid = self.__spot_client.ticker_book_price(
+        symbol = self.__spot_client.ticker_book_price(
             symbol = f"{ base_currency }{ quote_currency }"
         )
 
-        return symbol_ask_and_bid
-
-        #for symbol in symbol_ask_and_bid["symbols"]:
-        #    if symbol["symbol"] == f"{ base_currency }{ quote_currency }":
-        #        return {
-        #            "bid_price": symbol["bidPrice"],
-        #            "bid_size": symbol["bidQty"],
-        #            "ask_price": symbol["askPrice"],
-        #            "ask_size": symbol["askQty"]
-        #        }
+        if symbol["symbol"] == f"{ base_currency }{ quote_currency }":
+            return {
+                "bid_price": symbol["bidPrice"],
+                "bid_size": symbol["bidQty"],
+                "ask_price": symbol["askPrice"],
+                "ask_size": symbol["askQty"]
+            }
 
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         return self.__spot_client.ticker_price(
