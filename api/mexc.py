@@ -248,6 +248,7 @@ class MexcAPI(
             )
 
         transaction_dict = dict(
+            {
                 "side": "buy",
                 "approach": approach,
                 "coin": coin,
