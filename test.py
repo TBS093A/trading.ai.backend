@@ -317,9 +317,9 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_MX_transaction_assset_0(self):
+    def test_SOL_transaction_assset_0(self):
         status = self.__api.buy(
-           coin = "MX",
+           coin = "SOL",
            currency_percent_size_to_buy = "1.0",
            used_currency = "USDT"
         )
@@ -328,9 +328,9 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_MX_transaction_assset_1(self):
+    def test_SOL_transaction_assset_1(self):
         status = self.__api.sell(
-           coin = "MX",
+           coin = "SOL",
            coin_percent_size_to_sell = "1.0",
            used_currency = "USDT"
         )
