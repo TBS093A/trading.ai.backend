@@ -336,6 +336,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_LBTC_transaction_assset_0(self):
+        sleep(2)
         status = self.__api.buy(
            coin = "LBTC",
            currency_percent_size_to_buy = "1.0",
@@ -347,6 +348,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_LBTC_transaction_assset_1(self):
+        sleep(2)
         status = self.__api.sell(
            coin = "LBTC",
            coin_percent_size_to_sell = "1.0",
@@ -358,6 +360,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_OX_transaction_assset_0(self):
+        sleep(2)
         status = self.__api.buy(
            coin = "OX",
            currency_percent_size_to_buy = "1.0",
@@ -369,6 +372,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_OX_transaction_assset_1(self):
+        sleep(2)
         status = self.__api.sell(
            coin = "OX",
            coin_percent_size_to_sell = "1.0",
@@ -380,6 +384,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_MONKE_transaction_assset_0(self):
+        sleep(2)
         status = self.__api.buy(
            coin = "MONKE",
            currency_percent_size_to_buy = "1.0",
@@ -391,6 +396,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_MONKE_transaction_assset_1(self):
+        sleep(2)
         status = self.__api.sell(
            coin = "MONKE",
            coin_percent_size_to_sell = "1.0",
@@ -402,6 +408,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_SOL_transaction_assset_0(self):
+        sleep(2)
         status = self.__api.buy(
            coin = "SOL",
            currency_percent_size_to_buy = "1.0",
@@ -413,6 +420,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_SOL_transaction_assset_1(self):
+        sleep(2)
         status = self.__api.sell(
            coin = "SOL",
            coin_percent_size_to_sell = "1.0",
