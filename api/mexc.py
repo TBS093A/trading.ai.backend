@@ -128,8 +128,6 @@ class MexcAPI(
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
-        # add checker - if bought asset size is still 0.0 after buy market then buy that by limit - used high limit (ask) price
-
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
             quote_currency = used_currency
