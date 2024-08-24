@@ -100,8 +100,7 @@ class MexcAPI(
                         "quote_amount_precision": symbol["quoteAmountPrecision"],
                         "quote_max_amount": symbol["maxQuoteAmount"],
                         "is_spot_trading_allowed": str(symbol["isSpotTradingAllowed"]).lower() == "true",
-                        "is_margin_trading_allowed": str(symbol["isMarginTradingAllowed"]).lower() == "true",
-                        "quote_order_qty_market_allowed": str(symbol["quoteOrderQtyMarketAllowed"]).lower() == "true"
+                        "is_margin_trading_allowed": str(symbol["isMarginTradingAllowed"]).lower() == "true"
                     }
 
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
