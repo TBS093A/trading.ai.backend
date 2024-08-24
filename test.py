@@ -170,7 +170,7 @@ class TestMexcAPI(unittest.TestCase):
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
@@ -182,67 +182,67 @@ class TestMexcAPI(unittest.TestCase):
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
             "base_asset_precision" in status
         )
 
-    def test_assets_check_lot_size_1(self):
+    def test_assets_check_lot_size_2(self):
         coin = "BTC"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
             "base_asset_precision" in status
         )
 
-    def test_assets_check_lot_size_1(self):
+    def test_assets_check_lot_size_3(self):
         coin = "ETH"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
             "base_asset_precision" in status
         )
 
-    def test_assets_check_lot_size_1(self):
+    def test_assets_check_lot_size_4(self):
         coin = "BNB"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
             "base_asset_precision" in status
         )
 
-    def test_assets_check_lot_size_1(self):
+    def test_assets_check_lot_size_5(self):
         coin = "ZZZ"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
             "base_asset_precision" in status
         )
 
-    def test_assets_check_lot_size_1(self):
+    def test_assets_check_lot_size_6(self):
         coin = "MONKE"
         quote = "USDT"
         status = self.__api.get_lot_size(
             base_currency = coin,
-            quote_currency = currency
+            quote_currency = quote
         )
         print(f"{ coin }/{ quote }: { status }")
         self.assertTrue(
