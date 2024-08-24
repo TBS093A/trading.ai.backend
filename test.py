@@ -196,7 +196,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_buy_assset_0(self):
         status = self.__api.buy(
-           coin = "ZZZ",
+           coin = "LBTC",
            currency_percent_size_to_buy = "1.0",
            used_currency = "USDT"
         )
@@ -206,6 +206,28 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_sell_assset_0(self):
+        status = self.__api.sell(
+           coin = "LBTC",
+           coin_percent_size_to_sell = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_buy_assset_1(self):
+        status = self.__api.buy(
+           coin = "ZZZ",
+           currency_percent_size_to_buy = "1.0",
+           used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "orderId" in status
+        )
+
+    def test_sell_assset_1(self):
         status = self.__api.sell(
            coin = "ZZZ",
            coin_percent_size_to_sell = "1.0",

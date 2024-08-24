@@ -166,7 +166,7 @@ class MexcAPI(
 
         return transaction_dict
 
-    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.05):
 
         symbol_lot_size = self.get_lot_size(
             base_currency = coin,
