@@ -1,6 +1,8 @@
 import os
 import unittest
 
+from time import sleep
+
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 
@@ -250,6 +252,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_buy_assset_0(self):
+        sleep(0)
         status = self.__api.buy(
            coin = "LBTC",
            currency_percent_size_to_buy = "1.0",
@@ -261,6 +264,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_sell_assset_0(self):
+        sleep(0)
         status = self.__api.sell(
            coin = "LBTC",
            coin_percent_size_to_sell = "1.0",
@@ -272,6 +276,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_buy_assset_1(self):
+        sleep(2)
         status = self.__api.buy(
            coin = "OX",
            currency_percent_size_to_buy = "1.0",
@@ -283,6 +288,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_sell_assset_1(self):
+        sleep(2.5)
         status = self.__api.sell(
            coin = "OX",
            coin_percent_size_to_sell = "1.0",
@@ -294,6 +300,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_buy_assset_2(self):
+        sleep(4)
         status = self.__api.buy(
            coin = "MONKE",
            currency_percent_size_to_buy = "1.0",
@@ -305,6 +312,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_sell_assset_2(self):
+        sleep(4.5)
         status = self.__api.sell(
            coin = "MONKE",
            coin_percent_size_to_sell = "1.0",
@@ -316,6 +324,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_buy_assset_3(self):
+        sleep(6)
         status = self.__api.buy(
            coin = "ZZZ",
            currency_percent_size_to_buy = "1.0",
@@ -327,6 +336,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_sell_assset_3(self):
+        sleep(6.5)
         status = self.__api.sell(
            coin = "ZZZ",
            coin_percent_size_to_sell = "1.0",
