@@ -148,7 +148,7 @@ class MexcAPI(
         self.__actual_price = float(best_ticker_data["ask_price"])
 
         print("pre-buy:")
-        print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']}))")
+        print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / best_ticker_data['ask_price'] ({best_ticker_data['ask_price']}))")
 
 
         coin_size_to_buy = self.__truncate_float(
