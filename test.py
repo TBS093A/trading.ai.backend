@@ -251,8 +251,7 @@ class TestMexcAPI(unittest.TestCase):
             "base_asset_precision" in status
         )
 
-    def test_buy_assset_0(self):
-        sleep(0)
+    def test_LBTC_transaction_assset_0(self):
         status = self.__api.buy(
            coin = "LBTC",
            currency_percent_size_to_buy = "1.0",
@@ -263,8 +262,7 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_sell_assset_0(self):
-        sleep(0)
+    def test_LBTC_transaction_assset_1(self):
         status = self.__api.sell(
            coin = "LBTC",
            coin_percent_size_to_sell = "1.0",
@@ -275,8 +273,7 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_buy_assset_1(self):
-        sleep(2)
+    def test_OX_transaction_assset_0(self):
         status = self.__api.buy(
            coin = "OX",
            currency_percent_size_to_buy = "1.0",
@@ -287,8 +284,7 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_sell_assset_1(self):
-        sleep(2.5)
+    def test_OX_transaction_assset_1(self):
         status = self.__api.sell(
            coin = "OX",
            coin_percent_size_to_sell = "1.0",
@@ -299,8 +295,7 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_buy_assset_2(self):
-        sleep(4)
+    def test_MONKE_transaction_assset_0(self):
         status = self.__api.buy(
            coin = "MONKE",
            currency_percent_size_to_buy = "1.0",
@@ -311,8 +306,7 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_sell_assset_2(self):
-        sleep(4.5)
+    def test_MONKE_transaction_assset_1(self):
         status = self.__api.sell(
            coin = "MONKE",
            coin_percent_size_to_sell = "1.0",
@@ -323,10 +317,9 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_buy_assset_3(self):
-        sleep(6)
+    def test_MX_transaction_assset_0(self):
         status = self.__api.buy(
-           coin = "ZZZ",
+           coin = "MX",
            currency_percent_size_to_buy = "1.0",
            used_currency = "USDT"
         )
@@ -335,10 +328,9 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_sell_assset_3(self):
-        sleep(6.5)
+    def test_MX_transaction_assset_1(self):
         status = self.__api.sell(
-           coin = "ZZZ",
+           coin = "MX",
            coin_percent_size_to_sell = "1.0",
            used_currency = "USDT"
         )
