@@ -154,7 +154,6 @@ class MexcAPI(
         coin_size_to_buy = self.__truncate_float(
             value = coin_buy_proportion,
             precision = int(symbol_lot_size["base_asset_precision"])
-            #precision = float(symbol_lot_size["base_size_precision"])
         )
 
         self.__actual_size = coin_size_to_buy
@@ -213,7 +212,6 @@ class MexcAPI(
         coin_sell_size = self.__truncate_float(
             value = coin_sell_proportion,
             precision = int(symbol_lot_size["base_asset_precision"])
-            #precision = float(symbol_lot_size["base_size_precision"])
         )
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
