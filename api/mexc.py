@@ -322,8 +322,10 @@ class MexcAPI(
 
         coin_price = coin_low_limit_price
 
+        approach = "limit"
+
         print()
-        print("sell:")
+        print("sell ({approach}):")
         print(f"\tcoin: {coin}")
         print(f"\tcoin sell quantity (size): {coin_sell_size}")
         print(f"\tcoin price: {coin_price}")
@@ -361,6 +363,7 @@ class MexcAPI(
         transaction_dict = dict(
             {
                 "side": "sell",
+                "approach": approach,
                 "coin": coin,
                 "coin_price_at_sell": ticker_data["price"],
                 "coin_used_price_at_sell": coin_price,
