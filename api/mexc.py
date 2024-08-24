@@ -38,9 +38,11 @@ class MexcAPI(
         )
 
     def __truncate_float(self, value: float, precision: float) -> float:
-        factor = int(1 / precision)
-        truncated_value = int(value * factor) / factor
-        return truncated_value
+        if precision < 1.0:
+            factor = int(1 / precision)
+            return int(value * factor) / factor
+        else:
+            return int(value)
 
     def __truncate_to_four_significant_digits(self, number: float, mode: str = "truncate") -> float:
         full_number = format(number, '.16f')
