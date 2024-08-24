@@ -324,7 +324,7 @@ class MexcAPI(
         approach = "limit"
 
         print()
-        print("sell ({approach}):")
+        print(f"sell ({approach}):")
         print(f"\tcoin: {coin}")
         print(f"\tcoin sell quantity (size): {coin_sell_size}")
         print(f"\tcoin price: {coin_price}")
