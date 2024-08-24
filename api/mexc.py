@@ -281,7 +281,6 @@ class MexcAPI(
                 "coin_sell_size": pretty_coin_sell_size,
                 "coin_sell_percent": pretty_coin_sell_percent,
                 "coin_price_sell_balance_percent": pretty_price_sell_balance_percent,
-                "coin_price_percent_balance": price_percent_balance,
                 "coin_size_availability_after_sell": pretty_coin_size_availability_after_sell,
                 "sell_profit": pretty_sell_profit,
                 "used_currency": used_currency,
