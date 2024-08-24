@@ -216,12 +216,32 @@ class MexcAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
+
         best_ticker_data = self.get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = used_currency
         )
 
-        coin_low_limit_price = float(best_ticker_data["bid_price"])
+        price_one_houndred_percent = float(best_ticker_data["bid_price"])
+        price_percent_balance = float(
+            format(
+                price_one_houndred_percent * float(price_sell_balance_percent),
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
+
+        self.__actual_price = float(ticker_data["price"])
+
+        coin_low_limit_price = float(
+            format(
+                price_one_houndred_percent - price_percent_balance,
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
 
         coin_high_limit_price = float(best_ticker_data["ask_price"])
 
@@ -267,11 +287,6 @@ class MexcAPI(
             f".{len(str(int(1 / float(symbol_lot_size['base_size_precision']))))}f"
         )
 
-        ticker_data = self.get_ticker(
-            base_currency = coin,
-            quote_currency = used_currency
-        )
-
         transaction_dict = dict(
             {
                 "side": "sell",
@@ -280,7 +295,6 @@ class MexcAPI(
                 "coin_used_price_at_sell": coin_price,
                 "coin_sell_size": pretty_coin_sell_size,
                 "coin_sell_percent": pretty_coin_sell_percent,
-                "coin_price_sell_balance_percent": pretty_price_sell_balance_percent,
                 "coin_size_availability_after_sell": pretty_coin_size_availability_after_sell,
                 "sell_profit": pretty_sell_profit,
                 "used_currency": used_currency,
