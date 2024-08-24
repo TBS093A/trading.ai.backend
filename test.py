@@ -251,6 +251,90 @@ class TestMexcAPI(unittest.TestCase):
             "base_asset_precision" in status
         )
 
+    def test_assets_ask_and_bid_0(self):
+        coin = "OX"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_aks_and_bid_1(self):
+        coin = "LBTC"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_ask_and_bid_2(self):
+        coin = "BTC"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_ask_and_bid_3(self):
+        coin = "ETH"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_ask_and_bid_4(self):
+        coin = "BNB"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_ask_and_bid_5(self):
+        coin = "ZZZ"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
+    def test_assets_ask_and_bid_6(self):
+        coin = "MONKE"
+        quote = "USDT"
+        status = self.__api.get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = quote
+        )
+        print(f"{ coin }/{ quote } ask/bid: { status }")
+        self.assertTrue(
+            "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
+        )
+
     def test_LBTC_transaction_assset_0(self):
         status = self.__api.buy(
            coin = "LBTC",
