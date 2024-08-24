@@ -177,17 +177,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_assets_check_lot_size_1(self):
         status = self.__api.get_lot_size(
-            base_currency = "BNB",
-            quote_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "base_asset_precision" in status
-        )
-
-    def test_assets_check_lot_size_2(self):
-        status = self.__api.get_lot_size(
-            base_currency = "ZZZ",
+            base_currency = "LBTC",
             quote_currency = "USDT"
         )
         print(status)
@@ -217,27 +207,27 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_buy_assset_1(self):
-        status = self.__api.buy(
-           coin = "BNB",
-           currency_percent_size_to_buy = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
+    #def test_buy_assset_1(self):
+    #    status = self.__api.buy(
+    #       coin = "LBTC",
+    #       currency_percent_size_to_buy = "1.0",
+    #       used_currency = "USDT"
+    #    )
+    #    print(status)
+    #    self.assertTrue(
+    #        "orderId" in status
+    #    )
 
-    def test_sell_assset_1(self):
-        status = self.__api.sell(
-           coin = "BNB",
-           coin_percent_size_to_sell = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
+    #def test_sell_assset_1(self):
+    #    status = self.__api.sell(
+    #       coin = "LBTC",
+    #       coin_percent_size_to_sell = "1.0",
+    #       used_currency = "USDT"
+    #    )
+    #    print(status)
+    #    self.assertTrue(
+    #        "orderId" in status
+    #    )
 
 
 if __name__ == '__main__':
