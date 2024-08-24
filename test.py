@@ -167,7 +167,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_assets_check_lot_size_0(self):
         status = self.__api.get_lot_size(
-            base_currency = "MONKE",
+            base_currency = "OX",
             quote_currency = "USDT"
         )
         print(status)
@@ -187,7 +187,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_buy_assset_0(self):
         status = self.__api.buy(
-           coin = "MONKE",
+           coin = "OX",
            currency_percent_size_to_buy = "1.0",
            used_currency = "USDT"
         )
@@ -198,7 +198,7 @@ class TestMexcAPI(unittest.TestCase):
 
     def test_sell_assset_0(self):
         status = self.__api.sell(
-           coin = "MONKE",
+           coin = "OX",
            coin_percent_size_to_sell = "1.0",
            used_currency = "USDT"
         )
