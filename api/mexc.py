@@ -104,6 +104,24 @@ class MexcAPI(
                         "is_margin_trading_allowed": str(symbol["isMarginTradingAllowed"]).lower() == "true"
                     }
 
+    def get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+        """
+            bid - best available buy price (the lowest)
+            ask - best available sell price (the highest)
+        """
+        symbol_ask_and_bid = self.__spot_client.ticker_book_price(
+            symbol = f"{ base_currency }{ quote_currency }"
+        )
+
+        for symbol in symbol_ask_and_bid["symbols"]:
+            if symbol["symbol"] == f"{ base_currency }{ quote_currency }"
+                return {
+                    "bid_price": symbol["bidPrice"],
+                    "bid_size": symbol["bidQty"],
+                    "ask_price": symbol["askPrice"],
+                    "ask_size": symbol["askQty"]
+                }
+
     def get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         return self.__spot_client.ticker_price(
             symbol = f"{ base_currency }{ quote_currency }"
@@ -116,7 +134,7 @@ class MexcAPI(
             quote_currency = used_currency
         )
 
-        ticker_data = self.get_ticker(
+        best_ticker_data = self.get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = used_currency
         )
@@ -126,9 +144,9 @@ class MexcAPI(
             currency = used_currency
         )
 
-        coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"]))
+        coin_buy_proportion = (float(available_currency_assets) / float(best_ticker_data["ask_price"]))
 
-        self.__actual_price = float(ticker_data["price"])
+        self.__actual_price = float(best_ticker_data["ask_price"])
 
         print("pre-buy:")
         print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']}))")
@@ -153,6 +171,11 @@ class MexcAPI(
             coin = coin,
             currency_size = coin_size_to_buy,
             used_currency = used_currency
+        )
+
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
         )
 
         transaction_dict = dict(
@@ -196,40 +219,18 @@ class MexcAPI(
 
         self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        ticker_data = self.get_ticker(
+        best_ticker_data = self.get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = used_currency
         )
 
-        price_one_houndred_percent = float(ticker_data["price"])
-        price_percent_balance = float(
-            format(
-                price_one_houndred_percent * float(price_sell_balance_percent),
-                f".{len(str(price_one_houndred_percent))}f"
-            )
-        )
+        coin_low_limit_price = float(best_ticker_data["bid_price"])
 
-        coin_high_limit_price = float(
-            format(
-                price_one_houndred_percent + price_percent_balance,
-                f".{len(str(price_one_houndred_percent))}f"
-            )
-        )
+        coin_high_limit_price = float(best_ticker_data["ask_price"])
 
-        self.__actual_price = float(ticker_data["price"])
+        print(f"\tcoin_low_limit_price ({coin_low_limit_price})")
 
-        coin_low_limit_price = float(
-            format(
-                price_one_houndred_percent - price_percent_balance,
-                f".{len(str(price_one_houndred_percent))}f"
-            )
-        )
-
-        print(f"\tself.__actual_size ({self.__actual_size}) = ticker_data['price'] ({ticker_data['price']})")
-
-        print(f"\tcoin_low_limit_price ({coin_low_limit_price}) = ticker_data['price'] ({ticker_data['price']}) - price_percent_balance ({price_percent_balance})")
-
-        print(f"\tcoin_high_limit_price ({coin_high_limit_price}) = ticker_data['price'] ({ticker_data['price']}) + price_percent_balance ({price_percent_balance})")
+        print(f"\tcoin_high_limit_price ({coin_high_limit_price})")
 
         coin_price = coin_low_limit_price
 
@@ -257,7 +258,7 @@ class MexcAPI(
 
         pretty_price_sell_balance_percent = float(price_sell_balance_percent) * 100
 
-        pretty_sell_profit = float(ticker_data["price"]) * coin_sell_size
+        pretty_sell_profit = float(best_ticker_data["ask_price"]) * coin_sell_size
 
         pretty_coin_size_availability_after_sell = format(
             float(
@@ -267,6 +268,11 @@ class MexcAPI(
                 )
             ),
             f".{len(str(int(1 / float(symbol_lot_size['base_size_precision']))))}f"
+        )
+
+        ticker_data = self.get_ticker(
+            base_currency = coin,
+            quote_currency = used_currency
         )
 
         transaction_dict = dict(
