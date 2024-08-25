@@ -321,22 +321,38 @@ class MexcAPI(
 
         coin_price = coin_low_limit_price
 
-        approach = "limit"
+        approach = "market"
 
-        print()
-        print(f"sell ({approach}):")
-        print(f"\tcoin: {coin}")
-        print(f"\tcoin sell quantity (size): {coin_sell_size}")
-        print(f"\tcoin price: {coin_price}")
-        print(f"\tused currency: {used_currency}")
-
-        transaction_dict = self._limit_order_request(
+        transaction_dict = self._market_order_request(
             transaction_side = "SELL",
             coin = coin,
-            coin_size = coin_sell_size,
-            coin_price = coin_price,
-            used_currency = used_currency,
+            currency_size = coin_sell_size,
+            used_currency = used_currency
         )
+
+        sell_asset_size = self.get_available_currency_percent_price(
+            percent_size = coin_percent_size_to_sell,
+            currency = coin
+        )
+
+        if float(sell_asset_size) == float(available_coin_assets):
+
+            approach = "limit"
+
+            print()
+            print(f"sell ({approach}):")
+            print(f"\tcoin: {coin}")
+            print(f"\tcoin sell quantity (size): {coin_sell_size}")
+            print(f"\tcoin price: {coin_price}")
+            print(f"\tused currency: {used_currency}")
+
+            transaction_dict = self._limit_order_request(
+                transaction_side = "SELL",
+                coin = coin,
+                coin_size = coin_sell_size,
+                coin_price = coin_price,
+                used_currency = used_currency,
+            )
 
         pretty_coin_sell_size = format(
             coin_sell_size,
