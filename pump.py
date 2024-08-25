@@ -26,7 +26,7 @@ from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 from api.transactions.strategies import (
     DistributedRiskSummationTransactionStrategy,
-    SingleShotTransactionStrategy,
+    SingleShotAfterTimeTransactionStrategy,
 )
 
 
@@ -86,7 +86,7 @@ def load_settings():
         print("invoke with defaults")
         return {
             "exchange": "MEXC",
-            "transaction_strategy": "DRSTS",
+            "transaction_strategy": "SSATTS", #"DRSTS",
             "used_currency": "USDT",
             "allow_manual_sell": "FALSE",
         }
@@ -305,17 +305,17 @@ def main() -> None:
                             telegram_sending_method = send_as_bot
                         )
 
-                    #if match_results["transaction_strategy"] == "SSTS":
-                    #    used_transaction_strategy = SingleShotTransactionStrategy(
-                    #        api = used_api,
-                    #        telegram_client_credentials = {
-                    #            "api_id": telethon_api_id,
-                    #            "api_hash": telethon_api_hash,
-                    #            "bot_session": bot,
-                    #            "user": user_id
-                    #        },
-                    #        telegram_sending_method = send_as_bot
-                    #    )
+                    if match_results["transaction_strategy"] == "SSATTS":
+                        used_transaction_strategy = SingleShotAfterTimeTransactionStrategy(
+                            api = used_api,
+                            telegram_client_credentials = {
+                                "api_id": telethon_api_id,
+                                "api_hash": telethon_api_hash,
+                                "bot_session": bot,
+                                "user": user_id
+                            },
+                            telegram_sending_method = send_as_bot
+                        )
 
 
                     if match_results["action"] == "buy":
