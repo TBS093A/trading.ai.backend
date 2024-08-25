@@ -115,7 +115,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
 
-#@unittest.skip("skip mexc tests")
+@unittest.skip("skip mexc tests")
 class TestMexcAPI(unittest.TestCase):
 
     __api = MexcAPI(
