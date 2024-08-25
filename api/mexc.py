@@ -323,6 +323,13 @@ class MexcAPI(
 
         approach = "market"
 
+        print()
+        print(f"sell ({approach}):")
+        print(f"\tcoin: {coin}")
+        print(f"\tcoin sell quantity (size): {coin_sell_size}")
+        print(f"\tcoin price: {ticker_data['price']}")
+        print(f"\tused currency: {used_currency}")
+
         transaction_dict = self._market_order_request(
             transaction_side = "SELL",
             coin = coin,
@@ -336,6 +343,9 @@ class MexcAPI(
         )
 
         if float(sell_asset_size) == float(available_coin_assets):
+
+            print()
+            print("market price no available!")
 
             approach = "limit"
 

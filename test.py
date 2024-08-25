@@ -407,29 +407,31 @@ class TestMexcAPI(unittest.TestCase):
             "orderId" in status
         )
 
-    def test_SOLS_transaction_assset_0(self):
-        sleep(2)
-        status = self.__api.buy(
-           coin = "SOLS",
-           currency_percent_size_to_buy = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
+    #SOLS is really expensive in tests - market buy + limit sell costs 5$ with 25$!!!
 
-    def test_SOLS_transaction_assset_1(self):
-        sleep(2)
-        status = self.__api.sell(
-           coin = "SOLS",
-           coin_percent_size_to_sell = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
+    #def test_SOLS_transaction_assset_0(self):
+    #    sleep(2)
+    #    status = self.__api.buy(
+    #       coin = "SOLS",
+    #       currency_percent_size_to_buy = "1.0",
+    #       used_currency = "USDT"
+    #    )
+    #    print(status)
+    #    self.assertTrue(
+    #        "orderId" in status
+    #    )
+
+    #def test_SOLS_transaction_assset_1(self):
+    #    sleep(2)
+    #    status = self.__api.sell(
+    #       coin = "SOLS",
+    #       coin_percent_size_to_sell = "1.0",
+    #       used_currency = "USDT"
+    #    )
+    #    print(status)
+    #    self.assertTrue(
+    #        "orderId" in status
+    #    )
 
 
 if __name__ == '__main__':
