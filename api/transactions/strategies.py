@@ -239,7 +239,7 @@ class DistributedRiskSummationTransactionStrategy(
         telegram_client_credentials,
         telegram_sending_method,
         sell_time_after_buy: int = 10,
-        sell_percent_per_transaction: float = 0.05,
+        sell_percent_per_transaction: float = 0.15,
         time_between_sells: int = 20,
         DEBUG: bool = False,
     ):
