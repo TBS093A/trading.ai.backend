@@ -80,6 +80,84 @@ class SingleShotTransactionStrategy(
         )
 
 
+class SingleShotAfterTimeTransactionStrategy(
+    AbstractTransactionStrategy
+):
+
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method,
+        sell_time_after_buy: int = 60,
+        DEBUG: bool = False,
+    ):
+        super().__init__(
+            api = api,
+            telegram_client_credentials = telegram_client_credentials,
+            telegram_sending_method = telegram_sending_method
+        )
+        self.sell_time_after_buy = sell_time_after_buy
+        self.__DEBUG = DEBUG
+
+    async def invoke(
+        self,
+        coin: str,
+        currency: str = "USDT",
+        buy_amount: float = 1.0,
+        last_sell_amount: float = 1.0,
+        buy = True,
+        sell = True,
+    ):
+
+        if buy:
+
+            try:
+                buy_info = self.api.buy(
+                    coin = coin,
+                    currency_percent_size_to_buy = buy_amount,
+                    used_currency = currency
+                )
+            except Exception as error:
+                buy_info = error
+
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
+                    message = f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for single shot risk sell transaction..."
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    f"Buy { coin } by { int(buy_amount * 100) }% of available { currency }\n\nBuy Information:\n\n{ buy_info }\n\nWaiting { self.sell_time_after_buy }s for single shot risk sell transaction..."
+                )
+
+            sleep(self.sell_time_after_buy)
+
+        if sell:
+
+            try:
+                last_sell_info = self.api.sell(
+                    coin = coin,
+                    coin_percent_size_to_sell = last_sell_amount,
+                    used_currency = currency
+                )
+            except Exception as error:
+                last_sell_info = error
+
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
+                    message = f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    f"Sell { int(last_sell_amount * 100) }% of available { coin } for { currency }\n\nLast sell information:\n\n{ last_sell_info }"
+                )
+
 
 class DistributedRiskBalancedTransactionStrategy(
     AbstractTransactionStrategy
@@ -160,9 +238,9 @@ class DistributedRiskSummationTransactionStrategy(
         api: AbstractAPI,
         telegram_client_credentials,
         telegram_sending_method,
-        sell_time_after_buy: int = 5,
+        sell_time_after_buy: int = 10,
         sell_percent_per_transaction: float = 0.05,
-        time_between_sells: int = 10,
+        time_between_sells: int = 20,
         DEBUG: bool = False,
     ):
         super().__init__(
