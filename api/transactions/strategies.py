@@ -89,7 +89,7 @@ class SingleShotAfterTimeTransactionStrategy(
         api: AbstractAPI,
         telegram_client_credentials,
         telegram_sending_method,
-        sell_time_after_buy: int = 60,
+        sell_time_after_buy: int = 50,
         DEBUG: bool = False,
     ):
         super().__init__(
