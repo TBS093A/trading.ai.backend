@@ -1,8 +1,8 @@
-from pymexc import spot
+from binance.spot import Spot
 from .abstract import AbstractAPI
 
 
-class MexcAPI(
+class BinanceAPI(
     AbstractAPI
 ):
 
@@ -10,7 +10,7 @@ class MexcAPI(
         self.__api_key = api_key
         self.__api_secret = api_secret
 
-        self.__spot_client = spot.HTTP(
+        self.__spot_client = Spot(
             api_key = self.__api_key,
             api_secret = self.__api_secret
         )
@@ -21,7 +21,7 @@ class MexcAPI(
         return self.__spot_client.new_order(
             symbol = f"{ coin }{ used_currency }",
             side = transaction_side,
-            order_type = "MARKET",
+            type = "MARKET",
             quantity = currency_size
         )
 
@@ -29,24 +29,29 @@ class MexcAPI(
         return self.__spot_client.new_order(
             symbol = f"{ coin }{ used_currency }",
             side = transaction_side,
-            order_type = "LIMIT",
+            type = "LIMIT",
             quantity = coin_size,
             price = coin_price,
         )
 
 
-    def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "SPOT"):
+    def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "assets"):
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
-        """
-        available_assets = self.__spot_client.account_information()
 
-        if available_assets["accountType"] == asset_type:
-            for asset in available_assets["balances"]:
-                if asset["asset"] == currency:
-                    return str(
-                        float(asset["free"]) * float(percent_size)
-                    )
+            where asset_type can be "assets" (BTC/USDC/USDT) or "positions" (opened positions on symbols like BTCUSDT or etc.)
+
+            docs:
+
+               https://binance-docs.github.io/apidocs/futures/en/#account-information-v3-user_data
+        """
+        available_assets = self.__spot_client.account()
+
+        for asset in available_assets[asset_type]:
+            if available_assets["asset"] == currency:
+                return str(
+                    float(asset["availableBalance"]) * float(percent_size)
+                )
         return 0.0
 
     def __get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
@@ -126,7 +131,13 @@ class MexcAPI(
 
                 {
                     "price"        - current market price
+                    "symbol":      - position symbol (like BTCUSDT)
+                    "time":        - date time in seconds
                 }
+
+            docs:
+
+                https://binance-docs.github.io/apidocs/futures/en/#symbol-price-ticker
         """
         return self.__spot_client.ticker_price(
             symbol = f"{ base_currency }{ quote_currency }"
