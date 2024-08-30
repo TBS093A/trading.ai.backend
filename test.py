@@ -7,7 +7,6 @@ from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 
 
-@unittest.skip("skip kucoin tests")
 class TestKucoinAPI(unittest.TestCase):
 
     __kucoin_api = KucoinAPI(
@@ -53,7 +52,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
     def test_get_available_currency_percent_price_0(self):
-        status = self.__kucoin_api.get_available_currency_percent_price(
+        status = self.__kucoin_api._KucoinAPI__get_available_currency_percent_price(
             percent_size = 0.5,
             currency = "USDT"
         )
@@ -63,7 +62,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
     def test_get_available_currency_percent_price_1(self):
-        status = self.__kucoin_api.get_available_currency_percent_price(
+        status = self.__kucoin_api._KucoinAPI__get_available_currency_percent_price(
             percent_size = 1.0,
             currency = "USDT"
         )
@@ -73,7 +72,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
     def test_assets_check_lot_size_0(self):
-        status = self.__kucoin_api.get_lot_size(
+        status = self.__kucoin_api._KucoinAPI__get_lot_size(
             base_currency = "BTC",
             quote_currency = "USDT"
         )
@@ -83,7 +82,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
     def test_assets_check_lot_size_1(self):
-        status = self.__kucoin_api.get_lot_size(
+        status = self.__kucoin_api._KucoinAPI__get_lot_size(
             base_currency = "ETH",
             quote_currency = "USDT"
         )
@@ -91,6 +90,25 @@ class TestKucoinAPI(unittest.TestCase):
         self.assertTrue(
             "base_increment" in status
         )
+
+
+@unittest.skip("skip transactions tests")
+class TestKucoinAPITransactions(unittest.TestCase):
+
+    __kucoin_api = KucoinAPI(
+        api_key = os.environ.get(
+            "KUCOIN_API_KEY",
+            default=""
+        ),
+        api_secret = os.environ.get(
+            "KUCOIN_API_SECRET",
+            default=""
+        ),
+        api_key_passphrase = os.environ.get(
+            "KUCOIN_API_KEY_PASSPHRASE",
+            default=""
+        )
+    )
 
     def test_buy_assset_0(self):
         status = self.__kucoin_api.buy(
@@ -115,7 +133,6 @@ class TestKucoinAPI(unittest.TestCase):
         )
 
 
-@unittest.skip("skip mexc tests")
 class TestMexcAPI(unittest.TestCase):
 
     __api = MexcAPI(
@@ -148,7 +165,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_get_available_currency_percent_price_0(self):
-        status = self.__api.get_available_currency_percent_price(
+        status = self.__api._MexcAPI__get_available_currency_percent_price(
             percent_size = 0.5,
             currency = "USDT"
         )
@@ -158,7 +175,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
     def test_get_available_currency_percent_price_1(self):
-        status = self.__api.get_available_currency_percent_price(
+        status = self.__api._MexcAPI__get_available_currency_percent_price(
             percent_size = 1.0,
             currency = "USDT"
         )
@@ -170,7 +187,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_0(self):
         coin = "OX"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -182,7 +199,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_1(self):
         coin = "LBTC"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -194,7 +211,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_2(self):
         coin = "BTC"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -206,7 +223,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_3(self):
         coin = "ETH"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -218,7 +235,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_4(self):
         coin = "BNB"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -230,7 +247,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_5(self):
         coin = "SOLS"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -242,7 +259,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_check_lot_size_6(self):
         coin = "MONKE"
         quote = "USDT"
-        status = self.__api.get_lot_size(
+        status = self.__api._MexcAPI__get_lot_size(
             base_currency = coin,
             quote_currency = quote
         )
@@ -254,7 +271,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_0(self):
         coin = "OX"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -266,7 +283,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_aks_and_bid_1(self):
         coin = "LBTC"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -278,7 +295,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_2(self):
         coin = "BTC"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -290,7 +307,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_3(self):
         coin = "ETH"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -302,7 +319,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_4(self):
         coin = "BNB"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -314,7 +331,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_5(self):
         coin = "SOLS"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -326,7 +343,7 @@ class TestMexcAPI(unittest.TestCase):
     def test_assets_ask_and_bid_6(self):
         coin = "MONKE"
         quote = "USDT"
-        status = self.__api.get_bid_and_ask_prices(
+        status = self.__api._MexcAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -334,6 +351,21 @@ class TestMexcAPI(unittest.TestCase):
         self.assertTrue(
             "bid_price" in status and "bid_size" in status and "ask_price" in status and "ask_size"
         )
+
+
+@unittest.skip("skip transactions tests")
+class TestMexcAPITransactions(unittest.TestCase)
+
+    __api = MexcAPI(
+        api_key = os.environ.get(
+            "MEXC_API_KEY",
+            default=""
+        ),
+        api_secret = os.environ.get(
+            "MEXC_API_SECRET",
+            default=""
+        )
+    )
 
     def test_LBTC_transaction_assset_0(self):
         sleep(2)
@@ -406,32 +438,6 @@ class TestMexcAPI(unittest.TestCase):
         self.assertTrue(
             "orderId" in status
         )
-
-    #SOLS is really expensive in tests - market buy + limit sell costs 5$ with 25$!!!
-
-    #def test_SOLS_transaction_assset_0(self):
-    #    sleep(2)
-    #    status = self.__api.buy(
-    #       coin = "SOLS",
-    #       currency_percent_size_to_buy = "1.0",
-    #       used_currency = "USDT"
-    #    )
-    #    print(status)
-    #    self.assertTrue(
-    #        "orderId" in status
-    #    )
-
-    #def test_SOLS_transaction_assset_1(self):
-    #    sleep(2)
-    #    status = self.__api.sell(
-    #       coin = "SOLS",
-    #       coin_percent_size_to_sell = "1.0",
-    #       used_currency = "USDT"
-    #    )
-    #    print(status)
-    #    self.assertTrue(
-    #        "orderId" in status
-    #    )
 
 
 if __name__ == '__main__':
