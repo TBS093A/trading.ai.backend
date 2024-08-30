@@ -78,7 +78,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "base_increment" in status
+            "base_asset_precision" in status
         )
 
     def test_assets_check_lot_size_1(self):
@@ -88,7 +88,7 @@ class TestKucoinAPI(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "base_increment" in status
+            "base_asset_precision" in status
         )
 
 
