@@ -354,7 +354,7 @@ class TestMexcAPI(unittest.TestCase):
 
 
 @unittest.skip("skip transactions tests")
-class TestMexcAPITransactions(unittest.TestCase)
+class TestMexcAPITransactions(unittest.TestCase):
 
     __api = MexcAPI(
         api_key = os.environ.get(
