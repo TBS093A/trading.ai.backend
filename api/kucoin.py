@@ -124,7 +124,7 @@ class KucoinAPI(
         if len(post_params) > 0:
             post_parameters_json = json.dumps(post_params)
 
-        str_to_signature = str(server_time) + request_method.upper() + endpoint + get_parameters_str + post_parameters_json
+        str_to_signature = str(server_time) + str(request_method).upper() + str(endpoint) + get_parameters_str + post_parameters_json
 
         signature = base64.b64encode(
             hmac.new(
