@@ -94,7 +94,7 @@ class TestKucoinAPI(unittest.TestCase):
     def test_assets_ask_and_bid_0(self):
         coin = "BTC"
         quote = "USDT"
-        status = self.__api._KucoinAPI__get_bid_and_ask_prices(
+        status = self.__kucoin_api._KucoinAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
@@ -106,7 +106,7 @@ class TestKucoinAPI(unittest.TestCase):
     def test_assets_aks_and_bid_1(self):
         coin = "ETH"
         quote = "USDT"
-        status = self.__api._KucoinAPI__get_bid_and_ask_prices(
+        status = self.__kucoin_api._KucoinAPI__get_bid_and_ask_prices(
             base_currency = coin,
             quote_currency = quote
         )
