@@ -1,6 +1,15 @@
 import requests
+import logging
 
 from pprint import pprint
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger()
+
+print = logging.info
 
 
 class AbstractAPI:
@@ -156,7 +165,7 @@ class AbstractAPI:
 
         approach = "market"
 
-        #print()
+        #print("")
         #print(f"buy ({approach}):")
         #print(f"\tcoin: {coin}")
         #print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
@@ -178,7 +187,7 @@ class AbstractAPI:
 
         if bought_asset_size == 0:
 
-            #print()
+            #print("")
             #print("market price no available!")
 
             price_one_houndred_percent = float(best_ticker_data["ask_price"])
@@ -208,7 +217,7 @@ class AbstractAPI:
 
             self.__actual_price = float(best_ticker_data["ask_price"])
 
-            print()
+            print("")
             print("pre-buy:")
             print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / best_ticker_data['ask_price'] ({best_ticker_data['ask_price']}))")
 
@@ -224,7 +233,7 @@ class AbstractAPI:
 
             approach = "limit"
 
-            print()
+            print("")
             print(f"buy ({approach}):")
             print(f"\tcoin: {coin}")
             print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
@@ -269,7 +278,7 @@ class AbstractAPI:
 
         coin_sell_proportion = float(available_coin_assets)
 
-        print()
+        print("")
         print("pre-sell")
         print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = available_coin_assets ({available_coin_assets})")
 
@@ -317,7 +326,7 @@ class AbstractAPI:
 
         approach = "market"
 
-        #print()
+        #print("")
         #print(f"sell ({approach}):")
         #print(f"\tcoin: {coin}")
         #print(f"\tcoin sell quantity (size): {coin_sell_size}")
@@ -340,12 +349,12 @@ class AbstractAPI:
 
         if float(sell_asset_size) == float(available_coin_assets):
 
-            #print()
+            #print("")
             #print("market price no available!")
 
             approach = "limit"
 
-            print()
+            print("")
             print(f"sell ({approach}):")
             print(f"\tcoin: {coin}")
             print(f"\tcoin sell quantity (size): {coin_sell_size}")
