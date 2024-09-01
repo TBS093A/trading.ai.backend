@@ -143,12 +143,16 @@ class AbstractAPI:
             quote_currency = used_currency
         )
 
-        available_currency_assets = self.__get_available_currency_percent_price(
-            percent_size = currency_percent_size_to_buy,
-            currency = used_currency
+        available_currency_assets = int(
+            float(
+                self.__get_available_currency_percent_price(
+                    percent_size = currency_percent_size_to_buy,
+                    currency = used_currency
+                )
+            )
         )
 
-        coin_buy_proportion = (float(int(float(available_currency_assets))) / float(ticker_data["price"]))
+        coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"]))
 
         self.__actual_price = float(ticker_data["price"])
 
