@@ -46,9 +46,9 @@ kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
 
 kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
-manual_pattern_settings = r'^/!settings exchange:(\w+) transaction_strategy:(\w+) used_currency:(\w+) allow_manual_sell:(\w+)$'
+manual_pattern_settings = r'^/!settings exchange (\w+) transaction_strategy (\w+) used_currency (\w+) allow_manual_sell (\w+)$'
 
-manual_pattern_buy = r'^/!buy coin:(\w+)$'
+manual_pattern_buy = r'^/!buy coin (\w+)$'
 
 manual_pattern_sell = r'^/!sell$'
 
