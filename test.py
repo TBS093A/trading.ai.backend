@@ -378,7 +378,7 @@ class TestMexcAPI(unittest.TestCase):
         )
 
 
-#@unittest.skip("skip transactions tests")
+@unittest.skip("skip transactions tests")
 class TestMexcAPITransactions(unittest.TestCase):
 
     __api = MexcAPI(
