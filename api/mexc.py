@@ -92,7 +92,7 @@ class MexcAPI(
                         "is_margin_trading_allowed": str(symbol["isMarginTradingAllowed"]).lower() == "true"
                     }
 
-    def __AbstractAPI_get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+    def _AbstractAPI__get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         """
             best available buy / sell prices, where:
 
@@ -120,7 +120,7 @@ class MexcAPI(
                 "ask_size": symbol["askQty"]
             }
 
-    def __AbstractAPI_get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+    def _AbstractAPI__get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         """
             current information about symbol:
 
