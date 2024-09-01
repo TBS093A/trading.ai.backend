@@ -226,9 +226,11 @@ class AbstractAPI:
             print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / best_ticker_data['ask_price'] ({best_ticker_data['ask_price']}))")
 
 
-            coin_size_to_buy = self.__truncate_float(
-                value = coin_buy_proportion,
-                precision = int(symbol_lot_size["base_asset_precision"])
+            coin_size_to_buy = int(
+                self.__truncate_float(
+                    value = coin_buy_proportion,
+                    precision = int(symbol_lot_size["base_asset_precision"])
+                )
             )
 
             self.__actual_size = coin_size_to_buy
