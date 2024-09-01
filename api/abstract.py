@@ -156,18 +156,20 @@ class AbstractAPI:
 
         approach = "market"
 
-        print()
-        print(f"buy ({approach}):")
-        print(f"\tcoin: {coin}")
-        print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
-        print(f"\tused currency: {used_currency}")
+        #print()
+        #print(f"buy ({approach}):")
+        #print(f"\tcoin: {coin}")
+        #print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
+        #print(f"\tused currency: {used_currency}")
 
-        transaction_dict = self._market_order_request(
-            transaction_side = "BUY",
-            coin = coin,
-            currency_size = coin_size_to_buy,
-            used_currency = used_currency
-        )
+        #transaction_dict = self._market_order_request(
+        #    transaction_side = "BUY",
+        #    coin = coin,
+        #    currency_size = coin_size_to_buy,
+        #    used_currency = used_currency
+        #)
+
+        transaction_dict = {}
 
         bought_asset_size = self.__get_available_currency_percent_price(
             percent_size = 100,
@@ -176,8 +178,8 @@ class AbstractAPI:
 
         if bought_asset_size == 0:
 
-            print()
-            print("market price no available!")
+            #print()
+            #print("market price no available!")
 
             price_one_houndred_percent = float(best_ticker_data["ask_price"])
             price_percent_balance = float(
@@ -315,19 +317,21 @@ class AbstractAPI:
 
         approach = "market"
 
-        print()
-        print(f"sell ({approach}):")
-        print(f"\tcoin: {coin}")
-        print(f"\tcoin sell quantity (size): {coin_sell_size}")
-        print(f"\tcoin price: {ticker_data['price']}")
-        print(f"\tused currency: {used_currency}")
+        #print()
+        #print(f"sell ({approach}):")
+        #print(f"\tcoin: {coin}")
+        #print(f"\tcoin sell quantity (size): {coin_sell_size}")
+        #print(f"\tcoin price: {ticker_data['price']}")
+        #print(f"\tused currency: {used_currency}")
 
-        transaction_dict = self._market_order_request(
-            transaction_side = "SELL",
-            coin = coin,
-            currency_size = coin_sell_size,
-            used_currency = used_currency
-        )
+        #transaction_dict = self._market_order_request(
+        #    transaction_side = "SELL",
+        #    coin = coin,
+        #    currency_size = coin_sell_size,
+        #    used_currency = used_currency
+        #)
+
+        transaction_dict = {}
 
         sell_asset_size = self.__get_available_currency_percent_price(
             percent_size = coin_percent_size_to_sell,
@@ -336,8 +340,8 @@ class AbstractAPI:
 
         if float(sell_asset_size) == float(available_coin_assets):
 
-            print()
-            print("market price no available!")
+            #print()
+            #print("market price no available!")
 
             approach = "limit"
 
