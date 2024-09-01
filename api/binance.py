@@ -35,7 +35,7 @@ class BinanceAPI(
         )
 
 
-    def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "assets"):
+    def _AbstractAPI__get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "assets"):
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
 
@@ -54,7 +54,7 @@ class BinanceAPI(
                 )
         return 0.0
 
-    def __get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+    def _AbstractAPI__get_lot_size(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         """
             particular symbol (base/quote where base can be - BTC and quote - USDT) details like:
 
@@ -97,7 +97,7 @@ class BinanceAPI(
                         "is_margin_trading_allowed": str(symbol["isMarginTradingAllowed"]).lower() == "true"
                     }
 
-    def __get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+    def _AbstractAPI__get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         """
             best available buy / sell prices, where:
 
@@ -125,7 +125,7 @@ class BinanceAPI(
                 "ask_size": symbol["askQty"]
             }
 
-    def __get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+    def _AbstractAPI__get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
         """
             current information about symbol:
 
