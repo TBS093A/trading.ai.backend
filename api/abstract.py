@@ -217,7 +217,11 @@ class AbstractAPI:
 
             print(f"\tcoin_high_limit_price ({coin_high_limit_price})")
 
-            coin_buy_proportion = (float(available_currency_assets) / float(coin_high_limit_price))
+            coin_buy_proportion = float(
+                int(
+                    float(available_currency_assets) / float(coin_high_limit_price)
+                )
+            )
 
             self.__actual_price = float(best_ticker_data["ask_price"])
 
