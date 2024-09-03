@@ -86,7 +86,7 @@ def load_settings():
         print("invoke with defaults")
         return {
             "exchange": "MEXC",
-            "transaction_strategy": "SSATTS", #"DRSTS",
+            "transaction_strategy": "DRSTS", #"SSATTS",
             "used_currency": "USDT",
             "allow_manual_sell": "FALSE",
         }
