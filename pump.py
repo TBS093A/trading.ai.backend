@@ -20,6 +20,7 @@ import json
 import logging
 
 from pprint import pprint
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events, sync
 
 from api.kucoin import KucoinAPI
@@ -28,6 +29,35 @@ from api.transactions.strategies import (
     DistributedRiskSummationTransactionStrategy,
     SingleShotAfterTimeTransactionStrategy,
 )
+
+
+telethon_bot_name = os.environ.get("TELETHON_BOT_NAME", default="")
+telethon_bot_token = os.environ.get("TELETHON_BOT_TOKEN", default="")
+telethon_api_phone = os.environ.get("TELETHON_API_PHONE", default="")
+telethon_api_id = os.environ.get("TELETHON_API_ID", default="")
+telethon_api_hash = os.environ.get("TELETHON_API_HASH", default="")
+
+user_id = int(os.environ.get("TELETHON_USER_ID", default=""))
+bot_id = int(os.environ.get("TELETHON_BOT_ID", default=""))
+
+kucoin_api_key = os.environ.get("KUCOIN_API_KEY", default="")
+kucoin_api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
+kucoin_api_secret = os.environ.get("KUCOIN_API_SECRET", default="")
+
+mexc_api_key = os.environ.get("MEXC_API_KEY", default="")
+mexc_api_secret = os.environ.get("MEXC_API_SECRET", default="")
+
+kucoin_api = KucoinAPI(
+    api_key = kucoin_api_key,
+    api_secret = kucoin_api_secret,
+    api_key_passphrase = kucoin_api_key_passphrase
+)
+
+mexc_api = MexcAPI(
+    api_key = mexc_api_key,
+    api_secret = mexc_api_secret
+)
+
 
 
 logging.basicConfig(
@@ -39,18 +69,61 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 colon_pattern = r"[^:]+:\s*([^\r\n]+)"
-
 kucoin_alone_token_in_string_pattern = r"^[A-Z0-9\$]+$"
-
 kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
-
 kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
 
-manual_pattern_settings = r'^/!settings exchange (\w+) transaction_strategy (\w+) used_currency (\w+) allow_manual_sell (\w+)$'
+commands = {
+    "/!settings": {
+        "regex": r'^/!settings exchange (\w+) transaction_strategy (\w+) used_currency (\w+) allow_manual_sell (\w+)$',
+    },
+    "/!buy": {
+        "regex": r'^/!buy coin (\w+)$',
+    },
+    "/!sell": {
+        "regex": r'^/!sell$'
+    }
+}
 
-manual_pattern_buy = r'^/!buy coin (\w+)$'
+channels = {
+    "Crypto Pump Club": {
+        "username": "cryptoclubpump",
+        "id": -1001625691880,
+        "pumps": [
+            {
+                "day": "sunday",
+                "time": "19:00:00",
+                "is_today": False,
+                "is_realised": False,
+            },
+        ],
+        "exchange": mexc_api,
+        "currency": "USDT",
+        "strategy": DistributedRiskSummationTransactionStrategy,
+        "regex": r"",
+    },
+    "Xt Pumps VIP": {
+        "username": "XtpumpsVip",
+        "id": -1002129820268,
+        "pumps": [
+            {
+                "day": "wednesday",
+                "time": "19:00:00",
+                "is_today": False,
+                "is_realised": False,
+            },
+        ],
+        "exchange": mexc_api,
+        "currency": "USDT",
+        "strategy": DistributedRiskSummationTransactionStrategy,
+        "regex": r"",
+    }
+}
 
-manual_pattern_sell = r'^/!sell$'
+
+telegram_requests_per_minute_limit: int = 20
+
+sec_time_for_check_messages: int = 5
 
 
 async def send_as_bot(api_id, api_hash, bot_session, user, message):
@@ -91,40 +164,27 @@ def load_settings():
             "allow_manual_sell": "FALSE",
         }
 
-def gather_coin_name(captured_message: str) -> str:
 
-    match_patterns = {
-        "match_settings": re.match(
-            manual_pattern_settings,
-            captured_message
-        ),
-        "match_buy": re.match(
-            manual_pattern_buy,
-            captured_message
-        ),
-        "match_sell": re.match(
-            manual_pattern_sell,
+def gather_coin(captured_message: str, regex: str) -> str:
+    match_pattern = re.match(
+        regex,
+        captured_message
+    )
+    if match_pattern:
+        coin = match_pattern.group(1)
+        if ' ' not in coin:
+            if '$' in coin:
+                coin = coin.replace('$', '')
+        return coin
+    return None
+
+
+def gather_command(captured_message: str) -> str:
+    for match_pattern_name, match_pattern_info in commands.items():
+        match_pattern = re.match(
+            manual_pattern_info["regex"],
             captured_message
         )
-        #"match_coin_from_kucoin_pumps_binance_chat": re.match(
-        #    kucoin_pumps_binance_chat_pattern,
-        #    captured_message
-        #),
-        #"match_coin_from_url": re.match(
-        #    kucoin_url_pattern,
-        #    captured_message
-        #),
-        #"match_coin_from_one_word_message": re.match(
-        #    kucoin_alone_token_in_string_pattern,
-        #    captured_message
-        #),
-        #"match_coin_after_colon": re.match(
-        #    colon_pattern,
-        #    captured_message
-        #)
-    }
-
-    for match_pattern_name, match_pattern in match_patterns.items():
         if match_pattern_name == "match_setting":
            if match_pattern:
 
@@ -180,38 +240,132 @@ def gather_coin_name(captured_message: str) -> str:
                     },
                     **loaded_settings
                 )
-
     return None
 
 
-def main() -> None:
-    """Start the bot."""
-    telethon_bot_name = os.environ.get("TELETHON_BOT_NAME", default="")
-    telethon_bot_token = os.environ.get("TELETHON_BOT_TOKEN", default="")
-    telethon_api_phone = os.environ.get("TELETHON_API_PHONE", default="")
-    telethon_api_id = os.environ.get("TELETHON_API_ID", default="")
-    telethon_api_hash = os.environ.get("TELETHON_API_HASH", default="")
+async def sleep_to_next_day():
+    now = datetime.now()
+    today_str = now.strftime('%Y-%m-%d')
+    target_time_today = datetime.strptime(f'{today_str} 01:00:00', '%Y-%m-%d %H:%M:%S')
 
-    user_id = int(os.environ.get("TELETHON_USER_ID", default=""))
-    bot_id = int(os.environ.get("TELETHON_BOT_ID", default=""))
+    if target_time_today <= now:
+        target_time_today += timedelta(days=1)
 
-    kucoin_api_key = os.environ.get("KUCOIN_API_KEY", default="")
-    kucoin_api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
-    kucoin_api_secret = os.environ.get("KUCOIN_API_SECRET", default="")
+    seconds_until_target = (target_time_today - now).total_seconds()
 
-    mexc_api_key = os.environ.get("MEXC_API_KEY", default="")
-    mexc_api_secret = os.environ.get("MEXC_API_SECRET", default="")
+    await asyncio.sleep(seconds_until_target)
 
-    kucoin_api = KucoinAPI(
-        api_key = kucoin_api_key,
-        api_secret = kucoin_api_secret,
-        api_key_passphrase = kucoin_api_key_passphrase
-    )
 
-    mexc_api = MexcAPI(
-        api_key = mexc_api_key,
-        api_secret = mexc_api_secret
-    )
+@client.on(events.NewMessage(pattern="(.*)"))
+async def handler_coin(event):
+    captured_message = event.message.message
+    if "[BOT]" not in captured_message:
+        await send_as_bot(
+            telethon_api_id,
+            telethon_api_hash,
+            bot,
+            user=user_id,
+            message=f"Captured Message: {captured_message}"
+        )
+
+        match_results = gather_command(
+            captured_message
+        )
+
+        if match_results != None and "action" not in match_results.keys():
+            await send_as_bot(
+                telethon_api_id,
+                telethon_api_hash,
+                bot,
+                user=user_id,
+                message=f"Settings:\n{ match_results }\nSaved!"
+            )
+
+        if match_results != None and "action" in match_results.keys():
+
+            captured_coin = match_results["coin"]
+
+            allow_manual_sell = match_results["allow_manual_sell"].lower() == "true"
+
+            await send_as_bot(
+                telethon_api_id,
+                telethon_api_hash,
+                bot,
+                user=user_id,
+                message=f"Captured Coin: {captured_coin}"
+            )
+
+            used_api = mexc_api
+
+            if match_results["exchange"] == "KUCOIN":
+                used_api = kucoin_api
+            if match_results["exchange"] == "MEXC":
+                used_api = mexc_api
+
+            used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
+                api = used_api,
+                telegram_client_credentials = {
+                    "api_id": telethon_api_id,
+                    "api_hash": telethon_api_hash,
+                    "bot_session": bot,
+                    "user": user_id
+                },
+                telegram_sending_method = send_as_bot
+            )
+            if match_results["transaction_strategy"] == "DRSTS":
+                used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
+                    api = used_api,
+                    telegram_client_credentials = {
+                        "api_id": telethon_api_id,
+                        "api_hash": telethon_api_hash,
+                        "bot_session": bot,
+                        "user": user_id
+                    },
+                    telegram_sending_method = send_as_bot
+                )
+
+            if match_results["transaction_strategy"] == "SSATTS":
+                used_transaction_strategy = SingleShotAfterTimeTransactionStrategy(
+                    api = used_api,
+                    telegram_client_credentials = {
+                        "api_id": telethon_api_id,
+                        "api_hash": telethon_api_hash,
+                        "bot_session": bot,
+                        "user": user_id
+                    },
+                    telegram_sending_method = send_as_bot
+                )
+
+
+            if match_results["action"] == "buy":
+
+                await used_transaction_strategy.invoke(
+                    coin = captured_coin,
+                    currency = match_results["used_currency"],
+                    buy = True,
+                    sell = not allow_manual_sell,
+                )
+
+                if allow_manual_sell:
+                    await send_as_bot(
+                        telethon_api_id,
+                        telethon_api_hash,
+                        bot,
+                        user=user_id,
+                        message=f"[Exchange Symbol Chart]({ used_api.generate_symbol_url() })"
+                    )
+
+            if match_results["action"] == "sell":
+
+                await used_transaction_strategy.invoke(
+                    coin = captured_coin,
+                    currency = match_results["used_currency"],
+                    buy = False,
+                    sell = True,
+                )
+
+
+async def main() -> None:
 
     with TelegramClient(
         "user_session",
@@ -237,119 +391,86 @@ def main() -> None:
         #    message=f"Bot Ready To Use!!!\n\nInstruction:\n\n\tSettings Init / Overriding Example:\n\n\t\t/!settings exchange:MEXC transaction_strategy:DRSTS used_currency:USDT allow_manual_sell=FALSE\n\n\tBuy Action Example:\n\n\t\t/!buy coin:ZZZ\n\n\tSell Action Example:\n\n\t\t/!sell"
         #)
 
-        @client.on(events.NewMessage(pattern="(.*)"))
-        async def handler_coin(event):
-            captured_message = event.message.message
-            if "[BOT]" not in captured_message:
-                await send_as_bot(
-                    telethon_api_id,
-                    telethon_api_hash,
-                    bot,
-                    user=user_id,
-                    message=f"Captured Message: {captured_message}"
-                )
+        async while True:
+            async for channel_name, channel_info in channels.items():
+                async for pump_info in channel_info['pumps']:
+                    now = datetime.now()
+                    current_day = now.strftime("%A")
+                    current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
+                    if current_day.lower() == pump_info["day"].lower():
+                        pump_info['is_today'] = True
+                        if current_hour_and_minute == pump_info["time"][:5]:
+                            print(f"Download messages in {channel_name} (USERNAME: {channel['username']} ID:, {channel['id']}) for pump at {pump['day']} {pump['time']}")
+                            async for request_no in range(1, telegram_requests_per_minute_limit + 1):
+                                now = datetime.now().strftime("%H:%M:%S")
+                                print(f"request no {request_no} at {now}")
+                                async for message in client.iter_messages(chat, limit=5):
+                                    match_results = gather_coin(
+                                        captured_message = captured_message,
+                                        regex = channel_info["regex"]
+                                    )
+                                    if match_result != None:
 
-                match_results = gather_coin_name(
-                    captured_message
-                )
+                                        captured_coin = match_results.group(1)
 
-                if match_results != None and "action" not in match_results.keys():
-                    await send_as_bot(
-                        telethon_api_id,
-                        telethon_api_hash,
-                        bot,
-                        user=user_id,
-                        message=f"Settings:\n{ match_results }\nSaved!"
-                    )
+                                        await send_as_bot(
+                                            telethon_api_id,
+                                            telethon_api_hash,
+                                            bot,
+                                            user=user_id,
+                                            message=f"Captured Coin: {captured_coin}"
+                                        )
 
-                if match_results != None and "action" in match_results.keys():
+                                        used_exchange = channel_info["exchange"]
 
-                    captured_coin = match_results["coin"]
+                                        used_transaction_strategy = channel_info["strategy"](
+                                            api = used_api,
+                                            telegram_client_credentials = {
+                                                "api_id": telethon_api_id,
+                                                "api_hash": telethon_api_hash,
+                                                "bot_session": bot,
+                                                "user": user_id
+                                            },
+                                            telegram_sending_method = send_as_bot
+                                        )
 
-                    allow_manual_sell = match_results["allow_manual_sell"].lower() == "true"
+                                        await used_transaction_strategy.invoke(
+                                            coin = captured_coin,
+                                            currency = channel_info["currency"],
+                                            buy = True,
+                                            sell = True,
+                                        )
 
-                    await send_as_bot(
-                        telethon_api_id,
-                        telethon_api_hash,
-                        bot,
-                        user=user_id,
-                        message=f"Captured Coin: {captured_coin}"
-                    )
+                                        pump_is_realised = True
 
-                    used_api = mexc_api
+                                        break
+                                if pump_is_realised:
+                                    break
+                                else:
+                                    waiting_time = float(sec_time_for_check_messages / telegram_requests_per_minute_limit)
+                                    await asyncio.sleep(waiting_time)
+                        elif pump_is_realised:
+                            break
+                        else:
+                            await asyncio.sleep(0.25)
 
-                    if match_results["exchange"] == "KUCOIN":
-                        used_api = kucoin_api
-                    if match_results["exchange"] == "MEXC":
-                        used_api = mexc_api
+            async for channel_name, channel_info in channels.items():
+                async for pump_info in channel_info['pumps']:
+                    if pump_info['is_realised'] == True:
+                        current_day = datetime.now().strftime("%A")
+                        if current_day.lower() != pump_info['day'].lower():
+                            pump_info['is_realised'] = False
 
-                    used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
-                        api = used_api,
-                        telegram_client_credentials = {
-                            "api_id": telethon_api_id,
-                            "api_hash": telethon_api_hash,
-                            "bot_session": bot,
-                            "user": user_id
-                        },
-                        telegram_sending_method = send_as_bot
-                    )
-                    if match_results["transaction_strategy"] == "DRSTS":
-                        used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
-                            api = used_api,
-                            telegram_client_credentials = {
-                                "api_id": telethon_api_id,
-                                "api_hash": telethon_api_hash,
-                                "bot_session": bot,
-                                "user": user_id
-                            },
-                            telegram_sending_method = send_as_bot
-                        )
+            pump_is_not_today = False
 
-                    if match_results["transaction_strategy"] == "SSATTS":
-                        used_transaction_strategy = SingleShotAfterTimeTransactionStrategy(
-                            api = used_api,
-                            telegram_client_credentials = {
-                                "api_id": telethon_api_id,
-                                "api_hash": telethon_api_hash,
-                                "bot_session": bot,
-                                "user": user_id
-                            },
-                            telegram_sending_method = send_as_bot
-                        )
+            async for channel_name, channel_info in channels.items():
+                async for pump_info in channel_info['pumps']:
+                    if pump_info['is_today'] == False:
+                        pump_info['is_today'] = False
+                        pump_is_not_today = True
 
-
-                    if match_results["action"] == "buy":
-
-                        await used_transaction_strategy.invoke(
-                            coin = captured_coin,
-                            currency = match_results["used_currency"],
-                            buy = True,
-                            sell = not allow_manual_sell,
-                        )
-
-                        if allow_manual_sell:
-                            await send_as_bot(
-                                telethon_api_id,
-                                telethon_api_hash,
-                                bot,
-                                user=user_id,
-                                message=f"[Exchange Symbol Chart]({ used_api.generate_symbol_url() })"
-                            )
-
-                    if match_results["action"] == "sell":
-
-                        await used_transaction_strategy.invoke(
-                            coin = captured_coin,
-                            currency = match_results["used_currency"],
-                            buy = False,
-                            sell = True,
-                        )
-
-
-        # Run the client until Ctrl+C is pressed, or the client disconnects
-        print('(Press Ctrl+C to stop)')
-        client.run_until_disconnected()
-
+            if pump_is_not_today:
+                await sleep_to_next_day()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
