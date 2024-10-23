@@ -394,6 +394,8 @@ async def main() -> None:
         async while True:
             async for channel_name, channel_info in channels.items():
                 async for pump_info in channel_info['pumps']:
+                    if pump_info['is_realised']:
+                        continue
                     now = datetime.now()
                     current_day = now.strftime("%A")
                     current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
@@ -441,18 +443,15 @@ async def main() -> None:
                                             sell = True,
                                         )
 
-                                        pump_is_realised = True
-
+                                        pump_info['is_realised'] = True
                                         break
-                                if pump_is_realised:
+
+                                if pump_info['is_realised']:
                                     break
                                 else:
                                     waiting_time = float(sec_time_for_check_messages / telegram_requests_per_minute_limit)
                                     await asyncio.sleep(waiting_time)
-                        elif pump_is_realised:
-                            break
-                        else:
-                            await asyncio.sleep(0.25)
+                        await asyncio.sleep(0.25)
 
             async for channel_name, channel_info in channels.items():
                 async for pump_info in channel_info['pumps']:
