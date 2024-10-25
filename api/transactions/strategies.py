@@ -589,16 +589,16 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                 last_sell_info
             )
 
-            message = f"Sell { coin } by { len(sell_infos) - 1 } x { self.sell_percent_per_transaction}% { currency } transactions\n\nSell Information:\n\n{ sell_infos }"
+        message = f"Sell { coin } by { len(sell_infos) - 1 } x { self.sell_percent_per_transaction}% { currency } transactions\n\nSell Information:\n\n{ sell_infos }"
 
-            if self.__DEBUG == False:
+        if self.__DEBUG == False:
 
-                await self._send_message_to_telegram(
-                    message = message
-                )
+            await self._send_message_to_telegram(
+                message = message
+            )
 
-            if self.__DEBUG:
+        if self.__DEBUG:
 
-                print(
-                    message
-                )
+            print(
+                message
+            )
