@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pump-bot-config
+data:
+  config.json: |
+    export TELETHON_BOT_NAME="<<telethon.bot.name>>"
+    export TELETHON_BOT_TOKEN="<<telethon.bot.token>>"
+
+    export TELETHON_API_PHONE="<<telethon.api.phone>>"
+    export TELETHON_API_ID="<<telethon.api.id>>"
+    export TELETHON_API_HASH="<<telethon.api.hash>>"
+
+    export TELETHON_USER_ID=<<telethon.user.id>>
+    export TELETHON_BOT_ID=<<telethon.bot.id>>
+
+    export KUCOIN_API_SECRET="<<kucoin.api.secret>>"
+    export KUCOIN_API_KEY="<<kucoin.api.key>>"
+    export KUCOIN_API_KEY_PASSPHRASE="<<kucoin.api.key.passphrase"
+
+    export MEXC_API_KEY="<<mexc.api.key>>"
+    export MEXC_API_SECRET="<<mexc.api.secret>>"
