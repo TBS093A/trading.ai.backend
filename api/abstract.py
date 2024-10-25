@@ -64,6 +64,12 @@ class AbstractAPI:
 
         return number
 
+    def __get_available_currency_amount_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
+        """
+            currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
+        """
+        return 0.0
+
     def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)

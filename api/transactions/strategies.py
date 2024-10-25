@@ -443,3 +443,162 @@ class DistributedRiskSummationTransactionStrategy(
                 print(
                     message
                 )
+
+
+class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
+    AbstractTransactionStrategy
+):
+
+    def __init__(
+        self,
+        api: AbstractAPI,
+        telegram_client_credentials,
+        telegram_sending_method,
+        qoute_currency_amount_per_transaction_used_to_buy: int = 50,
+        buy_transactions: int = None,
+        time_between_buys: float = 0.1,
+        time_between_buy_and_sell: int = 15,
+        sell_percent_per_transaction: float = 0.1,
+        time_between_sells: float = 0.1,
+        DEBUG: bool = False,
+    ):
+        super().__init__(
+            api = api,
+            telegram_client_credentials = telegram_client_credentials,
+            telegram_sending_method = telegram_sending_method
+        )
+        self.qoute_currency_amount_per_transaction_used_to_buy = qoute_currency_amount_per_transaction_used_to_buy
+        self.buy_transactions = buy_transactions
+        self.time_between_buys = time_between_buys
+        self.time_between_buy_and_sell = time_between_buy_and_sell
+        self.sell_percent_per_transaction = sell_percent_per_transaction
+        self.time_between_sells = time_between_sells
+        self.__DEBUG = DEBUG
+
+    async def invoke(
+        self,
+        coin: str,
+        currency: str = "USDT",
+        buy_amount: float = 1.0,
+        last_sell_amount: float = 1.0,
+        buy = True,
+        sell = True,
+    ):
+
+        if buy:
+
+            available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
+                currency = currency
+            )
+
+            possible_transactions = int(available_quote / self.qoute_currency_amount_per_transaction_used_to_buy)
+
+            if self.buy_transactions == None or self.buy_transaction > possible_transactions:
+
+               self.buy_transactions = possible_transactions
+
+            buy_infos = []
+
+            for transaction_no in range(1, self.buy_transactions + 1):
+
+                buy_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_buy / available_quote * 100
+
+                try:
+                    buy_info = self.api.buy(
+                        coin = coin,
+                        currency_percent_size_to_buy = buy_percent_per_transaction,
+                        used_currency = currency
+                    )
+                    buy_info = self._dict_to_pretty_str(
+                        ugly_dict = buy_info
+                    )
+                except Exception as error:
+                    buy_info = error
+
+                buy_infos.append(
+                    buy_info
+                )
+
+                sleep(self.time_between_buys)
+
+            message = f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { available_quote } { currency }\n\nBuy Information:\n\n{ buy_infos }\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
+
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
+                    message = message
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    message
+                )
+
+            sleep(self.time_between_buy_and_sell)
+
+        if sell:
+
+            available_percent = 1.0
+
+            dynamic_percent = 0
+
+            sell_infos = []
+
+            while available_percent > 0.0:
+
+                available_percent = available_percent - dynamic_percent
+
+                dynamic_percent = (1.0 / available_percent / self.sell_percent_per_transaction) / 100
+
+                if available_percent <= 0.0:
+
+                    break
+
+                try:
+                    sell_info = self.api.sell(
+                        coin = coin,
+                        coin_percent_size_to_sell = dynamic_percent,
+                        used_currency = currency
+                    )
+                    sell_info = self._dict_to_pretty_str(
+                        ugly_dict = sell_info
+                    )
+                except Exception as error:
+                    sell_info = error
+
+                sell_infos.append(
+                    sell_info
+                )
+
+                sleep(self.time_between_sells)
+
+            try:
+                last_sell_info = self.api.sell(
+                    coin = coin,
+                    coin_percent_size_to_sell = last_sell_amount,
+                    used_currency = currency
+                )
+                last_sell_info = self._dict_to_pretty_str(
+                    ugly_dict = last_sell_info
+                )
+            except Exception as error:
+                last_sell_info = error
+
+            sell_infos.append(
+                last_sell_info
+            )
+
+            message = f"Sell { coin } by { len(sell_infos) - 1 } x { self.sell_percent_per_transaction}% { currency } transactions\n\nSell Information:\n\n{ sell_infos }"
+
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
+                    message = message
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    message
+                )

@@ -34,6 +34,17 @@ class MexcAPI(
             price = coin_price,
         )
 
+    def _AbstractAPI__get_available_currency_amount_price(self, currency: str = None, asset_type: str = "SPOT"):
+        """
+            currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
+        """
+        available_assets = self.__spot_client.account_information()
+
+        if available_assets["accountType"] == asset_type:
+            for asset in available_assets["balances"]:
+                if asset["asset"] == currency:
+                    return float(asset["free"])
+        return 0.0
 
     def _AbstractAPI__get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "SPOT"):
         """

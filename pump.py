@@ -26,6 +26,7 @@ from telethon import TelegramClient, events, sync
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 from api.transactions.strategies import (
+    DistributedRiskStaticQuoteAndAssetTransactionStrategy,
     DistributedRiskSummationTransactionStrategy,
     SingleShotAfterTimeTransactionStrategy,
 )
@@ -99,7 +100,7 @@ channels = {
         ],
         "exchange": mexc_api,
         "currency": "USDT",
-        "strategy": DistributedRiskSummationTransactionStrategy,
+        "strategy": DistributedRiskStaticQuoteAndAssetTransactionStrategy,
         "regex": r"",
     },
     "Xt Pumps VIP": {
