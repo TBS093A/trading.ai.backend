@@ -1,0 +1,58 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pump-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pump-bot
+  template:
+    metadata:
+      labels:
+        app: pump-bot
+    spec:
+      initContainers:
+        - name: python-requirements-install
+          image: python:3.13.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              pip3 install tox;
+        - name: clone-repo
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              git clone <<pump.bot.repo.url>> /;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /
+      containers:
+        - name: pump-bot
+          image: python:3.13.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              source .env;
+              tox;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /
+            - name: config-volume
+              mountPath: /
+              subPath: .env
+      volumes:
+        - name: pump-bot-storage
+          persistentVolumeClaim:
+            claimName: pvc-pump-bot
+        - name: config-volume
+          configMap:
+            name: pump-bot-config
+            items:
+              - key: .env
+                path: .env
