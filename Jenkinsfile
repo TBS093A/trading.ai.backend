@@ -229,6 +229,14 @@ pipeline {
                     key: 'DATA_SOURCE_BRANCH',
                     value: '$.DATA_SOURCE_BRANCH'
                 ],
+                [
+                    key: 'TESTS',
+                    value: '$.TESTS'
+                ],
+                [
+                    key: 'DEPLOY',
+                    value: '$.DEPLOY'
+                ],
             ],
             token: '077ff7e0-8460-4a63-9a33-71503bbad374'
         )
@@ -257,8 +265,13 @@ pipeline {
                             ),
                             booleanParam(
                                 defaultValue: false,
-                                description: 'enable if you want <b>run bot after tests</b> for capture pump singnals and invest automatically',
-                                name: 'TESTS_ONLY'
+                                description: 'Enable if you want <b>run Pump Bot tests only</b>.',
+                                name: 'TESTS'
+                            ),
+                            booleanParam(
+                                defaultValue: true,
+                                description: 'enable if you want <b>run Pump Bot</b> for capture pump singnals from telegram and invest automatically',
+                                name: 'DEPLOY'
                             )
                         ])
                     ])
