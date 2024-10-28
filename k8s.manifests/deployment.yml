@@ -14,17 +14,6 @@ spec:
         app: pump-bot
     spec:
       initContainers:
-        - name: python-requirements-install
-          image: python:3.11.0
-          command:
-            - /bin/bash
-            - -c
-            - |
-              apt update -y;
-              apt upgrade -y;
-              apt install python3-pip -y
-              pip3 install --upgrade pip setuptools;
-              pip3 install tox;
         - name: clone-repo
           image: alpine/git
           command:
@@ -42,7 +31,13 @@ spec:
             - /bin/bash
             - -c
             - |
-              . ./.env;
+              apt update -y;
+              apt upgrade -y;
+              apt install python3-pip -y
+              pip3 install --upgrade pip setuptools;
+              pip3 install tox;
+              cd /app;
+              ./.env;
               python -m tox;
           volumeMounts:
             - name: pump-bot-storage
