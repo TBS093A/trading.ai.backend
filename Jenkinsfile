@@ -142,7 +142,7 @@ def test(JENKINS_REPO_DIR) {
 
                 kubectl apply -f ./k8s.manifests/storage.yml;
                 kubectl apply -f ./k8s.manifests/config.yml;
-                kubectl apply -f ./k8s.manifests/deployment.test.yml;
+                kubectl apply -f ./k8s.manifests/job.test.yml;
             """
 
             // Wait until the pod in the deployment is running the tests
@@ -175,7 +175,7 @@ def test(JENKINS_REPO_DIR) {
             sh """
                 export KUBECONFIG="/home/jenkins/.kube/config";
 
-                kubectl delete -f ./k8s.manifests/deployment.test.yml;
+                kubectl delete -f ./k8s.manifests/job.test.yml;
             """
 
         }
