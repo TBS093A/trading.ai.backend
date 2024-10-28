@@ -31,8 +31,7 @@ spec:
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /pump.bot
-      containers:
-        - name: pump-bot-api-tests
+        - name: setup-environment
           image: python:3.11.0
           command:
             - /bin/bash
@@ -40,9 +39,19 @@ spec:
             - |
               apt update -y;
               apt upgrade -y;
-              apt install python3-pip -y
+              apt install python3-pip -y;
               pip3 install --upgrade pip setuptools;
               pip3 install tox;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /app
+      containers:
+        - name: pump-bot-api-tests
+          image: python:3.11.0
+          command:
+            - /bin/bash
+            - -c
+            - |
               cd /app;
               . ./.env;
               python -m tox -e api-tests;
