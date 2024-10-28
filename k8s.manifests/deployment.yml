@@ -48,7 +48,7 @@ spec:
             - name: pump-bot-storage
               mountPath: /app
             - name: config-volume
-              mountPath: /
+              mountPath: /app
               subPath: .env
       volumes:
         - name: pump-bot-storage
