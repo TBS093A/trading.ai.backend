@@ -1,8 +1,8 @@
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: Job
 metadata:
-  name: pump-bot
+  name: pump-bot-api-tests
 spec:
   replicas: 1
   selector:
