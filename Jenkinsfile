@@ -167,9 +167,16 @@ def test(JENKINS_REPO_DIR) {
 
             // After tests, check if logs contain failure keywords
             def finalLogs = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl logs ${podName} -c pump-bot-api-tests", returnStdout: true).trim()
+
             if (finalLogs.contains("FAILED")) {
                 error("TESTS FAILED.")
             }
+
+            sh """
+                export KUBECONFIG="/home/jenkins/.kube/config";
+
+                kubectl delete -f ./k8s.manifests/deployment.test.yml;
+            """
 
         }
     } catch(error) {
