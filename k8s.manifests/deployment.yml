@@ -24,6 +24,16 @@ spec:
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /pump.bot
+        - name: clone-repo
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              git clone <<pump.bot.repo.url>> /pump.bot/;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /pump.bot
         - name: setup-environment
           image: python:3.11.0
           command:
@@ -38,16 +48,6 @@ spec:
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /app
-        - name: clone-repo
-          image: alpine/git
-          command:
-            - "sh"
-            - "-c"
-            - >
-              git clone <<pump.bot.repo.url>> /pump.bot/;
-          volumeMounts:
-            - name: pump-bot-storage
-              mountPath: /pump.bot
       containers:
         - name: pump-bot
           image: python:3.11.0
