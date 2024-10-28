@@ -31,10 +31,10 @@ spec:
             - "sh"
             - "-c"
             - >
-              git clone <<pump.bot.repo.url>> /;
+              git clone <<pump.bot.repo.url>> ./pump.bot;
           volumeMounts:
             - name: pump-bot-storage
-              mountPath: /
+              mountPath: /pump.bot
       containers:
         - name: pump-bot-api-tests
           image: python:3.13.0
@@ -46,7 +46,7 @@ spec:
               python -m tox -e api-tests;
           volumeMounts:
             - name: pump-bot-storage
-              mountPath: /
+              mountPath: /app
             - name: config-volume
               mountPath: /
               subPath: .env
