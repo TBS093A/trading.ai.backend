@@ -21,16 +21,6 @@ spec:
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /pump.bot
-        - name: clone-repo
-          image: alpine/git
-          command:
-            - "sh"
-            - "-c"
-            - >
-              git clone <<pump.bot.repo.url>> /pump.bot/;
-          volumeMounts:
-            - name: pump-bot-storage
-              mountPath: /pump.bot
         - name: setup-environment
           image: python:3.11.0
           command:
@@ -44,7 +34,17 @@ spec:
               pip3 install tox;
           volumeMounts:
             - name: pump-bot-storage
-              mountPath: /app
+              mountPath: /
+        - name: clone-repo
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              git clone <<pump.bot.repo.url>> /pump.bot/app/;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /pump.bot
       containers:
         - name: pump-bot-api-tests
           image: python:3.11.0
@@ -57,7 +57,7 @@ spec:
               python -m tox -e api-tests;
           volumeMounts:
             - name: pump-bot-storage
-              mountPath: /app
+              mountPath: /
             - name: config-volume
               mountPath: /app/.env
               subPath: .env
