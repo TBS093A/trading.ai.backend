@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
         - name: python-requirements-install
-          image: python:3.13.0
+          image: python:3.11.0
           command:
             - /bin/bash
             - -c
@@ -37,7 +37,7 @@ spec:
               mountPath: /pump.bot
       containers:
         - name: pump-bot-api-tests
-          image: python:3.13.0
+          image: python:3.11.0
           command:
             - /bin/bash
             - -c
