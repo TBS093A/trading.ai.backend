@@ -4,10 +4,6 @@ kind: Job
 metadata:
   name: pump-bot-api-tests
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: pump-bot-api-tests
   template:
     metadata:
       labels:
