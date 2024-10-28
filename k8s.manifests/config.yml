@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: pump-bot-config
 data:
-  config.json: |
+  .env: |
     export TELETHON_BOT_NAME="<<telethon.bot.name>>"
     export TELETHON_BOT_TOKEN="<<telethon.bot.token>>"
 

@@ -7,11 +7,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pump-bot
+      app: pump-bot-api-tests
   template:
     metadata:
       labels:
-        app: pump-bot
+        app: pump-bot-api-tests
     spec:
       initContainers:
         - name: python-requirements-install
@@ -36,14 +36,14 @@ spec:
             - name: pump-bot-storage
               mountPath: /
       containers:
-        - name: pump-bot
+        - name: pump-bot-api-tests
           image: python:3.13.0
           command:
             - /bin/bash
             - -c
             - |
               . ./.env;
-              python -m tox;
+              python -m tox -e api-tests;
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /
