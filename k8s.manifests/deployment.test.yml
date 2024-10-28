@@ -20,7 +20,7 @@ spec:
             - "sh"
             - "-c"
             - >
-              git clone <<pump.bot.repo.url>> ./pump.bot;
+              git clone <<pump.bot.repo.url>> /pump.bot;
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /pump.bot
