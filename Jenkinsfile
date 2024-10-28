@@ -152,6 +152,9 @@ def test(JENKINS_REPO_DIR) {
 
             // Wait until the tests are finished by checking container logs
             waitUntil {
+                // Sleep for 1 minute before the next check
+                sleep time: 1, unit: 'MINUTES'
+
                 def testLogs = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl logs ${podName} -c pump-bot-api-tests", returnStdout: true).trim()
                 echo "Test Logs:\n${testLogs}"
                 return testLogs.contains("summary") || testLogs.contains("tox")  // assuming `tox` will indicate completion
