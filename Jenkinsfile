@@ -75,6 +75,11 @@ def set_env_vars(JENKINS_REPO_DIR, GIT_REPO_URL, VARS) {
             withCredentials(
                 [
                     usernamePassword(
+                        credentialsId: 'git-gitea-tbs093a',
+                        passwordVariable: 'GIT_TOKEN',
+                        usernameVariable: 'GIT_USERNAME'
+                    ),
+                    usernamePassword(
                         credentialsId: 'telegram-pump-bot-credentials',
                         passwordVariable: 'TELETHON_BOT_TOKEN',
                         usernameVariable: 'TELETHON_BOT_NAME'
