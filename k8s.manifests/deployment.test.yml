@@ -13,6 +13,7 @@ spec:
       labels:
         app: pump-bot-api-tests
     spec:
+      restartPolicy: Never
       initContainers:
         - name: remove-old-files
           image: alpine/git
@@ -37,7 +38,6 @@ spec:
       containers:
         - name: pump-bot-api-tests
           image: python:3.11.0
-          restartPolicy: Never
           command:
             - /bin/bash
             - -c
