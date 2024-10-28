@@ -14,13 +14,23 @@ spec:
         app: pump-bot-api-tests
     spec:
       initContainers:
+        - name: remove-old-files
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              find /pump.bot/ -mindepth 1 -delete;
+          volumeMounts:
+            - name: pump-bot-storage
+              mountPath: /pump.bot
         - name: clone-repo
           image: alpine/git
           command:
             - "sh"
             - "-c"
             - >
-              git clone <<pump.bot.repo.url>> /pump.bot;
+              git clone <<pump.bot.repo.url>> /pump.bot/;
           volumeMounts:
             - name: pump-bot-storage
               mountPath: /pump.bot
