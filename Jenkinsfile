@@ -329,40 +329,6 @@ pipeline {
             }
         }
 
-        stage('Integrate Container Environment') {
-
-            steps {
-
-                container('jenkins-pump-bot-agent') {
-
-                    echo """
-                        Integrate Container Environment
-                    """
-
-                    catchError(
-                        buildResult: 'FAILURE',
-                        stageResult: 'FAILURE'
-                    ) {
-
-                        dir("${JENKINS_REPO_PUMP_SCRIPT_DIR}") {
-
-                            sh """
-                                apt update -y;
-                                apt upgrade -y;
-                                apt install python3-pip -y
-                            """
-
-                            sh """
-                                pip3 install --upgrade pip setuptools;
-                                pip3 install tox;
-                            """
-                        }
-                    }
-                }
-            }
-        }
-
-
         stage('Test Pump Bot On K8S') {
 
             when {
