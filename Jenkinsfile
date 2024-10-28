@@ -270,7 +270,7 @@ pipeline {
                             ),
                             booleanParam(
                                 defaultValue: true,
-                                description: 'enable if you want <b>run Pump Bot</b> for capture pump singnals from telegram and invest automatically',
+                                description: 'Enable if you want <b>run Pump Bot</b> for capture pump singnals from telegram and invest automatically',
                                 name: 'DEPLOY'
                             )
                         ])
