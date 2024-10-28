@@ -47,7 +47,7 @@ spec:
               pip3 install --upgrade pip setuptools;
               pip3 install tox;
               cd /app;
-              ./.env;
+              . ./.env;
               python -m tox -e api-tests;
           volumeMounts:
             - name: pump-bot-storage
