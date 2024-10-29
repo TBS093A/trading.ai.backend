@@ -65,7 +65,7 @@ class AbstractAPIMock:
             "coin": coin,
             "coin_percent_size_to_sell": coin_percent_size_to_sell,
             "used_currency": used_currency,
-            "price_sell_balance_percent": price_sell_balance_percent
+            "price_sell_balance_percent": price_sell_balance_percent,
             "transaction": {
                 "bought_assets_price": sold_assets_price,
                 "available_quote_after": self.available_quote,
