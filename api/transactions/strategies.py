@@ -484,6 +484,9 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         sell = True,
     ):
 
+        buy_infos = []
+        sell_infos = []
+
         if buy:
 
             available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
@@ -495,8 +498,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             if self.buy_transactions == None or self.buy_transaction > possible_transactions:
 
                self.buy_transactions = possible_transactions
-
-            buy_infos = []
 
             for transaction_no in range(1, self.buy_transactions + 1):
 
@@ -541,8 +542,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             available_percent = 1.0
 
             dynamic_percent = 0
-
-            sell_infos = []
 
             while available_percent > 0.0:
 
@@ -601,3 +600,10 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             print(
                 message
             )
+
+    if self.__DEBUG:
+
+        return {
+            "buy_infos": buy_infos,
+            "sell_infos": sell_infos
+        }
