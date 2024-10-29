@@ -392,9 +392,9 @@ async def main() -> None:
         #    message=f"Bot Ready To Use!!!\n\nInstruction:\n\n\tSettings Init / Overriding Example:\n\n\t\t/!settings exchange:MEXC transaction_strategy:DRSTS used_currency:USDT allow_manual_sell=FALSE\n\n\tBuy Action Example:\n\n\t\t/!buy coin:ZZZ\n\n\tSell Action Example:\n\n\t\t/!sell"
         #)
 
-        async while True:
-            async for channel_name, channel_info in channels.items():
-                async for pump_info in channel_info['pumps']:
+        while True:
+            for channel_name, channel_info in channels.items():
+                for pump_info in channel_info['pumps']:
                     if pump_info['is_realised']:
                         continue
                     now = datetime.now()
@@ -404,10 +404,10 @@ async def main() -> None:
                         pump_info['is_today'] = True
                         if current_hour_and_minute == pump_info["time"][:5]:
                             print(f"Download messages in {channel_name} (USERNAME: {channel['username']} ID:, {channel['id']}) for pump at {pump['day']} {pump['time']}")
-                            async for request_no in range(1, telegram_requests_per_minute_limit + 1):
+                            for request_no in range(1, telegram_requests_per_minute_limit + 1):
                                 now = datetime.now().strftime("%H:%M:%S")
                                 print(f"request no {request_no} at {now}")
-                                async for message in client.iter_messages(chat, limit=5):
+                                for message in client.iter_messages(chat, limit=5):
                                     match_results = gather_coin(
                                         captured_message = captured_message,
                                         regex = channel_info["regex"]
@@ -454,8 +454,8 @@ async def main() -> None:
                                     await asyncio.sleep(waiting_time)
                         await asyncio.sleep(0.25)
 
-            async for channel_name, channel_info in channels.items():
-                async for pump_info in channel_info['pumps']:
+            for channel_name, channel_info in channels.items():
+                for pump_info in channel_info['pumps']:
                     if pump_info['is_realised'] == True:
                         current_day = datetime.now().strftime("%A")
                         if current_day.lower() != pump_info['day'].lower():
@@ -463,8 +463,8 @@ async def main() -> None:
 
             pump_is_not_today = False
 
-            async for channel_name, channel_info in channels.items():
-                async for pump_info in channel_info['pumps']:
+            for channel_name, channel_info in channels.items():
+                for pump_info in channel_info['pumps']:
                     if pump_info['is_today'] == False:
                         pump_info['is_today'] = False
                         pump_is_not_today = True
