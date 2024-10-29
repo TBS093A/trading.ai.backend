@@ -37,7 +37,7 @@ class AbstractAPI:
 
         self.available_quote -= bought_assets_price
 
-        self.available_coin_assets += self.coin_price_at_buy * bought_assets_price
+        self.available_coin_assets += bought_assets_price / self.coin_price_at_buy
 
         return {
             "coin": coin,
