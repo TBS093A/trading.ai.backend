@@ -66,7 +66,7 @@ class AbstractAPI:
             "used_currency": used_currency,
             "price_sell_balance_percent": price_sell_balance_percent,
             "transaction": {
-                "bought_assets_price": sold_assets_price,
+                "sold_assets_price": sold_assets_price,
                 "available_quote_after": self.available_quote,
                 "available_coin_assets_after": self.available_coin_assets,
                 "coin_price": self.coin_price_at_sell

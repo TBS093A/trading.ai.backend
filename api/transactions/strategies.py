@@ -489,11 +489,11 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         if buy:
 
-            available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
+            first_available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
                 currency = currency
             )
 
-            possible_transactions = int(available_quote / self.qoute_currency_amount_per_transaction_used_to_buy)
+            possible_transactions = int(first_available_quote / self.qoute_currency_amount_per_transaction_used_to_buy)
 
             if self.buy_transactions == None or self.buy_transaction > possible_transactions:
 
@@ -525,7 +525,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 sleep(self.time_between_buys)
 
-            message = f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { available_quote } { currency }\n\nBuy Information:\n\n{ buy_infos }\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
+            message = f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { first_available_quote } { currency }\n\nBuy Information:\n\n{ buy_infos }\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
 
             if self.__DEBUG == False:
 
@@ -553,7 +553,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 dynamic_percent = (1.0 / available_percent / self.sell_percent_per_transaction) / 100
 
-                if available_percent <= 0.0:
+                if dynamic_percent >= 1.0:
 
                     break
 
