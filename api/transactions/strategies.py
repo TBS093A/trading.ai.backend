@@ -479,7 +479,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         self,
         coin: str,
         currency: str = "USDT",
-        buy_amount: float = 1.0,
         last_sell_amount: float = 1.0,
         buy = True,
         sell = True,
