@@ -54,11 +54,11 @@ class AbstractAPI:
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
-        sold_assets_price: float = self.available_quote * coin_percent_size_to_sell
+        sold_assets_price: float = self.available_coin_assets * coin_percent_size_to_sell
 
-        self.available_quote += sold_assets_price
+        self.available_quote += self.coin_price_at_sell * sold_assets_price
 
-        self.available_coin_assets -= self.coin_price_at_sell * sold_assets_price
+        self.available_coin_assets -= sold_assets_price
 
         return {
             "coin": coin,
