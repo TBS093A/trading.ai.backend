@@ -501,7 +501,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             for transaction_no in range(1, self.buy_transactions + 1):
 
-                buy_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_buy / available_quote * 100
+                buy_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_buy / available_quote
 
                 try:
                     buy_info = self.api.buy(
