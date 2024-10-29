@@ -36,7 +36,7 @@ from pump import (
 )
 
 
-class TestTransactionStrategies(unittest.testcase):
+class TestTransactionStrategies(unittest.TestCase):
 
     self.__bot = TelegramClient(
         "bot_session",
@@ -176,7 +176,7 @@ class TestTransactionStrategies(unittest.testcase):
 
 
 @unittest.skip("skip kucoin unit tests")
-class TestKucoinAPI(unittest.testcase):
+class TestKucoinAPI(unittest.TestCase):
 
     __kucoin_api = KucoinAPI(
         api_key = os.environ.get(
