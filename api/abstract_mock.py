@@ -23,13 +23,19 @@ class AbstractAPI:
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
         """
-        return self.available_quote
+        if "QUOTE".lower() in currency.lower():
+            return self.available_quote
+        if "ASSET".lower() in currency.lower():
+            return self.available_coin_assets
 
     def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
         """
-        return self.available_quote * percent_size
+        if "QUOTE".lower() in currency.lower():
+            return self.available_quote * percent_size
+        if "ASSET".lower() in currency.lower():
+            return self.available_coin_assets * percent_size
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
