@@ -501,7 +501,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             for transaction_no in range(1, self.buy_transactions + 1):
 
-                available_quote = = self.api._AbstractAPI__get_available_currency_amount_price(
+                available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
                     currency = currency
                 )
 
