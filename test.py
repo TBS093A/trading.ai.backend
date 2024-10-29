@@ -1,5 +1,6 @@
 import os
 import unittest
+import asyncio
 
 from time import sleep
 
@@ -49,12 +50,12 @@ class TestTransactionStrategies(unittest.TestCase):
     __coin: str = "TEST_ASSET"
     __currency: str = "TEST_QUOTE"
 
-    async def test_distributed_risk_static_quote_and_asset_transaction_strategy_000(self):
+    async def __distributed_risk_static_quote_and_asset_transaction_strategy(self, available_quote: float, coin_price_at_buy: float, coin_price_at_sell: float):
 
         used_api = AbstractAPIMock(
-            available_quote = 500.0,
-            coin_price_at_buy = 0.0034,
-            coin_price_at_sell = 0.034,
+            available_quote = available_quote,
+            coin_price_at_buy = coin_price_at_buy,
+            coin_price_at_sell = coin_price_at_sell,
         )
 
         used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
@@ -74,116 +75,65 @@ class TestTransactionStrategies(unittest.TestCase):
             currency = self.__currency
         )
 
-        print(transaction_infos)
+        return transaction_infos
 
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_000(self):
 
-    async def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
-
-        used_api = AbstractAPIMock(
-            available_quote = 1000.0,
-            coin_price_at_buy = 0.0034,
-            coin_price_at_sell = 0.034,
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 500.0,
+                coin_price_at_buy = 0.0034,
+                coin_price_at_sell = 0.034,
+            )
         )
 
-        used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
-            api = used_api,
-            telegram_client_credentials = {
-                "api_id": telethon_api_id,
-                "api_hash": telethon_api_hash,
-                "bot_session": self.__bot,
-                "user": user_id
-            },
-            telegram_sending_method = send_as_bot,
-            DEBUG = True
+        print(transaction_info)
+
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 1000.0,
+                coin_price_at_buy = 0.0034,
+                coin_price_at_sell = 0.034,
+            )
         )
 
-        transaction_infos = await used_strategy.invoke(
-            coin = self.__coin,
-            currency = self.__currency
+        print(transaction_info)
+
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_002(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 250.0,
+                coin_price_at_buy = 0.034,
+                coin_price_at_sell = 3.4,
+            )
         )
 
-        print(transaction_infos)
+        print(transaction_info)
 
-    async def test_distributed_risk_static_quote_and_asset_transaction_strategy_002(self):
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
 
-        used_api = AbstractAPIMock(
-            available_quote = 250.0,
-            coin_price_at_buy = 0.034,
-            coin_price_at_sell = 3.4,
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 50.0,
+                coin_price_at_buy = 0.034,
+                coin_price_at_sell = 3.4,
+            )
         )
 
-        used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
-            api = used_api,
-            telegram_client_credentials = {
-                "api_id": telethon_api_id,
-                "api_hash": telethon_api_hash,
-                "bot_session": self.__bot,
-                "user": user_id
-            },
-            telegram_sending_method = send_as_bot,
-            DEBUG = True
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_004(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 100.0,
+                coin_price_at_buy = 0.000032,
+                coin_price_at_sell = 0.0067,
+            )
         )
 
-        transaction_infos = await used_strategy.invoke(
-            coin = self.__coin,
-            currency = self.__currency
-        )
-
-        print(transaction_infos)
-
-    async def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
-
-        used_api = AbstractAPIMock(
-            available_quote = 50.0,
-            coin_price_at_buy = 0.034,
-            coin_price_at_sell = 3.4,
-        )
-
-        used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
-            api = used_api,
-            telegram_client_credentials = {
-                "api_id": telethon_api_id,
-                "api_hash": telethon_api_hash,
-                "bot_session": self.__bot,
-                "user": user_id
-            },
-            telegram_sending_method = send_as_bot,
-            DEBUG = True
-        )
-
-        transaction_infos = await used_strategy.invoke(
-            coin = self.__coin,
-            currency = self.__currency
-        )
-
-        print(transaction_infos)
-
-    async def test_distributed_risk_static_quote_and_asset_transaction_strategy_004(self):
-
-        used_api = AbstractAPIMock(
-            available_quote = 100.0,
-            coin_price_at_buy = 0.000032,
-            coin_price_at_sell = 0.0067,
-        )
-
-        used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
-            api = used_api,
-            telegram_client_credentials = {
-                "api_id": telethon_api_id,
-                "api_hash": telethon_api_hash,
-                "bot_session": self.__bot,
-                "user": user_id
-            },
-            telegram_sending_method = send_as_bot,
-            DEBUG = True
-        )
-
-        transaction_infos = await used_strategy.invoke(
-            coin = self.__coin,
-            currency = self.__currency
-        )
-
-        print(transaction_infos)
+        print(transaction_info)
 
 
 @unittest.skip("skip kucoin unit tests")
