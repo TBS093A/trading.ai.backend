@@ -601,9 +601,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                 message
             )
 
-    if self.__DEBUG:
-
-        return {
-            "buy_infos": buy_infos,
-            "sell_infos": sell_infos
-        }
+            return {
+                "buy_infos": buy_infos,
+                "sell_infos": sell_infos
+            }
