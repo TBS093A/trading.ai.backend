@@ -257,115 +257,6 @@ async def sleep_to_next_day():
     await asyncio.sleep(seconds_until_target)
 
 
-@client.on(events.NewMessage(pattern="(.*)"))
-async def handler_coin(event):
-    captured_message = event.message.message
-    if "[BOT]" not in captured_message:
-        await send_as_bot(
-            telethon_api_id,
-            telethon_api_hash,
-            bot,
-            user=user_id,
-            message=f"Captured Message: {captured_message}"
-        )
-
-        match_results = gather_command(
-            captured_message
-        )
-
-        if match_results != None and "action" not in match_results.keys():
-            await send_as_bot(
-                telethon_api_id,
-                telethon_api_hash,
-                bot,
-                user=user_id,
-                message=f"Settings:\n{ match_results }\nSaved!"
-            )
-
-        if match_results != None and "action" in match_results.keys():
-
-            captured_coin = match_results["coin"]
-
-            allow_manual_sell = match_results["allow_manual_sell"].lower() == "true"
-
-            await send_as_bot(
-                telethon_api_id,
-                telethon_api_hash,
-                bot,
-                user=user_id,
-                message=f"Captured Coin: {captured_coin}"
-            )
-
-            used_api = mexc_api
-
-            if match_results["exchange"] == "KUCOIN":
-                used_api = kucoin_api
-            if match_results["exchange"] == "MEXC":
-                used_api = mexc_api
-
-            used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
-                api = used_api,
-                telegram_client_credentials = {
-                    "api_id": telethon_api_id,
-                    "api_hash": telethon_api_hash,
-                    "bot_session": bot,
-                    "user": user_id
-                },
-                telegram_sending_method = send_as_bot
-            )
-            if match_results["transaction_strategy"] == "DRSTS":
-                used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
-                    api = used_api,
-                    telegram_client_credentials = {
-                        "api_id": telethon_api_id,
-                        "api_hash": telethon_api_hash,
-                        "bot_session": bot,
-                        "user": user_id
-                    },
-                    telegram_sending_method = send_as_bot
-                )
-
-            if match_results["transaction_strategy"] == "SSATTS":
-                used_transaction_strategy = SingleShotAfterTimeTransactionStrategy(
-                    api = used_api,
-                    telegram_client_credentials = {
-                        "api_id": telethon_api_id,
-                        "api_hash": telethon_api_hash,
-                        "bot_session": bot,
-                        "user": user_id
-                    },
-                    telegram_sending_method = send_as_bot
-                )
-
-
-            if match_results["action"] == "buy":
-
-                await used_transaction_strategy.invoke(
-                    coin = captured_coin,
-                    currency = match_results["used_currency"],
-                    buy = True,
-                    sell = not allow_manual_sell,
-                )
-
-                if allow_manual_sell:
-                    await send_as_bot(
-                        telethon_api_id,
-                        telethon_api_hash,
-                        bot,
-                        user=user_id,
-                        message=f"[Exchange Symbol Chart]({ used_api.generate_symbol_url() })"
-                    )
-
-            if match_results["action"] == "sell":
-
-                await used_transaction_strategy.invoke(
-                    coin = captured_coin,
-                    currency = match_results["used_currency"],
-                    buy = False,
-                    sell = True,
-                )
-
-
 async def main() -> None:
 
     with TelegramClient(
@@ -471,6 +362,116 @@ async def main() -> None:
 
             if pump_is_not_today:
                 await sleep_to_next_day()
+
+
+        @client.on(events.NewMessage(pattern="(.*)"))
+        async def handler_coin(event):
+            captured_message = event.message.message
+            if "[BOT]" not in captured_message:
+                await send_as_bot(
+                    telethon_api_id,
+                    telethon_api_hash,
+                    bot,
+                    user=user_id,
+                    message=f"Captured Message: {captured_message}"
+                )
+
+                match_results = gather_command(
+                    captured_message
+                )
+
+                if match_results != None and "action" not in match_results.keys():
+                    await send_as_bot(
+                        telethon_api_id,
+                        telethon_api_hash,
+                        bot,
+                        user=user_id,
+                        message=f"Settings:\n{ match_results }\nSaved!"
+                    )
+
+                if match_results != None and "action" in match_results.keys():
+
+                    captured_coin = match_results["coin"]
+
+                    allow_manual_sell = match_results["allow_manual_sell"].lower() == "true"
+
+                    await send_as_bot(
+                        telethon_api_id,
+                        telethon_api_hash,
+                        bot,
+                        user=user_id,
+                        message=f"Captured Coin: {captured_coin}"
+                    )
+
+                    used_api = mexc_api
+
+                    if match_results["exchange"] == "KUCOIN":
+                        used_api = kucoin_api
+                    if match_results["exchange"] == "MEXC":
+                        used_api = mexc_api
+
+                    used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
+                        api = used_api,
+                        telegram_client_credentials = {
+                            "api_id": telethon_api_id,
+                            "api_hash": telethon_api_hash,
+                            "bot_session": bot,
+                            "user": user_id
+                        },
+                        telegram_sending_method = send_as_bot
+                    )
+                    if match_results["transaction_strategy"] == "DRSTS":
+                        used_transaction_strategy = DistributedRiskSummationTransactionStrategy(
+                            api = used_api,
+                            telegram_client_credentials = {
+                                "api_id": telethon_api_id,
+                                "api_hash": telethon_api_hash,
+                                "bot_session": bot,
+                                "user": user_id
+                            },
+                            telegram_sending_method = send_as_bot
+                        )
+
+                    if match_results["transaction_strategy"] == "SSATTS":
+                        used_transaction_strategy = SingleShotAfterTimeTransactionStrategy(
+                            api = used_api,
+                            telegram_client_credentials = {
+                                "api_id": telethon_api_id,
+                                "api_hash": telethon_api_hash,
+                                "bot_session": bot,
+                                "user": user_id
+                            },
+                            telegram_sending_method = send_as_bot
+                        )
+
+
+                    if match_results["action"] == "buy":
+
+                        await used_transaction_strategy.invoke(
+                            coin = captured_coin,
+                            currency = match_results["used_currency"],
+                            buy = True,
+                            sell = not allow_manual_sell,
+                        )
+
+                        if allow_manual_sell:
+                            await send_as_bot(
+                                telethon_api_id,
+                                telethon_api_hash,
+                                bot,
+                                user=user_id,
+                                message=f"[Exchange Symbol Chart]({ used_api.generate_symbol_url() })"
+                            )
+
+                    if match_results["action"] == "sell":
+
+                        await used_transaction_strategy.invoke(
+                            coin = captured_coin,
+                            currency = match_results["used_currency"],
+                            buy = False,
+                            sell = True,
+                        )
+
 
 if __name__ == "__main__":
     asyncio.run(main())
