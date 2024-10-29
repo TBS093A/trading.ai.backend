@@ -8,7 +8,7 @@ from telethon import TelegramClient
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 
-from api.transactions.abstract_mock import (
+from api.abstract_mock import (
     AbstractAPIMock
 )
 from api.transactions.strategies import (
