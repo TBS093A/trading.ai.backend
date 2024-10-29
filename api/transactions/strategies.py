@@ -557,7 +557,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 available_percent -= self.sell_percent_per_transaction
 
-                dynamic_percent = const_size / value
+                dynamic_percent = const_size / available_size
 
                 try:
                     sell_info = self.api.sell(
