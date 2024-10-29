@@ -38,7 +38,7 @@ from pump import (
 
 class TestTransactionStrategies(unittest.TestCase):
 
-    self.__bot = TelegramClient(
+    __bot = TelegramClient(
         "bot_session",
         telethon_api_id,
         telethon_api_hash
@@ -46,8 +46,8 @@ class TestTransactionStrategies(unittest.TestCase):
         bot_token=telethon_bot_token
     )
 
-    self.__coin: str = "TEST_ASSET"
-    self.__currency: str = "TEST_QUOTE"
+    __coin: str = "TEST_ASSET"
+    __currency: str = "TEST_QUOTE"
 
     async def test_distributed_risk_static_quote_and_asset_transaction_strategy_000(self):
 
