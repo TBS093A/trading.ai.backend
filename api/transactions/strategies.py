@@ -458,7 +458,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         buy_transactions: int = None,
         time_between_buys: float = 0.1,
         time_between_buy_and_sell: int = 15,
-        sell_percent_per_transaction: float = 0.1,
+        sell_percent_per_transaction: float = 0.025,
         time_between_sells: float = 0.1,
         DEBUG: bool = False,
     ):
@@ -547,25 +547,17 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             dynamic_percent = 0
 
-            while available_percent > -1.0:
+            available_size = self.api._AbstractAPI__get_available_currency_amount_price(
+                currency = coin
+            )
 
-                available_percent -= dynamic_percent
+            const_size = available_size * self.sell_percent_per_transaction
 
-                dynamic_percent = (1.0 / available_percent * self.sell_percent_per_transaction)
+            while available_percent > 0.0 and available_size > 0.0:
 
-                if dynamic_percent < 0.0:
+                available_percent -= self.sell_percent_per_transaction
 
-                    dynamic_percent = dynamic_percent * -1.0
-
-                if dynamic_percent > 1.0:
-
-                    while dynamic_percent > 1.0:
-
-                        dynamic_percent = dynamic_percent / 10
-
-                if dynamic_percent > 0.5:
-
-                    dynamic_percent = dynamic_percent / 2
+                dynamic_percent = const_size / value
 
                 try:
                     sell_info = self.api.sell(
@@ -581,6 +573,10 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 sell_infos.append(
                     sell_info
+                )
+
+                available_size = self.api._AbstractAPI__get_available_currency_amount_price(
+                    currency = coin
                 )
 
                 sleep(self.time_between_sells)
