@@ -10,7 +10,7 @@ from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
 
 from api.abstract_mock import (
-    AbstractAPIMock
+    AbstractAPI
 )
 from api.transactions.strategies import (
     DistributedRiskStaticQuoteAndAssetTransactionStrategy,
@@ -52,7 +52,7 @@ class TestTransactionStrategies(unittest.TestCase):
 
     async def __distributed_risk_static_quote_and_asset_transaction_strategy(self, available_quote: float, coin_price_at_buy: float, coin_price_at_sell: float):
 
-        used_api = AbstractAPIMock(
+        used_api = AbstractAPI(
             available_quote = available_quote,
             coin_price_at_buy = coin_price_at_buy,
             coin_price_at_sell = coin_price_at_sell,
