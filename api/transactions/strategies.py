@@ -553,6 +553,14 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 dynamic_percent = (1.0 / available_percent / self.sell_percent_per_transaction) / 100
 
+                if dynamic_percent < 0.0:
+
+                    dynamic_percent = dynamic_percent * -1.0
+
+                    while dynamic_percent > 1.0:
+
+                        dynamic_percent = dynamic_percent / 10
+
                 if dynamic_percent >= 1.0:
 
                     break
