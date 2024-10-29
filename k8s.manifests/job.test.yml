@@ -60,7 +60,7 @@ spec:
               python -m tox -e api-tests;
           volumeMounts:
             - name: pump-bot-storage
-              mountPath: /
+              mountPath: /app
             - name: config-volume
               mountPath: /app/.env
               subPath: .env
