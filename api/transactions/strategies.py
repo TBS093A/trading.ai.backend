@@ -547,23 +547,25 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             dynamic_percent = 0
 
-            while available_percent > 0.0:
+            while available_percent > -1.0:
 
-                available_percent = available_percent - dynamic_percent
+                available_percent -= dynamic_percent
 
-                dynamic_percent = (1.0 / available_percent / self.sell_percent_per_transaction) / 100
+                dynamic_percent = (1.0 / available_percent * sell_percent_per_transaction)
 
                 if dynamic_percent < 0.0:
 
                     dynamic_percent = dynamic_percent * -1.0
 
+                if dynamic_percent > 1.0:
+
                     while dynamic_percent > 1.0:
 
                         dynamic_percent = dynamic_percent / 10
 
-                if dynamic_percent >= 1.0:
+                if dynamic_percent > 0.5:
 
-                    break
+                    dynamic_percent = dynamic_percent / 2
 
                 try:
                     sell_info = self.api.sell(
