@@ -2,7 +2,7 @@ import requests
 import logging
 
 
-class AbstractAPIMock:
+class AbstractAPI:
 
     __general_endpoint = ""
     __buy_endpoint = ""
@@ -18,7 +18,6 @@ class AbstractAPIMock:
         self.coin_price_at_buy: float = coin_price_at_buy
         self.coin_price_at_sell: float = coin_price_at_sell
         self.available_coin_assets: float = available_coin_assets
-
 
     def __get_available_currency_amount_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
         """
