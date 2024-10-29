@@ -69,10 +69,13 @@ class TestTransactionStrategies(unittest.TestCase):
             DEBUG = True
         )
 
-        await used_strategy.invoke(
+        transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             currency = self.__currency
         )
+
+        print(transaction_infos)
+
 
     async def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
 
@@ -94,10 +97,12 @@ class TestTransactionStrategies(unittest.TestCase):
             DEBUG = True
         )
 
-        await used_strategy.invoke(
+        transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             currency = self.__currency
         )
+
+        print(transaction_infos)
 
     async def test_distributed_risk_static_quote_and_asset_transaction_strategy_002(self):
 
@@ -119,10 +124,12 @@ class TestTransactionStrategies(unittest.TestCase):
             DEBUG = True
         )
 
-        await used_strategy.invoke(
+        transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             currency = self.__currency
         )
+
+        print(transaction_infos)
 
     async def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
 
@@ -144,10 +151,12 @@ class TestTransactionStrategies(unittest.TestCase):
             DEBUG = True
         )
 
-        await used_strategy.invoke(
+        transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             currency = self.__currency
         )
+
+        print(transaction_infos)
 
     async def test_distributed_risk_static_quote_and_asset_transaction_strategy_004(self):
 
@@ -169,10 +178,12 @@ class TestTransactionStrategies(unittest.TestCase):
             DEBUG = True
         )
 
-        await used_strategy.invoke(
+        transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             currency = self.__currency
         )
+
+        print(transaction_infos)
 
 
 @unittest.skip("skip kucoin unit tests")
