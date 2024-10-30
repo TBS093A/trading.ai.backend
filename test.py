@@ -39,14 +39,6 @@ from pump import (
 
 class TestTransactionStrategies(unittest.TestCase):
 
-    __bot = TelegramClient(
-        "bot_session",
-        telethon_api_id,
-        telethon_api_hash
-    ).start(
-        bot_token=telethon_bot_token
-    )
-
     __coin: str = "TEST_ASSET"
     __currency: str = "TEST_QUOTE"
 
@@ -60,14 +52,10 @@ class TestTransactionStrategies(unittest.TestCase):
 
         used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             api = used_api,
-            telegram_client_credentials = {
-                "api_id": telethon_api_id,
-                "api_hash": telethon_api_hash,
-                "bot_session": self.__bot,
-                "user": user_id
-            },
-            telegram_sending_method = send_as_bot,
-            DEBUG = True
+            telegram_client_credentials = {},
+            telegram_sending_method = None,
+            DEBUG = True,
+            time_between_buy_and_sell = 0.0,
         )
 
         transaction_infos = await used_strategy.invoke(
@@ -87,8 +75,6 @@ class TestTransactionStrategies(unittest.TestCase):
             )
         )
 
-        print(transaction_info)
-
     def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
 
         transaction_info = asyncio.run(
@@ -99,8 +85,6 @@ class TestTransactionStrategies(unittest.TestCase):
             )
         )
 
-        print(transaction_info)
-
     def test_distributed_risk_static_quote_and_asset_transaction_strategy_002(self):
 
         transaction_info = asyncio.run(
@@ -110,8 +94,6 @@ class TestTransactionStrategies(unittest.TestCase):
                 coin_price_at_sell = 3.4,
             )
         )
-
-        print(transaction_info)
 
     def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
 
@@ -132,8 +114,6 @@ class TestTransactionStrategies(unittest.TestCase):
                 coin_price_at_sell = 0.0067,
             )
         )
-
-        print(transaction_info)
 
 
 @unittest.skip("skip kucoin unit tests")

@@ -5,6 +5,7 @@ from .abstract import AbstractAPI
 class MexcAPI(
     AbstractAPI
 ):
+    __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
 
     def __init__(self, api_key: str, api_secret: str) -> None:
         self.__api_key = api_key
@@ -32,6 +33,11 @@ class MexcAPI(
             order_type = "LIMIT",
             quantity = coin_size,
             price = coin_price,
+        )
+
+    def _cancel_all_orders(self, coin: str, used_currency: str):
+        return self.__spot_client.cancel_all_open_orders(
+            symbol = f"{ coin }{ used_currency }"
         )
 
     def _AbstractAPI__get_available_currency_amount_price(self, currency: str = None, asset_type: str = "SPOT"):
