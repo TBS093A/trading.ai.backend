@@ -6,6 +6,8 @@ class BinanceAPI(
     AbstractAPI
 ):
 
+    __api_transaction_requests_limit = {"requests": 6000, "in_seconds": 60}
+
     def __init__(self, api_key: str, api_secret: str) -> None:
         self.__api_key = api_key
         self.__api_secret = api_secret

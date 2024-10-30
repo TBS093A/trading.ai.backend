@@ -1,6 +1,6 @@
 from api.abstract import AbstractAPI
 
-from time import sleep
+from time import sleep, time
 import logging
 
 
@@ -43,6 +43,14 @@ class AbstractTransactionStrategy:
                 }
             )
         )
+
+    def _prepare_represented_string_for_transactions(self, transactions_list: list) -> str:
+        all_transactions = ""
+        index = 1
+        for single_transaction in transactions_list:
+            all_transactions += f"{index} -> {single_transaction}\n\n"
+            index += 1
+        return all_transactions
 
     async def invoke(self):
 
@@ -454,12 +462,11 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         api: AbstractAPI,
         telegram_client_credentials,
         telegram_sending_method,
-        qoute_currency_amount_per_transaction_used_to_buy: int = 50,
+        qoute_currency_amount_per_transaction_used_to_buy: int = 50.0,
         buy_transactions: int = None,
-        time_between_buys: float = 0.1,
-        time_between_buy_and_sell: int = 15,
-        sell_percent_per_transaction: float = 0.025,
-        time_between_sells: float = 0.1,
+        time_between_buy_and_sell: int = 1.0,
+        qoute_currency_amount_per_transaction_used_to_sell: int = 50.0,
+        sell_transactions: int = None,
         DEBUG: bool = False,
     ):
         super().__init__(
@@ -467,12 +474,16 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             telegram_client_credentials = telegram_client_credentials,
             telegram_sending_method = telegram_sending_method
         )
+
+        requests_per_transaction = 1 #each endpoint have independet limit of requests which is equal -> api_transaction_requests_limit["requests"]
+        api_transaction_requests_limit = api.get_api_transaction_requests_limit()
         self.qoute_currency_amount_per_transaction_used_to_buy = qoute_currency_amount_per_transaction_used_to_buy
         self.buy_transactions = buy_transactions
-        self.time_between_buys = time_between_buys
+        self.time_between_buys = api_transaction_requests_limit["in_seconds"] / int(api_transaction_requests_limit["requests"] / requests_per_transaction)
         self.time_between_buy_and_sell = time_between_buy_and_sell
-        self.sell_percent_per_transaction = sell_percent_per_transaction
-        self.time_between_sells = time_between_sells
+        self.qoute_currency_amount_per_transaction_used_to_sell = qoute_currency_amount_per_transaction_used_to_sell
+        self.sell_transactions = sell_transactions
+        self.time_between_sells = api_transaction_requests_limit["in_seconds"] / int(api_transaction_requests_limit["requests"] / requests_per_transaction)
         self.__DEBUG = DEBUG
 
     async def invoke(
@@ -489,13 +500,15 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         if buy:
 
+            buy_start_time = time()
+
             first_available_quote = self.api._AbstractAPI__get_available_currency_amount_price(
                 currency = currency
             )
 
             possible_transactions = int(first_available_quote / self.qoute_currency_amount_per_transaction_used_to_buy)
 
-            if self.buy_transactions == None or self.buy_transaction > possible_transactions:
+            if self.buy_transactions == None or self.buy_transactions > possible_transactions:
 
                self.buy_transactions = possible_transactions
 
@@ -525,7 +538,12 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 sleep(self.time_between_buys)
 
-            message = f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { first_available_quote } { currency }\n\nBuy Information:\n\n{ buy_infos }\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
+            buy_end_time = time()
+
+            elapsed_time_sec = buy_end_time - buy_start_time
+            elapsed_time_millisec = elapsed_time_sec * 1000
+
+            message = f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { first_available_quote } { currency }\n\nBuy Information:\n\n{ self._prepare_represented_string_for_transactions(buy_infos) }\n\nTotal Buy Transaction Elapsed Time: {elapsed_time_sec:.6f} SEC ({elapsed_time_millisec:.3f} MS)\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
 
             if self.__DEBUG == False:
 
@@ -543,47 +561,110 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         if sell:
 
-            available_percent = 1.0
-
-            dynamic_percent = 0
+            sell_start_time = time()
 
             available_size = self.api._AbstractAPI__get_available_currency_amount_price(
                 currency = coin
             )
 
-            const_size = available_size * self.sell_percent_per_transaction
+            actual_coin_price = float(
+                self.api._AbstractAPI__get_bid_and_ask_prices(
+                    base_currency = coin,
+                    quote_currency = currency
+                )["bid_price"]
+            )
 
-            while available_percent > 0.0 and available_size > 0.0:
+            iteration_index = 0
 
-                available_percent -= self.sell_percent_per_transaction
-
-                dynamic_percent = const_size / available_size
-
-                if dynamic_percent >= 1.0:
-
-                    break
-
-                try:
-                    sell_info = self.api.sell(
-                        coin = coin,
-                        coin_percent_size_to_sell = dynamic_percent,
-                        used_currency = currency
-                    )
-                    sell_info = self._dict_to_pretty_str(
-                        ugly_dict = sell_info
-                    )
-                except Exception as error:
-                    sell_info = error
-
-                sell_infos.append(
-                    sell_info
-                )
+            while True:
 
                 available_size = self.api._AbstractAPI__get_available_currency_amount_price(
                     currency = coin
                 )
 
-                sleep(self.time_between_sells)
+                actual_coin_price = float(
+                    self.api._AbstractAPI__get_bid_and_ask_prices(
+                        base_currency = coin,
+                        quote_currency = currency
+                    )["bid_price"]
+                )
+
+                available_quote_in_asset = available_size * actual_coin_price
+
+                if available_quote_in_asset < self.qoute_currency_amount_per_transaction_used_to_sell:
+
+                    break
+
+                possible_transactions = int(available_quote_in_asset / self.qoute_currency_amount_per_transaction_used_to_sell)
+
+                if self.sell_transactions == None or self.sell_transactions > possible_transactions:
+
+                    self.sell_transactions = possible_transactions
+
+                if iteration_index > 0:
+                    info = self.api._cancel_all_orders(
+                        coin = coin,
+                        used_currency = currency
+                    )
+
+                    message = f"All Orders Canceled For Symbol { coin }-{ currency }\n\nAPI Response:\n\n{ self._prepare_represented_string_for_transactions([info]) }"
+
+                    if self.__DEBUG == False:
+
+                        await self._send_message_to_telegram(
+                            message = message
+                        )
+
+                    if self.__DEBUG:
+
+                        print(
+                            message
+                        )
+
+                iteration_index += 1
+
+                for transaction_no in range(1, self.sell_transactions + 1):
+
+                    available_size = self.api._AbstractAPI__get_available_currency_amount_price(
+                        currency = coin
+                    )
+
+                    actual_coin_price = float(
+                        self.api._AbstractAPI__get_bid_and_ask_prices(
+                            base_currency = coin,
+                            quote_currency = currency
+                        )["bid_price"]
+                    )
+
+                    available_quote_in_asset = available_size * actual_coin_price
+
+                    sell_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_sell / available_quote_in_asset
+
+                    if sell_percent_per_transaction >= 1.0:
+
+                        break
+
+                    try:
+                        sell_info = self.api.sell(
+                            coin = coin,
+                            coin_percent_size_to_sell = sell_percent_per_transaction,
+                            used_currency = currency
+                        )
+                        sell_info = self._dict_to_pretty_str(
+                            ugly_dict = sell_info
+                        )
+                    except Exception as error:
+                        sell_info = error
+
+                    sell_infos.append(
+                        sell_info
+                    )
+
+                    available_size = self.api._AbstractAPI__get_available_currency_amount_price(
+                        currency = coin
+                    )
+
+                    sleep(self.time_between_sells)
 
             try:
                 last_sell_info = self.api.sell(
@@ -601,19 +682,26 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                 last_sell_info
             )
 
-        message = f"Sell { coin } by { len(sell_infos) - 1 } x { self.sell_percent_per_transaction}% { currency } transactions\n\nSell Information:\n\n{ sell_infos }"
+            sell_end_time = time()
 
-        if self.__DEBUG == False:
+            elapsed_time_sec = sell_end_time - sell_start_time
+            elapsed_time_millisec = elapsed_time_sec * 1000
 
-            await self._send_message_to_telegram(
-                message = message
-            )
+            message = f"Sell { coin } by { len(sell_infos) } x { sell_percent_per_transaction * 100}% { currency } transactions\n\nSell Information:\n\n{ self._prepare_represented_string_for_transactions(sell_infos) }\n\nTotal Sell Transactions Elapsed Time: {elapsed_time_sec:.6f} SEC ({elapsed_time_millisec:.3f} MS)"
+
+            if self.__DEBUG == False:
+
+                await self._send_message_to_telegram(
+                    message = message
+                )
+
+            if self.__DEBUG:
+
+                print(
+                    message
+                )
 
         if self.__DEBUG:
-
-            print(
-                message
-            )
 
             return {
                 "buy_infos": buy_infos,

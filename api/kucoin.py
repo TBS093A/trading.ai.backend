@@ -23,6 +23,8 @@ class KucoinAPI(
     __all_orders = "/api/v1/limit/orders"
     __get_ticker = "/api/v1/market/orderbook/level1"
 
+    __api_transaction_requests_limit = {"requests": 99, "in_seconds": 10}
+
     def __init__(self, api_key: str, api_secret: str, api_key_passphrase: str, api_version="2") -> None:
         self.__api = RequestsFactory(
             general_url = self.__general_url

@@ -18,11 +18,16 @@ class AbstractAPI:
     __buy_endpoint = ""
     __sell_endpoint = ""
 
+    __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
+
     def __init__(self):
         self.__buy_transaction = {}
         self.__actual_size = 0.0
         self.__actual_price = 0.0
         self.__sell_transactions = {}
+
+    def get_api_transaction_requests_limit(self):
+        return self.__api_transaction_requests_limit
 
     def _market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str):
         """
@@ -33,6 +38,12 @@ class AbstractAPI:
     def _limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str):
         """
             functionality which will define limit order creation
+        """
+        pass
+
+    def _cancel_all_orders(self, coin: str, used_currency: str):
+        """
+            functionality which will define all orders cancel operation
         """
         pass
 

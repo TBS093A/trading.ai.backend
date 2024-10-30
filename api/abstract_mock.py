@@ -8,6 +8,8 @@ class AbstractAPI:
     __buy_endpoint = ""
     __sell_endpoint = ""
 
+    __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
+
     def __init__(self, available_quote: float = 500.0, coin_price_at_buy: float = 0.0034, coin_price_at_sell: float = 0.034, available_coin_assets: float = 0.0):
         self.__buy_transaction = {}
         self.__actual_size = 0.0
@@ -18,6 +20,20 @@ class AbstractAPI:
         self.coin_price_at_buy: float = coin_price_at_buy
         self.coin_price_at_sell: float = coin_price_at_sell
         self.available_coin_assets: float = available_coin_assets
+
+        self.bid_price = coin_price_at_sell + (coin_price_at_sell / 10)
+        self.ask_price = coin_price_at_buy - (coin_price_at_buy / 10)
+
+    def get_api_transaction_requests_limit(self):
+        return self.__api_transaction_requests_limit
+
+    def _cancel_all_orders(self, coin: str, used_currency: str):
+        """
+            functionality which will define all orders cancel operation
+        """
+        return {
+            "all_orders_canceled": True
+        }
 
     def __get_available_currency_amount_price(self, currency: str = None, asset_type: str = "") -> float:
         """
@@ -37,46 +53,77 @@ class AbstractAPI:
         if "ASSET".lower() in currency.lower():
             return self.available_coin_assets * percent_size
 
+    def __get_bid_and_ask_prices(self, base_currency: str = "BTC", quote_currency: str = "USDT") -> dict:
+        """
+            best available buy / sell prices, where:
+
+                bid - best available buy price (the lowest)
+                ask - best available sell price (the highest)
+
+            returned dict must contains all of these keys:
+
+                {
+                    "bid_price"     - best available buy price
+                    "bid_size"      - best available buy size
+                    "ask_price"     - best available sell price
+                    "ask_size"      - best available sell size
+                }
+        """
+        return {
+            "bid_price": f"{self.bid_price}",
+            "bid_size": "",
+            "ask_price": f"{self.ask_price}",
+            "ask_size": ""
+        }
+
+    def __get_ticker(self, base_currency: str = "BTC", quote_currency: str = "USDT"):
+        """
+            current price of symbol where dict should looks like that:
+
+                {
+                    "price"        - current market price
+                }
+        """
+        return {
+            "price": f"{self.coin_price_at_sell}"
+        }
+
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
         bought_assets_price: float = self.available_quote * currency_percent_size_to_buy
 
         self.available_quote -= bought_assets_price
 
-        self.available_coin_assets += bought_assets_price / self.coin_price_at_buy
+        bought_assets_size: float = bought_assets_price / (self.ask_price - self.ask_price * price_buy_balance_percent) # bought_assets_price / self.coin_price_at_buy
+
+        self.available_coin_assets += bought_assets_size
 
         return {
-            "coin": coin,
             "currency_percent_size_to_buy": currency_percent_size_to_buy,
-            "used_currency": used_currency,
-            "price_buy_balance_percent": price_buy_balance_percent,
-            "transaction": {
-                "bought_assets_price": bought_assets_price,
-                "available_quote_after": self.available_quote,
-                "available_coin_assets_after": self.available_coin_assets,
-                "coin_price": self.coin_price_at_buy
-            }
+            "bought_assets_size": bought_assets_size,
+            "bought_assets_price": bought_assets_price,
+            "available_quote_after": self.available_quote,
+            "available_coin_assets_after": self.available_coin_assets,
+            "coin_price": self.coin_price_at_buy
         }
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
-        sold_assets_price: float = self.available_coin_assets * coin_percent_size_to_sell
+        sold_assets_size: float = self.available_coin_assets * coin_percent_size_to_sell
 
-        self.available_quote += self.coin_price_at_sell * sold_assets_price
+        sold_assets_price: float = (self.bid_price + self.bid_price * price_sell_balance_percent) * sold_assets_size # self.coin_price_at_sell * sold_assets_size
 
-        self.available_coin_assets -= sold_assets_price
+        self.available_quote += sold_assets_price
+
+        self.available_coin_assets -= sold_assets_size
 
         return {
-            "coin": coin,
             "coin_percent_size_to_sell": coin_percent_size_to_sell,
-            "used_currency": used_currency,
-            "price_sell_balance_percent": price_sell_balance_percent,
-            "transaction": {
-                "sold_assets_price": sold_assets_price,
-                "available_quote_after": self.available_quote,
-                "available_coin_assets_after": self.available_coin_assets,
-                "coin_price": self.coin_price_at_sell
-            }
+            "sold_assets_size": sold_assets_size,
+            "sold_assets_price": sold_assets_price,
+            "available_quote_after": self.available_quote,
+            "available_coin_assets_after": self.available_coin_assets,
+            "coin_price": self.coin_price_at_sell
         }
 
 
