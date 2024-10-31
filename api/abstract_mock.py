@@ -94,7 +94,9 @@ class AbstractAPI:
 
         self.available_quote -= bought_assets_price
 
-        bought_assets_size: float = bought_assets_price / (self.ask_price - self.ask_price * price_buy_balance_percent) # bought_assets_price / self.coin_price_at_buy
+        asset_used_price: float = self.ask_price - self.ask_price * price_buy_balance_percent # bought_assets_price / self.coin_price_at_buy
+
+        bought_assets_size: float = bought_assets_price / asset_used_price
 
         self.available_coin_assets += bought_assets_size
 
@@ -103,27 +105,31 @@ class AbstractAPI:
             "bought_assets_size": bought_assets_size,
             "bought_assets_price": bought_assets_price,
             "available_quote_after": self.available_quote,
-            "available_coin_assets_after": self.available_coin_assets,
-            "coin_price": self.coin_price_at_buy
+            "available_asset_after": self.available_coin_assets,
+            "asset_market_price": self.coin_price_at_buy,
+            "asset_used_price": asset_used_price,
         }
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
         sold_assets_size: float = self.available_coin_assets * coin_percent_size_to_sell
 
-        sold_assets_price: float = (self.bid_price + self.bid_price * price_sell_balance_percent) * sold_assets_size # self.coin_price_at_sell * sold_assets_size
+        asset_used_price: float = self.bid_price + self.bid_price * price_sell_balance_percent # self.coin_price_at_sell * sold_assets_size
+
+        sold_assets_price: float = asset_used_price * sold_assets_size
 
         self.available_quote += sold_assets_price
 
         self.available_coin_assets -= sold_assets_size
 
         return {
-            "coin_percent_size_to_sell": coin_percent_size_to_sell,
+            "asset_percent_size_to_sell": coin_percent_size_to_sell,
             "sold_assets_size": sold_assets_size,
             "sold_assets_price": sold_assets_price,
             "available_quote_after": self.available_quote,
-            "available_coin_assets_after": self.available_coin_assets,
-            "coin_price": self.coin_price_at_sell
+            "available_asset_after": self.available_coin_assets,
+            "asset_market_price": self.coin_price_at_sell,
+            "asset_used_price": asset_used_price,
         }
 
 

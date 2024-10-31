@@ -202,7 +202,7 @@ class AbstractAPI:
         transaction_dict = {}
 
         bought_asset_size = self.__get_available_currency_percent_price(
-            percent_size = 100,
+            percent_size = 1.0,
             currency = coin
         )
 
@@ -268,7 +268,7 @@ class AbstractAPI:
             print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
             print(f"\tused currency: {used_currency}")
 
-            transaction_dict = self._limit_order_request(
+            api_response = self._limit_order_request(
                 transaction_side = "BUY",
                 coin = coin,
                 coin_size = coin_size_to_buy,
@@ -276,22 +276,14 @@ class AbstractAPI:
                 used_currency = used_currency,
             )
 
-        transaction_dict = dict(
-            {
-                "side": "buy",
-                "approach": approach,
-                "coin": coin,
-                "coin_price_at_buy": ticker_data["price"],
-                "coin_buy_size": coin_size_to_buy,
-                "currency_used_to_buy_percent": float(currency_percent_size_to_buy) * 100,
-                "currency_used_to_buy": available_currency_assets,
-                "used_currency": used_currency,
-            },
-            **transaction_dict
-        )
-
-        return transaction_dict
-
+        return {
+            "order_approach": approach,
+            "bought_asset_price": coin_price * coin_size_to_buy,
+            "bought_asset_size": coin_size_to_buy,
+            "asset_market_price": ticker_data["price"],
+            "asset_used_price": coin_price,
+            "api_response": api_response,
+        }
 
     def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
@@ -390,7 +382,7 @@ class AbstractAPI:
             print(f"\tcoin price: {coin_price}")
             print(f"\tused currency: {used_currency}")
 
-            transaction_dict = self._limit_order_request(
+            api_response = self._limit_order_request(
                 transaction_side = "SELL",
                 coin = coin,
                 coin_size = coin_sell_size,
@@ -398,46 +390,14 @@ class AbstractAPI:
                 used_currency = used_currency,
             )
 
-        pretty_coin_sell_size = format(
-            coin_sell_size,
-            f".{len(str(int(1 / float(symbol_lot_size['base_size_precision']))))}f"
-        )
-
-        pretty_coin_sell_percent = float(coin_percent_size_to_sell) * 100
-
-        pretty_price_sell_balance_percent = float(price_sell_balance_percent) * 100
-
-        pretty_sell_profit = float(best_ticker_data["ask_price"]) * coin_sell_size
-
-        pretty_coin_size_availability_after_sell = format(
-            float(
-                self.__get_available_currency_percent_price(
-                    percent_size = 1.0,
-                    currency = coin
-                )
-            ),
-            f".{len(str(int(1 / float(symbol_lot_size['base_size_precision']))))}f"
-        )
-
-        transaction_dict = dict(
-            {
-                "side": "sell",
-                "approach": approach,
-                "coin": coin,
-                "coin_price_at_sell": ticker_data["price"],
-                "coin_used_price_at_sell": coin_price,
-                "coin_sell_size": pretty_coin_sell_size,
-                "coin_sell_percent": pretty_coin_sell_percent,
-                "coin_price_sell_balance_percent": pretty_price_sell_balance_percent,
-                "coin_price_percent_balance": price_percent_balance,
-                "coin_size_availability_after_sell": pretty_coin_size_availability_after_sell,
-                "sell_profit": pretty_sell_profit,
-                "used_currency": used_currency,
-            },
-            **transaction_dict
-        )
-
-        return transaction_dict
+        return {
+            "order_approach": approach,
+            "sold_asset_price": coin_sell_size * coin_price,
+            "sold_asset_size": coin_sell_size,
+            "asset_market_price": ticker_data["price"],
+            "asset_used_price": coin_price,
+            "api_response": api_response,
+        }
 
 
 class RequestsFactory:

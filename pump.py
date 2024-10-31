@@ -257,6 +257,85 @@ async def sleep_to_next_day():
     await asyncio.sleep(seconds_until_target)
 
 
+async def capture_pump(DEBUG: bool = False):
+    while True:
+        for channel_name, channel_info in channels.items():
+            for pump_info in channel_info['pumps']:
+                if pump_info['is_realised']:
+                    continue
+                now = datetime.now()
+                current_day = now.strftime("%A")
+                current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
+                if current_day.lower() == pump_info["day"].lower():
+                    pump_info['is_today'] = True
+                    if current_hour_and_minute == pump_info["time"][:5]:
+                        print(f"Download messages in {channel_name} (USERNAME: {channel['username']} ID:, {channel['id']}) for pump at {pump['day']} {pump['time']}")
+                        for request_no in range(1, telegram_requests_per_minute_limit + 1):
+                            now = datetime.now().strftime("%H:%M:%S")
+                            print(f"request no {request_no} at {now}")
+                            for message in client.iter_messages(chat, limit=5):
+                                match_results = gather_coin(
+                                    captured_message = captured_message,
+                                    regex = channel_info["regex"]
+                                )
+                                if match_result != None:
+                                    captured_coin = match_results.group(1)
+                                    message = f"Captured Coin: {captured_coin}"
+                                    if DEBUG == True:
+                                        print(message)
+                                    if DEBUG == False:
+                                        await send_as_bot(
+                                            telethon_api_id,
+                                            telethon_api_hash,
+                                            bot,
+                                            user=user_id,
+                                            message=message
+                                        )
+                                    used_exchange = channel_info["exchange"]
+                                    used_transaction_strategy = channel_info["strategy"](
+                                        api = used_api,
+                                        telegram_client_credentials = {
+                                            "api_id": telethon_api_id,
+                                            "api_hash": telethon_api_hash,
+                                            "bot_session": bot,
+                                            "user": user_id
+                                        },
+                                        telegram_sending_method = send_as_bot,
+                                        DEBUG = DEBUG
+                                    )
+                                    await used_transaction_strategy.invoke(
+                                        coin = captured_coin,
+                                        currency = channel_info["currency"],
+                                        buy = True,
+                                        sell = True,
+                                    )
+                                    pump_info['is_realised'] = True
+                                    break
+                            if pump_info['is_realised']:
+                                break
+                            else:
+                                waiting_time = float(sec_time_for_check_messages / telegram_requests_per_minute_limit)
+                                await asyncio.sleep(waiting_time)
+                    await asyncio.sleep(0.25)
+
+        for channel_name, channel_info in channels.items():
+            for pump_info in channel_info['pumps']:
+                if pump_info['is_realised'] == True:
+                    current_day = datetime.now().strftime("%A")
+                    if current_day.lower() != pump_info['day'].lower():
+                        pump_info['is_realised'] = False
+
+        pump_is_not_today = False
+        for channel_name, channel_info in channels.items():
+            for pump_info in channel_info['pumps']:
+                if pump_info['is_today'] == False:
+                    pump_info['is_today'] = False
+                    pump_is_not_today = True
+
+        if pump_is_not_today:
+            await sleep_to_next_day()
+
+
 async def main() -> None:
 
     with TelegramClient(
@@ -283,86 +362,7 @@ async def main() -> None:
         #    message=f"Bot Ready To Use!!!\n\nInstruction:\n\n\tSettings Init / Overriding Example:\n\n\t\t/!settings exchange:MEXC transaction_strategy:DRSTS used_currency:USDT allow_manual_sell=FALSE\n\n\tBuy Action Example:\n\n\t\t/!buy coin:ZZZ\n\n\tSell Action Example:\n\n\t\t/!sell"
         #)
 
-        while True:
-            for channel_name, channel_info in channels.items():
-                for pump_info in channel_info['pumps']:
-                    if pump_info['is_realised']:
-                        continue
-                    now = datetime.now()
-                    current_day = now.strftime("%A")
-                    current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
-                    if current_day.lower() == pump_info["day"].lower():
-                        pump_info['is_today'] = True
-                        if current_hour_and_minute == pump_info["time"][:5]:
-                            print(f"Download messages in {channel_name} (USERNAME: {channel['username']} ID:, {channel['id']}) for pump at {pump['day']} {pump['time']}")
-                            for request_no in range(1, telegram_requests_per_minute_limit + 1):
-                                now = datetime.now().strftime("%H:%M:%S")
-                                print(f"request no {request_no} at {now}")
-                                for message in client.iter_messages(chat, limit=5):
-                                    match_results = gather_coin(
-                                        captured_message = captured_message,
-                                        regex = channel_info["regex"]
-                                    )
-                                    if match_result != None:
-
-                                        captured_coin = match_results.group(1)
-
-                                        await send_as_bot(
-                                            telethon_api_id,
-                                            telethon_api_hash,
-                                            bot,
-                                            user=user_id,
-                                            message=f"Captured Coin: {captured_coin}"
-                                        )
-
-                                        used_exchange = channel_info["exchange"]
-
-                                        used_transaction_strategy = channel_info["strategy"](
-                                            api = used_api,
-                                            telegram_client_credentials = {
-                                                "api_id": telethon_api_id,
-                                                "api_hash": telethon_api_hash,
-                                                "bot_session": bot,
-                                                "user": user_id
-                                            },
-                                            telegram_sending_method = send_as_bot
-                                        )
-
-                                        await used_transaction_strategy.invoke(
-                                            coin = captured_coin,
-                                            currency = channel_info["currency"],
-                                            buy = True,
-                                            sell = True,
-                                        )
-
-                                        pump_info['is_realised'] = True
-                                        break
-
-                                if pump_info['is_realised']:
-                                    break
-                                else:
-                                    waiting_time = float(sec_time_for_check_messages / telegram_requests_per_minute_limit)
-                                    await asyncio.sleep(waiting_time)
-                        await asyncio.sleep(0.25)
-
-            for channel_name, channel_info in channels.items():
-                for pump_info in channel_info['pumps']:
-                    if pump_info['is_realised'] == True:
-                        current_day = datetime.now().strftime("%A")
-                        if current_day.lower() != pump_info['day'].lower():
-                            pump_info['is_realised'] = False
-
-            pump_is_not_today = False
-
-            for channel_name, channel_info in channels.items():
-                for pump_info in channel_info['pumps']:
-                    if pump_info['is_today'] == False:
-                        pump_info['is_today'] = False
-                        pump_is_not_today = True
-
-            if pump_is_not_today:
-                await sleep_to_next_day()
-
+        await capture_pump()
 
         @client.on(events.NewMessage(pattern="(.*)"))
         async def handler_coin(event):
