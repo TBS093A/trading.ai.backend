@@ -19,7 +19,7 @@ from api.transactions.strategies import (
 )
 
 from pump import (
-    main,
+    capture_pump,
     gather_coin
 )
 from pump import (
