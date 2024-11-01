@@ -21,8 +21,8 @@ class AbstractAPI:
         self.coin_price_at_sell: float = coin_price_at_sell
         self.available_coin_assets: float = available_coin_assets
 
-        self.bid_price = coin_price_at_sell + (coin_price_at_sell / 10)
-        self.ask_price = coin_price_at_buy - (coin_price_at_buy / 10)
+        self.bid_price = coin_price_at_sell - (coin_price_at_sell / 10)
+        self.ask_price = coin_price_at_buy + (coin_price_at_buy / 10)
 
     def get_api_transaction_requests_limit(self):
         return self.__api_transaction_requests_limit

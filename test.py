@@ -4,36 +4,19 @@ import asyncio
 
 from time import sleep
 
-from telethon import TelegramClient
-
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
+from api.telegram import TelegramAPIMock
 
 from api.abstract_mock import (
     AbstractAPI
 )
 from api.transactions.strategies import (
-    DistributedRiskStaticQuoteAndAssetTransactionStrategy,
-    DistributedRiskSummationTransactionStrategy,
-    SingleShotAfterTimeTransactionStrategy,
+    DistributedRiskStaticQuoteAndAssetTransactionStrategy
 )
 
 from pump import (
-    capture_pump,
-    gather_coin
-)
-from pump import (
-    channels,
-    telegram_requests_per_minute_limit,
-    sec_time_for_check_messages
-)
-from pump import (
-    telethon_api_id,
-    telethon_api_hash,
-    telethon_api_phone,
-    telethon_bot_token,
-    user_id,
-    send_as_bot
+    Pump
 )
 
 
@@ -41,6 +24,8 @@ class TestTransactionStrategies(unittest.TestCase):
 
     __coin: str = "TEST_ASSET"
     __currency: str = "TEST_QUOTE"
+
+    __telegram_api_mock = TelegramAPIMock()
 
     async def __distributed_risk_static_quote_and_asset_transaction_strategy(self, available_quote: float, coin_price_at_buy: float, coin_price_at_sell: float):
 
@@ -51,9 +36,8 @@ class TestTransactionStrategies(unittest.TestCase):
         )
 
         used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
-            api = used_api,
-            telegram_client_credentials = {},
-            telegram_sending_method = None,
+            exchange_api = used_api,
+            telegram_api = self.__telegram_api_mock,
             DEBUG = True,
             time_between_buy_and_sell = 0.0,
         )
