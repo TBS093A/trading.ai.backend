@@ -186,6 +186,37 @@ class AbstractTransactionStrategy:
             }
 
 
+class MockTransactionStrategy(
+    AbstractTransactionStrategy
+):
+
+    def __init__(
+        self,
+        exchange_api: AbstractAPI,
+        telegram_api: TelegramAPI,
+        time_between_buy_and_sell: int = 1.0,
+        DEBUG: bool = False,
+    ):
+        self.__DEBUG = DEBUG
+
+        super().__init__(
+            exchange_api = exchange_api,
+            telegram_api = telegram_api,
+            time_between_buys = 0.0,
+            time_between_buy_and_sell = time_between_buy_and_sell,
+            time_between_sells = 0.0,
+            DEBUG = DEBUG,
+        )
+
+    @StrategyUtils.elapsed_time
+    async def _AbstractTransactionStrategy__buy_strategy(self, coin: str, currency: str):
+        return f"Buy {coin} by {currency}"
+
+    @StrategyUtils.elapsed_time
+    async def _AbstractTransactionStrategy__sell_strategy(self, coin: str, currency: str, last_sell_percent: float = 1.0):
+        return f"Sell {coin} by {currency} + last sell percent: {last_sell_percent}"
+
+
 class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
     AbstractTransactionStrategy
 ):

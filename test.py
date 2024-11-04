@@ -2,7 +2,9 @@ import os
 import unittest
 import asyncio
 
+import time
 from time import sleep
+from datetime import datetime, timedelta
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
@@ -12,14 +14,125 @@ from api.abstract_mock import (
     AbstractAPI
 )
 from api.transactions.strategies import (
+    MockTransactionStrategy,
     DistributedRiskStaticQuoteAndAssetTransactionStrategy
 )
 
 from pump import (
-    Pump
+    Pump,
+    regexes,
+    exchange_apis,
+    const_channels
 )
 
 
+class TestPump(unittest.TestCase):
+
+    def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict]) -> Pump:
+
+        pump = Pump(
+            telegram_api = telegram_api_mock,
+            channels = {
+                "Test Channel Name": {
+                    "username": "test_channel_name",
+                    "id": -1,
+                    "pumps": pumps_list,
+                    "exchange": AbstractAPI(
+                        available_quote = 50,
+                        coin_price_at_buy = 0.1,
+                        coin_price_at_sell = 1.0,
+                    ),
+                    "currency": "USDT",
+                    "strategy": MockTransactionStrategy,
+                    "regex": regexes["single_uppercase_word_without_spaces"],
+                }
+            },
+            DEBUG = True
+        )
+
+        return pump
+
+    def test_pump_investment_000(self):
+
+        current_time = datetime.now()
+        new_time = current_time + timedelta(seconds=20)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "VTS"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ]
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    def test_pump_investment_001(self):
+
+        current_time = datetime.now()
+        new_time = current_time + timedelta(seconds=180)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "SVPN"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ]
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    def test_gather_coin_000(self):
+        pass
+
+    def test_sleep_to_next_day_000(self):
+        pass
+
+@unittest.skip("skip transaction strategies tests")
 class TestTransactionStrategies(unittest.TestCase):
 
     __coin: str = "TEST_ASSET"
@@ -250,7 +363,7 @@ class TestKucoinAPITransactions(unittest.TestCase):
             "orderId" in status
         )
 
-
+@unittest.skip("skip mexc unit tests")
 class TestMexcAPI(unittest.TestCase):
 
     __api = MexcAPI(

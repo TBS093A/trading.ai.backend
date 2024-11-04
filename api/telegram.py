@@ -1,3 +1,6 @@
+import os
+import asyncio
+
 from telethon import TelegramClient, events, sync
 from time import sleep, time
 import logging
@@ -14,8 +17,9 @@ print = logging.info
 
 class TelegramAPIMock:
 
-    def __init__(self, messages_list_mock: list[str] = []):
+    def __init__(self, messages_list_mock: list[str] = [], sleep: float = 0.0):
         self.__messages_list_mock = messages_list_mock
+        self.__sleep = sleep
 
     async def send_as_bot(self, message: str):
         print(message)
@@ -23,7 +27,8 @@ class TelegramAPIMock:
     async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 5):
         for message in self.__messages_list_mock[:limit]:
             yield message
-            await asyncio.sleep(0.0)
+            await asyncio.sleep(self.__sleep)
+
 
 class TelegramAPI:
 
