@@ -17,6 +17,7 @@ import requests
 import os
 import re
 import json
+import asyncio
 import logging
 
 from pprint import pprint
@@ -24,20 +25,10 @@ from datetime import datetime, timedelta
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
+from api.telegram import TelegramAPI
 from api.transactions.strategies import (
     DistributedRiskStaticQuoteAndAssetTransactionStrategy
 )
-
-
-# Temp
-
-colon_pattern = r"[^:]+:\s*([^\r\n]+)"
-kucoin_alone_token_in_string_pattern = r"^[A-Z0-9\$]+$"
-kucoin_url_pattern = r"/trade/([A-Z]+)-USDT"
-kucoin_pumps_binance_chat_pattern = r"^Selected COIN/TOKEN\s*:\s*(\$?\w+)$"
-
-# Temp
-
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -47,67 +38,62 @@ logger = logging.getLogger(__name__)
 
 print = logging.info
 
+regexes = {
+    "single_uppercase_word_without_spaces": r"^[A-Z0-9]+$"
+}
+
+exchange_apis = {
+    "kucoin": KucoinAPI(
+        api_key = os.environ.get("KUCOIN_API_KEY", default=""),
+        api_secret =  os.environ.get("KUCOIN_API_SECRET", default=""),
+        api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
+    ),
+    "mexc": MexcAPI(
+        api_key = os.environ.get("MEXC_API_KEY", default=""),
+        api_secret = os.environ.get("MEXC_API_SECRET", default="")
+    )
+}
+
+const_channels = {
+    "Crypto Pump Club": {
+        "username": "cryptoclubpump",
+        "id": -1001625691880,
+        "pumps": [
+            {
+                "day": "sunday",
+                "time": "19:00:00",
+                "is_today": False,
+                "is_realised": False,
+            },
+        ],
+        "exchange": exchange_apis["mexc"],
+        "currency": "USDT",
+        "strategy": DistributedRiskStaticQuoteAndAssetTransactionStrategy,
+        "regex": regexes["single_uppercase_word_without_spaces"],
+    }
+}
+
 
 class Pump:
 
-    def __init__(self, DEBUG: bool = False):
+    def __init__(
+        self,
+        channels: dict,
+        telegram_api: TelegramAPI,
+        loop_single_iteration_long_waiting_time = 30.0,
+        loop_single_iteration_short_waiting_time = 0.25,
+        DEBUG: bool = False
+    ):
 
         self.__DEBUG = DEBUG
 
-        self.__telegram_api = TelegramAPI(
-            DEBUG = DEBUG
-        )
+        self.__channels = channels
+        self.__loop_single_iteration_long_waiting_time = loop_single_iteration_long_waiting_time
+        self.__loop_single_iteration_short_waiting_time = loop_single_iteration_short_waiting_time
+        self.__telegram_api = telegram_api
 
-        self.__exchange_apis = {
-            "kucoin": KucoinAPI(
-                api_key = os.environ.get("KUCOIN_API_KEY", default=""),
-                api_secret =  os.environ.get("KUCOIN_API_SECRET", default=""),
-                api_key_passphrase = os.environ.get("KUCOIN_API_KEY_PASSPHRASE", default="")
-            ),
-            "mexc": MexcAPI(
-                api_key = os.environ.get("MEXC_API_KEY", default=""),
-                api_secret = os.environ.get("MEXC_API_SECRET", default="")
-            )
-        }
-
-        self.__transaction_strategies = {
-            "DRSQAATS": DistributedRiskStaticQuoteAndAssetTransactionStrategy,
-        }
-
-        self.__channels = {
-            "Crypto Pump Club": {
-                "username": "cryptoclubpump",
-                "id": -1001625691880,
-                "pumps": [
-                    {
-                        "day": "sunday",
-                        "time": "19:00:00",
-                        "is_today": False,
-                        "is_realised": False,
-                    },
-                ],
-                "exchange": self.__exchange_apis["mexc"],
-                "currency": "USDT",
-                "strategy": self.__transaction_strategies["DRSQAATS"],
-                "regex": r"",
-            },
-            "Xt Pumps VIP": {
-                "username": "XtpumpsVip",
-                "id": -1002129820268,
-                "pumps": [
-                    {
-                        "day": "wednesday",
-                        "time": "19:00:00",
-                        "is_today": False,
-                        "is_realised": False,
-                    },
-                ],
-                "exchange": self.__exchange_apis["mexc"],
-                "currency": "USDT",
-                "strategy": self.__transaction_strategies["DRSQAATS"],
-                "regex": r"",
-            }
-        }
+    def get_channels(self):
+        return self.__channels
 
     def __gather_coin(self, captured_message: str, regex: str) -> str:
         match_pattern = re.match(
@@ -115,7 +101,7 @@ class Pump:
             captured_message
         )
         if match_pattern:
-            coin = match_pattern.group(1)
+            coin = match_pattern.group(0)
             if ' ' not in coin:
                 if '$' in coin:
                     coin = coin.replace('$', '')
@@ -132,7 +118,97 @@ class Pump:
 
         seconds_until_target = (target_time_today - now).total_seconds()
 
-        await asyncio.sleep(seconds_until_target)
+        print(f"sleep for {seconds_until_target} seconds to next day")
+
+        if self.__DEBUG == False:
+
+            await asyncio.sleep(seconds_until_target)
+
+
+    async def __pump_investment(self):
+        for channel_name, channel_info in self.__channels.items():
+            for pump_info in channel_info['pumps']:
+
+                if pump_info['is_realised']:
+                    continue
+
+                now = datetime.now()
+                current_day = now.strftime("%A")
+                current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
+
+                if current_day.lower() == pump_info["day"].lower():
+
+                    if pump_info['is_realised'] == False:
+
+                        pump_info['is_today'] = True
+
+                if pump_info['is_today'] == True:
+
+                    if current_hour_and_minute == pump_info["time"][:5]:
+
+                        print(f"Download messages from {channel_name} (USERNAME: {channel_info['username']} ID:, {channel_info['id']}) for pump at {pump_info['day']} {pump_info['time']}")
+
+                        async for message in self.__telegram_api.yield_last_messages_from_chat(
+                            chat_id = channel_info['id']
+                        ):
+
+                            captured_coin = self.__gather_coin(
+                                captured_message = message,
+                                regex = channel_info["regex"]
+                            )
+
+                            if captured_coin == None:
+
+                                print("No Coin Found!")
+
+                            if captured_coin != None:
+                                message = f"Captured Coin: {captured_coin}"
+
+                                await self.__telegram_api.send_as_bot(
+                                    message = message
+                                )
+
+                                used_transaction_strategy = channel_info["strategy"](
+                                    exchange_api = channel_info["exchange"],
+                                    telegram_api = self.__telegram_api,
+                                    DEBUG = self.__DEBUG
+                                )
+
+                                await used_transaction_strategy.invoke(
+                                    coin = captured_coin,
+                                    currency = channel_info["currency"],
+                                    buy = True,
+                                    sell = True,
+                                )
+
+                                pump_info['is_realised'] = True
+                                pump_info['is_today'] = False
+
+                                break
+
+                    if current_hour_and_minute != pump_info["time"][:5]:
+
+                        current_time = datetime.strptime(current_hour_and_minute, "%H:%M")
+                        pump_time = datetime.strptime(pump_info["time"][:5], "%H:%M")
+
+                        time_difference = abs(pump_time - current_time)
+
+                        if time_difference <= timedelta(minutes=1):
+
+                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s Today Pumps Detection")
+
+                            await asyncio.sleep(self.__loop_single_iteration_short_waiting_time)
+
+                        else:
+
+                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s Today Pumps Detection")
+
+                            await asyncio.sleep(self.__loop_single_iteration_long_waiting_time)
+
+                if pump_info['is_today'] == False:
+
+                    continue
+
 
     def __reset_channel_day_stats(self):
         for channel_name, channel_info in self.__channels.items():
@@ -151,53 +227,8 @@ class Pump:
 
     async def capture_pump(self):
         while True:
-            for channel_name, channel_info in self.__channels.items():
-                for pump_info in channel_info['pumps']:
-                    if pump_info['is_realised']:
-                        continue
-                    now = datetime.now()
-                    current_day = now.strftime("%A")
-                    current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
-                    if current_day.lower() == pump_info["day"].lower():
-                        pump_info['is_today'] = True
-                        if current_hour_and_minute == pump_info["time"][:5]:
-                            print(f"Download messages from {channel_name} (USERNAME: {channel['username']} ID:, {channel['id']}) for pump at {pump['day']} {pump['time']}")
 
-                            for message in self.__telegram_api.yield_last_messages_from_chat(
-                                chat_id = chat
-                            ):
-                                match_results = self.__gather_coin(
-                                    captured_message = captured_message,
-                                    regex = channel_info["regex"]
-                                )
-
-                                if match_result != None:
-                                    captured_coin = match_results.group(1)
-                                    message = f"Captured Coin: {captured_coin}"
-
-                                    await self.__telegram_api.send_as_bot(
-                                        message = message
-                                    )
-
-                                    used_transaction_strategy = channel_info["strategy"](
-                                        exchange_api = channel_info["exchange"],
-                                        telegram_api = self.__telegram_api,
-                                        DEBUG = self.__DEBUG
-                                    )
-
-                                    await used_transaction_strategy.invoke(
-                                        coin = captured_coin,
-                                        currency = channel_info["currency"],
-                                        buy = True,
-                                        sell = True,
-                                    )
-
-                                    pump_info['is_realised'] = True
-                                    pump_info['is_today'] = False
-
-                                    break
-
-                        await asyncio.sleep(0.25)
+            self.__pump_investment()
 
             self.__reset_channel_day_stats()
 
@@ -205,13 +236,3 @@ class Pump:
 
             if pump_is_today == False:
                 await self.__sleep_to_next_day()
-
-
-async def main() -> None:
-
-
-    await capture_pump()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
