@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
-from api.telegram import TelegramAPIMock
+from api.telegram import TelegramAPIMock, TelegramAPI
 
 from api.abstract_mock import (
     AbstractAPI
@@ -26,6 +26,42 @@ from pump import (
 )
 
 
+class TestTelegram(unittest.TestCase):
+
+    __telegram_api = TelegramAPI()
+
+    def setUp(self):
+        self.loop = asyncio.get_event_loop()
+
+    def tearDown(self):
+        self.loop.close()
+
+    async def __get_messages_static(self, channel_name: str = "Crypto Pump Club", limit: int = 5):
+        channel_id = const_channels[channel_name]["id"]
+        returned_message = ""
+        async for message in self.__telegram_api.yield_last_messages_from_chat(
+            chat_id = channel_id,
+            limit = limit
+        ):
+            returned_message = message
+            break
+
+        return returned_message
+
+    def test_get_messages_static_000(self):
+        message = self.loop.run_until_complete(
+            self.__get_messages_static(
+                channel_name = "Crypto Pump Club",
+                limit = 5,
+            )
+        )
+
+        self.assertTrue(
+            type(message.message) == str
+        )
+
+
+@unittest.skip("skip pump mechanizm tests")
 class TestPump(unittest.TestCase):
 
     def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict]) -> Pump:
