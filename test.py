@@ -26,27 +26,49 @@ from pump import (
 )
 
 
+@unittest.skip("skip telegram tests")
 class TestTelegram(unittest.TestCase):
-
-    __telegram_api = TelegramAPI()
 
     def setUp(self):
         self.loop = asyncio.get_event_loop()
+        self.__telegram_api = TelegramAPI()
 
     def tearDown(self):
         self.loop.close()
+        del self.__telegram_api
 
     async def __get_messages_static(self, channel_name: str = "Crypto Pump Club", limit: int = 5):
-        channel_id = const_channels[channel_name]["id"]
-        returned_message = ""
-        async for message in self.__telegram_api.yield_last_messages_from_chat(
-            chat_id = channel_id,
-            limit = limit
-        ):
-            returned_message = message
-            break
 
-        return returned_message
+        try:
+
+            channel_id = const_channels[channel_name]["id"]
+            returned_message = ""
+            async for message in self.__telegram_api.yield_last_messages_from_chat(
+                chat_id = channel_id,
+                limit = limit
+            ):
+                returned_message = message
+                break
+
+            return returned_message
+
+        except Exception as error:
+
+            raise error
+
+        except KeyboardInterrupt as error:
+
+            print(f"closed by user keyboard interrupt:\n\n{error}")
+
+        finally:
+
+            try:
+
+                del telegram_api
+
+            except Exception as cleanup_error:
+
+                print("error at finally cleanup: {cleanup_error}")
 
     def test_get_messages_static_000(self):
         message = self.loop.run_until_complete(
@@ -61,11 +83,91 @@ class TestTelegram(unittest.TestCase):
         )
 
 
-@unittest.skip("skip pump mechanizm tests")
-class TestPump(unittest.TestCase):
+#@unittest.skip("skip pump real mechanizm tests")
+class TestPumpReal(unittest.TestCase):
 
-    def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict]) -> Pump:
+    def setUp(self):
+        self.__telegram_api = TelegramAPI()
 
+    def tearDown(self):
+        del self.__telegram_api
+
+    def __prepare_pump_object(self, channel_name: str, channel_username: str, channel_id: int, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
+
+        try:
+
+            pump = Pump(
+                telegram_api = self.__telegram_api,
+                channels = {
+                    f"{channel_name}": {
+                        "username": f"{channel_username}",
+                        "id": channel_id,
+                        "pumps": pumps_list,
+                        "exchange": AbstractAPI(
+                            available_quote = 50,
+                            coin_price_at_buy = 0.1,
+                            coin_price_at_sell = 1.0,
+                        ),
+                        "currency": "USDT",
+                        "strategy": MockTransactionStrategy,
+                        "regex": regexes[regex_key],
+                    }
+                },
+                DEBUG = True
+            )
+
+            return pump
+
+        except Exception as error:
+
+            raise error
+
+        except KeyboardInterrupt as error:
+
+            print(f"closed by user keyboard interrupt:\n\n{error}")
+
+        finally:
+
+            try:
+
+                del telegram_api
+
+            except Exception as cleanup_error:
+
+                print("error at finally cleanup: {cleanup_error}")
+
+    def test_pump_investment_real_000(self):
+
+        pump_object = self.__prepare_pump_object(
+            channel_name = "Xt Pumps Vip",
+            channel_username = "XtPumpsVip",
+            channel_id = -1002129820268,
+            pumps_list = [
+                {
+                    "day": f"tuesday",
+                    "time": f"18:00:00",
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ],
+            regex_key = "single_word_without_spaces"
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+
+@unittest.skip("skip pump mock mechanizm tests")
+class TestPumpMock(unittest.TestCase):
+
+    def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
         pump = Pump(
             telegram_api = telegram_api_mock,
             channels = {
@@ -80,7 +182,7 @@ class TestPump(unittest.TestCase):
                     ),
                     "currency": "USDT",
                     "strategy": MockTransactionStrategy,
-                    "regex": regexes["single_uppercase_word_without_spaces"],
+                    "regex": regexes[regex_key],
                 }
             },
             DEBUG = True
@@ -128,7 +230,83 @@ class TestPump(unittest.TestCase):
     def test_pump_investment_001(self):
 
         current_time = datetime.now()
+        new_time = current_time + timedelta(seconds=20)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "Ozone"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ],
+            regex_key = "single_word_without_spaces"
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+
+    def test_pump_investment_002(self):
+
+        current_time = datetime.now()
         new_time = current_time + timedelta(seconds=180)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "SVPN"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ]
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    def test_pump_investment_003(self):
+
+        current_time = datetime.now()
+        new_time = current_time + timedelta(minutes=32)
 
         current_day_str = time.strftime("%A").lower()
         new_time_str = new_time.strftime("%H:%M:%S")
@@ -167,6 +345,7 @@ class TestPump(unittest.TestCase):
 
     def test_sleep_to_next_day_000(self):
         pass
+
 
 @unittest.skip("skip transaction strategies tests")
 class TestTransactionStrategies(unittest.TestCase):
