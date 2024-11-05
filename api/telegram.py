@@ -3,6 +3,9 @@ import asyncio
 
 from telethon import TelegramClient, events, sync
 from time import sleep, time
+from datetime import datetime, timezone
+from collections import namedtuple
+
 import logging
 
 
@@ -18,8 +21,22 @@ print = logging.info
 class TelegramAPIMock:
 
     def __init__(self, messages_list_mock: list[str] = [], sleep: float = 0.0):
-        self.__messages_list_mock = messages_list_mock
+        self.__messages_list_mock = self.__create_messages_mock(
+            messages_list_mock = messages_list_mock
+        )
         self.__sleep = sleep
+
+    def __create_messages_mock(self, messages_list_mock: list[str]) -> list[dict]:
+        prepared_telegram_messages = []
+        Message = namedtuple("Message", ["id", "message"])
+        for message in messages_list_mock:
+            prepared_telegram_messages.append(
+                Message(
+                    id = -1,
+                    message = message
+                )
+            )
+        return prepared_telegram_messages
 
     async def send_as_bot(self, message: str):
         print(message)
@@ -79,7 +96,60 @@ class TelegramAPI:
             self.__api_requests_limit["in_seconds"] / self.__api_requests_limit["requests"]
         )
 
-    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 5):
+    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 5) -> dict:
+        """
+        That Function Yield Messages Objects Which Can Be Trait As namedtuple:
+            Message(
+                id=4772,
+                peer_id=PeerChannel(
+                    channel_id=1625691880
+                ),
+                date=datetime.datetime(
+                    2024, 11, 4, 19, 31, 37,
+                    tzinfo=datetime.timezone.utc
+                ),
+                message='Next pump will be blah, blah, blah, [...]',
+                out=False,
+                mentioned=False,
+                media_unread=False,
+                silent=False,
+                post=True,
+                from_scheduled=False,
+                legacy=False,
+                edit_hide=False,
+                pinned=False,
+                noforwards=False,
+                invert_media=False,
+                offline=False,
+                from_id=None,
+                from_boosts_applied=None,
+                saved_peer_id=None,
+                fwd_from=None,
+                via_bot_id=None,
+                via_business_bot_id=None,
+                reply_to=None,
+                media=None,
+                reply_markup=None,
+                entities=[
+                    MessageEntityBold(
+                        offset=0,
+                        length=41
+                    )
+                ],
+                views=108181,
+                forwards=3,
+                replies=None,
+                edit_date=None,
+                post_author=None,
+                grouped_id=None,
+                reactions=None,
+                restriction_reason=[],
+                ttl_period=None,
+                quick_reply_shortcut_id=None,
+                effect=None,
+                factcheck=None
+            )
+        """
 
         for request_no in range(
             1,
@@ -88,10 +158,12 @@ class TelegramAPI:
             now = datetime.now().strftime("%H:%M:%S")
             print(f"request number -> {request_no} at {now}")
 
-            for message in self.user_client.iter_messages(
+            # improve usage of that messages generator if it is possible - chat gpt confirms that it can be possible!
+            async for message in self.__user_client.iter_messages(
                 chat_id,
                 limit = limit
             ):
+                print(f"yielded message:\n\n{message.message}\n")
                 yield message
                 await asyncio.sleep(
                     self.__api_requests_limit_during_pump_detection["in_seconds"] / self.__api_requests_limit_during_pump_detection["requests"]

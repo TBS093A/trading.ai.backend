@@ -153,7 +153,7 @@ class Pump:
                         ):
 
                             captured_coin = self.__gather_coin(
-                                captured_message = message,
+                                captured_message = message.message,
                                 regex = channel_info["regex"]
                             )
 
