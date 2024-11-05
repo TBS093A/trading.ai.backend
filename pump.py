@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 print = logging.info
 
 regexes = {
-    "single_uppercase_word_without_spaces": r"^[A-Z0-9]+$"
+    "single_uppercase_word_without_spaces": r"^[A-Z0-9]+$",
+    "single_word_without_spaces": r"^[^\s]+$",
 }
 
 exchange_apis = {
@@ -80,7 +81,8 @@ class Pump:
         self,
         channels: dict,
         telegram_api: TelegramAPI,
-        loop_single_iteration_long_waiting_time = 30.0,
+        loop_single_iteration_long_waiting_time = 60.0 * 25,
+        loop_single_iteration_middle_waiting_time = 30.0,
         loop_single_iteration_short_waiting_time = 0.25,
         DEBUG: bool = False
     ):
@@ -89,6 +91,7 @@ class Pump:
 
         self.__channels = channels
         self.__loop_single_iteration_long_waiting_time = loop_single_iteration_long_waiting_time
+        self.__loop_single_iteration_middle_waiting_time = loop_single_iteration_middle_waiting_time
         self.__loop_single_iteration_short_waiting_time = loop_single_iteration_short_waiting_time
         self.__telegram_api = telegram_api
 
@@ -199,7 +202,13 @@ class Pump:
 
                             await asyncio.sleep(self.__loop_single_iteration_short_waiting_time)
 
-                        else:
+                        elif time_difference <= timedelta(minutes=30) and time_difference > timedelta(minutes=1):
+
+                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s Today Pumps Detection")
+
+                            await asyncio.sleep(self.__loop_single_iteration_middle_waiting_time)
+
+                        elif time_difference > timedelta(minutes=30):
 
                             print(f"Wait {self.__loop_single_iteration_long_waiting_time}s Today Pumps Detection")
 

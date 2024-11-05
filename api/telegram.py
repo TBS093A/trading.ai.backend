@@ -86,6 +86,20 @@ class TelegramAPI:
             bot_token = self.__telethon_bot_token
         )
 
+    def __del__(self):
+        try:
+            if self.__user_client.is_connected():
+                print("Closing User Client Telegram Session")
+                self.__user_client.disconnect()
+        except Exception as error:
+            print(error)
+        try:
+            if self.__bot_client.is_connected():
+                print("Closing Bot Client Telegram Session")
+                self.__bot_client.disconnect()
+        except Exception as error:
+            print(error)
+
     async def send_as_bot(self, message: str):
         print(message)
         await self.bot_client.send_message(
