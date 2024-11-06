@@ -4,7 +4,7 @@ import asyncio
 
 import time
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
@@ -83,7 +83,17 @@ class TestTelegram(unittest.TestCase):
         )
 
 
-#@unittest.skip("skip pump real mechanizm tests")
+@unittest.skip("skip pump real mechanizm tests")
+class TestPumpUnits(unittest.TestCase):
+
+    def test_gather_coin_000(self):
+        pass
+
+    def test_sleep_to_next_day_000(self):
+        pass
+
+
+@unittest.skip("skip pump real mechanizm tests")
 class TestPumpReal(unittest.TestCase):
 
     def setUp(self):
@@ -146,6 +156,7 @@ class TestPumpReal(unittest.TestCase):
                 {
                     "day": f"tuesday",
                     "time": f"18:00:00",
+                    "zone": None,
                     "is_today": False,
                     "is_realised": False,
                 },
@@ -164,8 +175,8 @@ class TestPumpReal(unittest.TestCase):
                 break
 
 
-@unittest.skip("skip pump mock mechanizm tests")
-class TestPumpMock(unittest.TestCase):
+#@unittest.skip("skip pump mock mechanizm tests")
+class TestPumpMockShortTime(unittest.TestCase):
 
     def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
         pump = Pump(
@@ -190,7 +201,7 @@ class TestPumpMock(unittest.TestCase):
 
         return pump
 
-    def test_pump_investment_000(self):
+    def test_pump_investment_short_000(self):
 
         current_time = datetime.now()
         new_time = current_time + timedelta(seconds=20)
@@ -211,6 +222,7 @@ class TestPumpMock(unittest.TestCase):
                 {
                     "day": f"{current_day_str}",
                     "time": f"{new_time_str}",
+                    "zone": None,
                     "is_today": False,
                     "is_realised": False,
                 },
@@ -227,7 +239,7 @@ class TestPumpMock(unittest.TestCase):
 
                 break
 
-    def test_pump_investment_001(self):
+    def test_pump_investment_short_001(self):
 
         current_time = datetime.now()
         new_time = current_time + timedelta(seconds=20)
@@ -248,6 +260,89 @@ class TestPumpMock(unittest.TestCase):
                 {
                     "day": f"{current_day_str}",
                     "time": f"{new_time_str}",
+                    "zone": None,
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ],
+            regex_key = "single_word_without_spaces"
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    def test_pump_investment_short_002(self):
+
+        zone = timezone(timedelta(0), "GMT")
+
+        current_time = datetime.now(zone)
+        new_time = current_time + timedelta(seconds=20)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "Ozone"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "zone": zone,
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ],
+            regex_key = "single_word_without_spaces"
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    def test_pump_investment_short_003(self):
+
+        zone = timezone.utc
+
+        current_time = datetime.now(zone)
+        new_time = current_time + timedelta(seconds=20)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "Ozone"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "zone": zone,
                     "is_today": False,
                     "is_realised": False,
                 },
@@ -266,44 +361,33 @@ class TestPumpMock(unittest.TestCase):
                 break
 
 
-    def test_pump_investment_002(self):
+@unittest.skip("skip pump mock mechanizm tests")
+class TestPumpMockLongTime(unittest.TestCase):
 
-        current_time = datetime.now()
-        new_time = current_time + timedelta(seconds=180)
-
-        current_day_str = time.strftime("%A").lower()
-        new_time_str = new_time.strftime("%H:%M:%S")
-
-        pump_object = self.__prepare_pump_object(
-            telegram_api_mock = TelegramAPIMock(
-                messages_list_mock = [
-                    ""
-                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
-                    "SVPN"
-                ],
-                sleep = 0.25
-            ),
-            pumps_list = [
-                {
-                    "day": f"{current_day_str}",
-                    "time": f"{new_time_str}",
-                    "is_today": False,
-                    "is_realised": False,
-                },
-            ]
+    def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
+        pump = Pump(
+            telegram_api = telegram_api_mock,
+            channels = {
+                "Test Channel Name": {
+                    "username": "test_channel_name",
+                    "id": -1,
+                    "pumps": pumps_list,
+                    "exchange": AbstractAPI(
+                        available_quote = 50,
+                        coin_price_at_buy = 0.1,
+                        coin_price_at_sell = 1.0,
+                    ),
+                    "currency": "USDT",
+                    "strategy": MockTransactionStrategy,
+                    "regex": regexes[regex_key],
+                }
+            },
+            DEBUG = True
         )
 
-        while True:
+        return pump
 
-            asyncio.run(
-                pump_object._Pump__pump_investment()
-            )
-
-            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
-
-                break
-
-    def test_pump_investment_003(self):
+    def test_pump_investment_long_000(self):
 
         current_time = datetime.now()
         new_time = current_time + timedelta(minutes=32)
@@ -324,6 +408,7 @@ class TestPumpMock(unittest.TestCase):
                 {
                     "day": f"{current_day_str}",
                     "time": f"{new_time_str}",
+                    "zone": None,
                     "is_today": False,
                     "is_realised": False,
                 },
@@ -340,11 +425,43 @@ class TestPumpMock(unittest.TestCase):
 
                 break
 
-    def test_gather_coin_000(self):
-        pass
+    def test_pump_investment_long_001(self):
 
-    def test_sleep_to_next_day_000(self):
-        pass
+        current_time = datetime.now()
+        new_time = current_time + timedelta(seconds=180)
+
+        current_day_str = time.strftime("%A").lower()
+        new_time_str = new_time.strftime("%H:%M:%S")
+
+        pump_object = self.__prepare_pump_object(
+            telegram_api_mock = TelegramAPIMock(
+                messages_list_mock = [
+                    ""
+                    "‼️ 5 MINUTES UNTIL THE PUMP\n\nNext message is the coin name. Buy as fast as possible.",
+                    "SVPN"
+                ],
+                sleep = 0.25
+            ),
+            pumps_list = [
+                {
+                    "day": f"{current_day_str}",
+                    "time": f"{new_time_str}",
+                    "zone": None,
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ]
+        )
+
+        while True:
+
+            asyncio.run(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+
+                break
 
 
 @unittest.skip("skip transaction strategies tests")
