@@ -21,7 +21,7 @@ import asyncio
 import logging
 
 from pprint import pprint
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
@@ -61,8 +61,9 @@ const_channels = {
         "id": -1001625691880,
         "pumps": [
             {
-                "day": "sunday",
-                "time": "19:00:00",
+                "day": "friday",
+                "time": "17:00:00",
+                "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
                 "is_today": False,
                 "is_realised": False,
             },
@@ -136,6 +137,13 @@ class Pump:
                     continue
 
                 now = datetime.now()
+
+                if pump_info["zone"] != None:
+
+                    now = datetime.now(
+                        pump_info["zone"]
+                    )
+
                 current_day = now.strftime("%A")
                 current_hour_and_minute = now.strftime("%H:%M:%S")[:5]
 
@@ -149,7 +157,7 @@ class Pump:
 
                     if current_hour_and_minute == pump_info["time"][:5]:
 
-                        print(f"Download messages from {channel_name} (USERNAME: {channel_info['username']} ID:, {channel_info['id']}) for pump at {pump_info['day']} {pump_info['time']}")
+                        print(f"Download messages from {channel_name} (USERNAME: {channel_info['username']} ID:, {channel_info['id']}) for pump at {pump_info['day']} {pump_info['time']} (timezone {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                         async for message in self.__telegram_api.yield_last_messages_from_chat(
                             chat_id = channel_info['id']
