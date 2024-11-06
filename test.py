@@ -68,7 +68,7 @@ class TestTelegram(unittest.TestCase):
 
             except Exception as cleanup_error:
 
-                print("error at finally cleanup: {cleanup_error}")
+                print(f"error at finally cleanup: {cleanup_error}")
 
     def test_get_messages_static_000(self):
         message = self.loop.run_until_complete(
@@ -93,13 +93,15 @@ class TestPumpUnits(unittest.TestCase):
         pass
 
 
-@unittest.skip("skip pump real mechanizm tests")
+#@unittest.skip("skip pump real mechanizm tests")
 class TestPumpReal(unittest.TestCase):
 
     def setUp(self):
+        self.loop = asyncio.get_event_loop()
         self.__telegram_api = TelegramAPI()
 
     def tearDown(self):
+        self.loop.close()
         del self.__telegram_api
 
     def __prepare_pump_object(self, channel_name: str, channel_username: str, channel_id: int, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
@@ -144,18 +146,20 @@ class TestPumpReal(unittest.TestCase):
 
             except Exception as cleanup_error:
 
-                print("error at finally cleanup: {cleanup_error}")
+                print(f"error at finally cleanup: {cleanup_error}")
 
     def test_pump_investment_real_000(self):
 
+        channel_name = "Pump Test Channel"
+
         pump_object = self.__prepare_pump_object(
-            channel_name = "Xt Pumps Vip",
-            channel_username = "XtPumpsVip",
-            channel_id = -1002129820268,
+            channel_name = channel_name,
+            channel_username = "None",
+            channel_id = -1002338823593,
             pumps_list = [
                 {
-                    "day": f"tuesday",
-                    "time": f"18:00:00",
+                    "day": f"wednesday",
+                    "time": f"15:17:00",
                     "zone": None,
                     "is_today": False,
                     "is_realised": False,
@@ -166,16 +170,47 @@ class TestPumpReal(unittest.TestCase):
 
         while True:
 
-            asyncio.run(
+            self.loop.run_until_complete(
                 pump_object._Pump__pump_investment()
             )
 
-            if pump_object.get_channels()["Test Channel Name"]["pumps"][0]["is_realised"] == True:
+            if pump_object.get_channels()[channel_name]["pumps"][0]["is_realised"] == True:
+
+                break
+
+    @unittest.skip("Skip Prod Channels")
+    def test_pump_investment_real_001(self):
+
+        channel_name = "Crypto Pump Club"
+
+        pump_object = self.__prepare_pump_object(
+            channel_name = channel_name,
+            channel_username = "cryptoclubpump",
+            channel_id = -1001625691880,
+            pumps_list = [
+                {
+                    "day": "friday",
+                    "time": "17:00:00",
+                    "zone": timezone(timedelta(0), "GMT"),
+                    "is_today": False,
+                    "is_realised": False,
+                },
+            ],
+            regex_key = "single_uppercase_word_without_spaces"
+        )
+
+        while True:
+
+            self.loop.run_until_complete(
+                pump_object._Pump__pump_investment()
+            )
+
+            if pump_object.get_channels()[channel_name]["pumps"][0]["is_realised"] == True:
 
                 break
 
 
-#@unittest.skip("skip pump mock mechanizm tests")
+@unittest.skip("skip pump mock mechanizm tests")
 class TestPumpMockShortTime(unittest.TestCase):
 
     def __prepare_pump_object(self, telegram_api_mock: TelegramAPIMock, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:

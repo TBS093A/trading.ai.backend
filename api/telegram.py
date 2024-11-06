@@ -102,7 +102,7 @@ class TelegramAPI:
 
     async def send_as_bot(self, message: str):
         print(message)
-        await self.bot_client.send_message(
+        await self.__bot_client.send_message(
             self.__user_id,
             "[BOT] " + message
         )
