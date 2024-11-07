@@ -245,7 +245,7 @@ class Pump:
     async def capture_pump(self):
         while True:
 
-            self.__pump_investment()
+            await self.__pump_investment()
 
             self.__reset_channel_day_stats()
 
