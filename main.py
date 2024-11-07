@@ -32,11 +32,11 @@ async def main() -> None:
 
     except Exception as error:
 
-        print(f"closed by issue:\n\n{error}")
+        logging.error(f"closed by issue:\n\n{error}")
 
     except KeyboardInterrupt as error:
 
-        print(f"closed by user keyboard interrupt:\n\n{error}")
+        logging.warning(f"closed by user keyboard interrupt:\n\n{error}")
 
         try:
 
@@ -44,7 +44,7 @@ async def main() -> None:
 
         except Exception as cleanup_error:
 
-            print(f"error at cleanup: {cleanup_error}")
+            logging.error(f"error at cleanup: {cleanup_error}")
 
     finally:
 
@@ -54,21 +54,36 @@ async def main() -> None:
 
         except Exception as cleanup_error:
 
-            print(f"error at finally cleanup: {cleanup_error}")
+            logging.error(f"error at finally cleanup: {cleanup_error}")
 
 
 if __name__ == "__main__":
-
     try:
+        try:
 
-        async_loop = asyncio.get_event_loop()
+            async_loop = asyncio.get_running_loop()
+
+        except RuntimeError:
+
+            async_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(async_loop)
 
         async_loop.run_until_complete(main())
 
+    except asyncio.CancelledError:
+
+        logging.warning("Async tasks were cancelled")
+
     except Exception as error:
 
-        print(f"error at async loop: {error}")
+        logging.error(f"Unexpected error in async loop: {error}", exc_info=True)
 
     finally:
+
+        pending_tasks = asyncio.all_tasks(async_loop)
+        if pending_tasks:
+            for task in pending_tasks:
+                task.cancel()
+            async_loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
 
         async_loop.close()
