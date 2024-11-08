@@ -122,7 +122,7 @@ class Pump:
 
         seconds_until_target = (target_time_today - now).total_seconds()
 
-        print(f"sleep for {seconds_until_target} seconds to next day")
+        print(f"sleep for {seconds_until_target}s to next day")
 
         if self.__DEBUG == False:
 
@@ -206,19 +206,19 @@ class Pump:
 
                         if time_difference <= timedelta(minutes=1):
 
-                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s Today Pumps Detection")
+                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_short_waiting_time)
 
                         elif time_difference <= timedelta(minutes=30) and time_difference > timedelta(minutes=1):
 
-                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s Today Pumps Detection")
+                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_middle_waiting_time)
 
                         elif time_difference > timedelta(minutes=30):
 
-                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s Today Pumps Detection")
+                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_long_waiting_time)
 

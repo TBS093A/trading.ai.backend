@@ -172,11 +172,21 @@ class TelegramAPI:
             now = datetime.now().strftime("%H:%M:%S")
             print(f"request number -> {request_no} at {now}")
 
-            # improve usage of that messages generator if it is possible - chat gpt confirms that it can be possible!
-            async for message in self.__user_client.iter_messages(
-                chat_id,
-                limit = limit
-            ):
+            try:
+
+                messages_generator = self.__user_client.iter_messages(
+                    chat_id,
+                    limit = limit
+                )
+
+            except:
+
+                messages_generator = await self.__user_client.iter_messages(
+                    chat_id,
+                    limit = limit
+                )
+
+            async for message in messages_generator:
                 print(f"yielded message:\n\n{message.message}\n")
                 yield message
                 await asyncio.sleep(
