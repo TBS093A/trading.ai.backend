@@ -26,7 +26,7 @@ from pump import (
 )
 
 
-@unittest.skip("skip telegram tests")
+#@unittest.skip("skip telegram tests")
 class TestTelegram(unittest.TestCase):
 
     def setUp(self):
@@ -93,7 +93,7 @@ class TestPumpUnits(unittest.TestCase):
         pass
 
 
-#@unittest.skip("skip pump real mechanizm tests")
+@unittest.skip("skip pump real mechanizm tests")
 class TestPumpReal(unittest.TestCase):
 
     def setUp(self):
