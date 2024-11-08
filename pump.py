@@ -199,7 +199,7 @@ class Pump:
 
                     if current_hour_and_minute != pump_info["time"][:5]:
 
-                        if int(current_hour_and_minute[:2]) > int(pump_info["time"]):
+                        if int(current_hour_and_minute[:2]) > int(pump_info["time"][:2]):
 
                             pump_info['is_today'] = False
 
