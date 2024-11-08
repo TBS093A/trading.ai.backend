@@ -199,6 +199,12 @@ class Pump:
 
                     if current_hour_and_minute != pump_info["time"][:5]:
 
+                        if int(current_hour_and_minute[:2]) > int(pump_info["time"]):
+
+                            pump_info['is_today'] = False
+
+                            break
+
                         current_time = datetime.strptime(current_hour_and_minute, "%H:%M")
                         pump_time = datetime.strptime(pump_info["time"][:5], "%H:%M")
 
@@ -206,19 +212,19 @@ class Pump:
 
                         if time_difference <= timedelta(minutes=1):
 
-                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_short_waiting_time)
 
                         elif time_difference <= timedelta(minutes=30) and time_difference > timedelta(minutes=1):
 
-                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_middle_waiting_time)
 
                         elif time_difference > timedelta(minutes=30):
 
-                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}), Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 
                             await asyncio.sleep(self.__loop_single_iteration_long_waiting_time)
 
