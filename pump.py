@@ -122,7 +122,7 @@ class Pump:
 
         seconds_until_target = (target_time_today - now).total_seconds()
 
-        print(f"sleep for {seconds_until_target}s to next day")
+        print(f"Sleep {seconds_until_target}s To The Next Day (No Pumps Today)")
 
         if self.__DEBUG == False:
 
