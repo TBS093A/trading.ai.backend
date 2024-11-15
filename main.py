@@ -23,6 +23,8 @@ async def main() -> None:
 
         telegram_api = TelegramAPI()
 
+        await telegram_api.start()
+
         pump = Pump(
             channels = const_channels,
             telegram_api = telegram_api,
@@ -40,7 +42,7 @@ async def main() -> None:
 
         try:
 
-            del telegram_api
+            await telegram_api.stop()
 
         except Exception as cleanup_error:
 
@@ -50,7 +52,7 @@ async def main() -> None:
 
         try:
 
-            del telegram_api
+            await telegram_api.stop()
 
         except Exception as cleanup_error:
 

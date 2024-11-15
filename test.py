@@ -35,11 +35,12 @@ class TestTelegram(unittest.TestCase):
 
     def tearDown(self):
         self.loop.close()
-        del self.__telegram_api
 
     async def __get_messages_static(self, channel_name: str = "Crypto Pump Club", limit: int = 5):
 
         try:
+
+            await self.__telegram_api.start()
 
             channel_id = const_channels[channel_name]["id"]
             returned_message = ""
@@ -64,7 +65,7 @@ class TestTelegram(unittest.TestCase):
 
             try:
 
-                del telegram_api
+                await self.__telegram_api.stop()
 
             except Exception as cleanup_error:
 
@@ -102,11 +103,12 @@ class TestPumpReal(unittest.TestCase):
 
     def tearDown(self):
         self.loop.close()
-        del self.__telegram_api
 
-    def __prepare_pump_object(self, channel_name: str, channel_username: str, channel_id: int, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
+    async def __prepare_pump_object(self, channel_name: str, channel_username: str, channel_id: int, pumps_list: list[dict], regex_key: str = "single_uppercase_word_without_spaces") -> Pump:
 
         try:
+
+            await self.__telegram_api.start()
 
             pump = Pump(
                 telegram_api = self.__telegram_api,
@@ -142,30 +144,33 @@ class TestPumpReal(unittest.TestCase):
 
             try:
 
-                del telegram_api
+                await self.__telegram_api.stop()
 
             except Exception as cleanup_error:
 
                 print(f"error at finally cleanup: {cleanup_error}")
 
+    @unittest.skip("Skip Test Channels")
     def test_pump_investment_real_000(self):
 
         channel_name = "Pump Test Channel"
 
-        pump_object = self.__prepare_pump_object(
-            channel_name = channel_name,
-            channel_username = "None",
-            channel_id = -1002338823593,
-            pumps_list = [
-                {
-                    "day": f"wednesday",
-                    "time": f"15:17:00",
-                    "zone": None,
-                    "is_today": False,
-                    "is_realised": False,
-                },
-            ],
-            regex_key = "single_word_without_spaces"
+        pump_object = self.loop.run_until_complete(
+            self.__prepare_pump_object(
+                channel_name = channel_name,
+                channel_username = "None",
+                channel_id = -1002338823593,
+                pumps_list = [
+                    {
+                        "day": f"wednesday",
+                        "time": f"15:17:00",
+                        "zone": None,
+                        "is_today": False,
+                        "is_realised": False,
+                    },
+                ],
+                regex_key = "single_word_without_spaces"
+            )
         )
 
         while True:
@@ -178,25 +183,27 @@ class TestPumpReal(unittest.TestCase):
 
                 break
 
-    @unittest.skip("Skip Prod Channels")
+    #@unittest.skip("Skip Prod Channels")
     def test_pump_investment_real_001(self):
 
         channel_name = "Crypto Pump Club"
 
-        pump_object = self.__prepare_pump_object(
-            channel_name = channel_name,
-            channel_username = "cryptoclubpump",
-            channel_id = -1001625691880,
-            pumps_list = [
-                {
-                    "day": "friday",
-                    "time": "17:00:00",
-                    "zone": timezone(timedelta(0), "GMT"),
-                    "is_today": False,
-                    "is_realised": False,
-                },
-            ],
-            regex_key = "single_uppercase_word_without_spaces"
+        pump_object = self.loop.run_until_complete(
+            self.__prepare_pump_object(
+                channel_name = channel_name,
+                channel_username = "cryptoclubpump",
+                channel_id = -1001625691880,
+                pumps_list = [
+                    {
+                        "day": "friday",
+                        "time": "17:00:00",
+                        "zone": timezone(timedelta(0), "GMT"),
+                        "is_today": False,
+                        "is_realised": False,
+                    },
+                ],
+                regex_key = "single_uppercase_word_without_spaces"
+            )
         )
 
         while True:

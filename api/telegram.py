@@ -70,23 +70,27 @@ class TelegramAPI:
         self.__user_id = int(os.environ.get("TELETHON_USER_ID", default=""))
         self.__bot_id = int(os.environ.get("TELETHON_BOT_ID", default=""))
 
-        self.__user_client = await TelegramClient(
+        self.__user_client = TelegramClient(
             "user_session",
             self.__telethon_api_id,
             self.__telethon_api_hash
-        ).start(
-            phone = self.__telethon_api_phone
         )
 
-        self.__bot_client = await TelegramClient(
+        self.__bot_client = TelegramClient(
             "bot_session",
             self.__telethon_api_id,
             self.__telethon_api_hash
-        ).start(
+        )
+
+    async def start(self):
+        await self.__user_client.start(
+            phone = self.__telethon_api_phone
+        )
+        await self.__bot_client.start(
             bot_token = self.__telethon_bot_token
         )
 
-    def __del__(self):
+    async def stop(self):
         try:
             if await self.__user_client.is_connected():
                 print("Closing User Client Telegram Session")
