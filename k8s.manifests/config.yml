@@ -16,7 +16,7 @@ data:
 
     export KUCOIN_API_SECRET="<<kucoin.api.secret>>"
     export KUCOIN_API_KEY="<<kucoin.api.key>>"
-    export KUCOIN_API_KEY_PASSPHRASE="<<kucoin.api.key.passphrase"
+    export KUCOIN_API_KEY_PASSPHRASE="<<kucoin.api.key.passphrase>>"
 
     export MEXC_API_KEY="<<mexc.api.key>>"
     export MEXC_API_SECRET="<<mexc.api.secret>>"
