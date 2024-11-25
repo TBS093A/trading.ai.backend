@@ -4,6 +4,7 @@ from time import sleep, time
 from concurrent.futures import ThreadPoolExecutor
 
 import os
+import traceback
 import asyncio
 
 
@@ -98,7 +99,7 @@ class AbstractTransactionStrategy:
                 ugly_dict = buy_info
             )
         except Exception as error:
-            buy_info = error
+            buy_info = f"Error '{error}' occured here:\n{traceback.format_exc()}"
 
         self.__buy_transaction_info.append(
             buy_info
@@ -121,7 +122,7 @@ class AbstractTransactionStrategy:
                 ugly_dict = sell_info
             )
         except Exception as error:
-            sell_info = error
+            sell_info = f"Error '{error}' occured here:\n{traceback.format_exc()}"
 
         self.__sell_transaction_info.append(
             sell_info
