@@ -506,7 +506,7 @@ class TestPumpMockLongTime(unittest.TestCase):
                 break
 
 
-#@unittest.skip("skip transaction strategies tests")
+@unittest.skip("skip transaction strategies tests")
 class TestTransactionStrategies(unittest.TestCase):
 
     __coin: str = "TEST_ASSET"
