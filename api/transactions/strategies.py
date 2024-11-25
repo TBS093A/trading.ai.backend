@@ -1,6 +1,9 @@
 from api.abstract import AbstractAPI
 from api.telegram import TelegramAPI
 from time import sleep, time
+from concurrent.futures import ThreadPoolExecutor
+
+import asyncio
 
 
 class StrategyUtils:
@@ -264,19 +267,29 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
            self.buy_transactions = possible_transactions
 
-        for transaction_no in range(1, self.buy_transactions + 1):
+        loop = asyncio.get_event_loop()
 
-            available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
-                currency = currency
-            )
+        with ThreadPoolExecutor() as pool:
+            tasks = []
 
-            buy_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_buy / available_quote
+            for transaction_no in range(1, self.buy_transactions + 1):
+                available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
+                    currency=currency
+                )
 
-            self.buy(
-                coin = coin,
-                currency = currency,
-                currency_percent_size_to_buy = buy_percent_per_transaction
-            )
+                buy_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_buy / available_quote
+
+                tasks.append(
+                    loop.run_in_executor(
+                        pool,
+                        self.buy,
+                        coin,
+                        currency,
+                        buy_percent_per_transaction
+                    )
+                )
+
+            await asyncio.gather(*tasks)
 
         return f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { currency } transactions - used available { first_available_quote } { currency }\n\nBuy Information:\n\n{ self.get_buy_transaction_info() }"
 
@@ -331,41 +344,56 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             iteration_index += 1
 
-            for transaction_no in range(1, self.sell_transactions + 1):
+            loop = asyncio.get_event_loop()
 
-                available_size = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
-                    currency = coin
+            with ThreadPoolExecutor() as pool:
+                tasks = []
+
+                for transaction_no in range(1, self.sell_transactions + 1):
+
+                    available_size = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
+                        currency = coin
+                    )
+
+                    actual_coin_price = float(
+                        self.exchange_api._AbstractAPI__get_bid_and_ask_prices(
+                            base_currency = coin,
+                            quote_currency = currency
+                        )["bid_price"]
+                    )
+
+                    available_quote_in_asset = available_size * actual_coin_price
+
+                    sell_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_sell / available_quote_in_asset
+
+                    if sell_percent_per_transaction >= 1.0:
+
+                        break
+
+                    tasks.append(
+                        loop.run_in_executor(
+                            pool,
+                            self.sell,
+                            coin,
+                            currency,
+                            sell_percent_per_transaction
+                        )
+                    )
+
+                    available_size = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
+                        currency = coin
+                    )
+
+                tasks.append(
+                    loop.run_in_executor(
+                        pool,
+                        self.sell,
+                        coin,
+                        currency,
+                        last_sell_percent
+                    )
                 )
 
-                actual_coin_price = float(
-                    self.exchange_api._AbstractAPI__get_bid_and_ask_prices(
-                        base_currency = coin,
-                        quote_currency = currency
-                    )["bid_price"]
-                )
+                await asyncio.gather(*tasks)
 
-                available_quote_in_asset = available_size * actual_coin_price
-
-                sell_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_sell / available_quote_in_asset
-
-                if sell_percent_per_transaction >= 1.0:
-
-                    break
-
-                self.sell(
-                    coin = coin,
-                    currency = currency,
-                    currency_percent_size_to_sell = sell_percent_per_transaction
-                )
-
-                available_size = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
-                    currency = coin
-                )
-
-            self.sell(
-                coin = coin,
-                currency = currency,
-                currency_percent_size_to_sell = last_sell_percent
-            )
-
-        return f"Sell { coin } by { self.get_sell_transactions_count() } x { sell_percent_per_transaction * 100}% { currency } transactions\n\nSell Information:\n\n{ self.get_sell_transaction_info() }"
+        return f"Sell { coin } by { self.get_sell_transactions_count() } x { sell_percent_per_transaction * 100} { currency } transactions\n\nSell Information:\n\n{ self.get_sell_transaction_info() }"

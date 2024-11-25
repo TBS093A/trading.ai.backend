@@ -26,7 +26,7 @@ from pump import (
 )
 
 
-#@unittest.skip("skip telegram tests")
+@unittest.skip("skip telegram tests")
 class TestTelegram(unittest.TestCase):
 
     def setUp(self):
@@ -183,7 +183,7 @@ class TestPumpReal(unittest.TestCase):
 
                 break
 
-    #@unittest.skip("Skip Prod Channels")
+    @unittest.skip("Skip Prod Channels")
     def test_pump_investment_real_001(self):
 
         channel_name = "Crypto Pump Club"
@@ -506,7 +506,7 @@ class TestPumpMockLongTime(unittest.TestCase):
                 break
 
 
-@unittest.skip("skip transaction strategies tests")
+#@unittest.skip("skip transaction strategies tests")
 class TestTransactionStrategies(unittest.TestCase):
 
     __coin: str = "TEST_ASSET"
@@ -748,7 +748,8 @@ class TestMexcAPI(unittest.TestCase):
         api_secret = os.environ.get(
             "MEXC_API_SECRET",
             default=""
-        )
+        ),
+        DEBUG = False
     )
 
     def test_capture_api_key_0(self):
@@ -959,7 +960,7 @@ class TestMexcAPI(unittest.TestCase):
 
 
 @unittest.skip("skip transactions tests")
-class TestMexcAPITransactions(unittest.TestCase):
+class TestMexcAPIBuyTransactions(unittest.TestCase):
 
     __api = MexcAPI(
         api_key = os.environ.get(
@@ -969,47 +970,83 @@ class TestMexcAPITransactions(unittest.TestCase):
         api_secret = os.environ.get(
             "MEXC_API_SECRET",
             default=""
-        )
+        ),
+        DEBUG = True
     )
 
-    def test_LBTC_transaction_assset_0(self):
-        sleep(2)
-        status = self.__api.buy(
-           coin = "LBTC",
-           currency_percent_size_to_buy = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
+    def setUp(self):
+        self.loop = asyncio.get_event_loop()
 
-    def test_LBTC_transaction_assset_1(self):
-        sleep(2)
-        status = self.__api.sell(
-           coin = "LBTC",
-           coin_percent_size_to_sell = "1.0",
-           used_currency = "USDT"
+    def tearDown(self):
+        self.loop.close()
+
+    def test_LBTC_transaction_assset_0(self):
+        status = self.__api.buy(
+            coin = "LBTC",
+            currency_percent_size_to_buy = "1.0",
+            used_currency = "USDT"
         )
         print(status)
         self.assertTrue(
-            "orderId" in status
+            "api_response" in status
         )
 
     def test_OX_transaction_assset_0(self):
-        sleep(2)
         status = self.__api.buy(
-           coin = "OX",
-           currency_percent_size_to_buy = "1.0",
+            coin = "OX",
+            currency_percent_size_to_buy = "1.0",
+            used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "api_response" in status
+        )
+
+    def test_PRY_transaction_assset_0(self):
+        status = self.__api.buy(
+            coin = "PRY",
+            currency_percent_size_to_buy = "1.0",
+            used_currency = "USDT"
+        )
+        print(status)
+        self.assertTrue(
+            "api_response" in status
+        )
+
+
+@unittest.skip("skip transactions tests")
+class TestMexcAPISellTransactions(unittest.TestCase):
+
+    __api = MexcAPI(
+        api_key = os.environ.get(
+            "MEXC_API_KEY",
+            default=""
+        ),
+        api_secret = os.environ.get(
+            "MEXC_API_SECRET",
+            default=""
+        ),
+        DEBUG = True
+    )
+
+    def setUp(self):
+        self.loop = asyncio.get_event_loop()
+
+    def tearDown(self):
+        self.loop.close()
+
+    def test_LBTC_transaction_assset_1(self):
+        status = self.__api.sell(
+           coin = "LBTC",
+           coin_percent_size_to_sell = "1.0",
            used_currency = "USDT"
         )
         print(status)
         self.assertTrue(
-            "orderId" in status
+            "api_response" in status
         )
 
     def test_OX_transaction_assset_1(self):
-        sleep(2)
         status = self.__api.sell(
            coin = "OX",
            coin_percent_size_to_sell = "1.0",
@@ -1017,31 +1054,18 @@ class TestMexcAPITransactions(unittest.TestCase):
         )
         print(status)
         self.assertTrue(
-            "orderId" in status
+            "api_response" in status
         )
 
-    def test_MONKE_transaction_assset_0(self):
-        sleep(2)
-        status = self.__api.buy(
-           coin = "MONKE",
-           currency_percent_size_to_buy = "1.0",
-           used_currency = "USDT"
-        )
-        print(status)
-        self.assertTrue(
-            "orderId" in status
-        )
-
-    def test_MONKE_transaction_assset_1(self):
-        sleep(2)
+    def test_PRY_transaction_assset_1(self):
         status = self.__api.sell(
-           coin = "MONKE",
+           coin = "PRY",
            coin_percent_size_to_sell = "1.0",
            used_currency = "USDT"
         )
         print(status)
         self.assertTrue(
-            "orderId" in status
+            "api_response" in status
         )
 
 

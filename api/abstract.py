@@ -142,20 +142,51 @@ class AbstractAPI:
             "price": ""
         }
 
+    def __prepare_coin_price_to_buy(self, price_buy_balance_percent: float, coin_ask_price: dict) -> float:
+
+        price_one_houndred_percent = float(coin_ask_price)
+
+        price_percent_balance = float(
+            format(
+                price_one_houndred_percent * float(price_buy_balance_percent),
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
+
+        return float(
+            format(
+                price_one_houndred_percent + price_percent_balance,
+                f".{len(str(price_one_houndred_percent))}f"
+            )
+        )
+
+    def __prepare_coin_size_to_buy(self, available_currency_assets: float, coin_price: float, symbol_lot_size: dict) -> float:
+
+        coin_buy_proportion = float(
+            int(
+                float(available_currency_assets) / float(coin_price)
+            )
+        )
+
+        return float(
+            int(
+                self.__truncate_float(
+                    value = coin_buy_proportion,
+                    precision = int(symbol_lot_size["base_asset_precision"])
+                )
+            )
+        )
 
     def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
-        symbol_lot_size = self.__get_lot_size(
-            base_currency = coin,
-            quote_currency = used_currency
-        )
-
-        ticker_data = self.__get_ticker(
-            base_currency = coin,
-            quote_currency = used_currency
-        )
+        #gather data
 
         best_ticker_data = self.__get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
+
+        symbol_lot_size = self.__get_lot_size(
             base_currency = coin,
             quote_currency = used_currency
         )
@@ -169,131 +200,60 @@ class AbstractAPI:
             )
         )
 
-        coin_buy_proportion = (float(available_currency_assets) / float(ticker_data["price"]))
+        #compute
 
-        self.__actual_price = float(ticker_data["price"])
-
-        print("pre-buy:")
-        print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / ticker_data['price'] ({ticker_data['price']}))")
-
-
-        coin_size_to_buy = self.__truncate_float(
-            value = coin_buy_proportion,
-            precision = int(symbol_lot_size["base_asset_precision"])
+        coin_price = self.__prepare_coin_price_to_buy(
+            price_buy_balance_percent = price_buy_balance_percent,
+            coin_ask_price = best_ticker_data["ask_price"]
         )
 
-        self.__actual_size = coin_size_to_buy
-
-        price_one_houndred_percent = float(best_ticker_data["ask_price"])
-        price_percent_balance = float(
-            format(
-                price_one_houndred_percent * float(price_buy_balance_percent),
-                f".{len(str(price_one_houndred_percent))}f"
-            )
+        coin_size = self.__prepare_coin_size_to_buy(
+            available_currency_assets = available_currency_assets,
+            coin_price = coin_price,
+            symbol_lot_size = symbol_lot_size
         )
 
-        self.__actual_price = float(ticker_data["price"])
-
-        coin_high_limit_price = float(
-            format(
-                price_one_houndred_percent + price_percent_balance,
-                f".{len(str(price_one_houndred_percent))}f"
-            )
-        )
-
-        coin_low_limit_price = float(best_ticker_data["bid_price"])
-
-        print(f"\tcoin_low_limit_price ({coin_low_limit_price})")
-
-        print(f"\tcoin_high_limit_price ({coin_high_limit_price})")
-
-        coin_buy_proportion = float(
-            int(
-                float(available_currency_assets) / float(coin_high_limit_price)
-            )
-        )
-
-        self.__actual_price = float(best_ticker_data["ask_price"])
-
-        print("")
-        print("pre-buy:")
-        print(f"\tcoin_buy_size / coin_buy_proportion ({coin_buy_proportion}) = (available_currency_assets ({available_currency_assets}) / best_ticker_data['ask_price'] ({best_ticker_data['ask_price']}))")
-
-
-        coin_size_to_buy = float(
-            int(
-                self.__truncate_float(
-                    value = coin_buy_proportion,
-                    precision = int(symbol_lot_size["base_asset_precision"])
-                )
-            )
-        )
-
-        self.__actual_size = coin_size_to_buy
-
-        coin_price = coin_high_limit_price
+        #transaction request
 
         approach = "limit"
 
         print("")
         print(f"buy ({approach}):")
         print(f"\tcoin: {coin}")
-        print(f"\tcoin buy quantity (size): {coin_size_to_buy}")
-        print(f"\tused currency: {used_currency}")
+        print(f"\tquote: {used_currency}")
+        print(f"\tquantity (size): {coin_size}")
+        print(f"\tprice: {coin_price}")
 
         api_response = self._limit_order_request(
             transaction_side = "BUY",
             coin = coin,
-            coin_size = coin_size_to_buy,
+            coin_size = coin_size,
             coin_price = coin_price,
             used_currency = used_currency,
         )
 
         return {
             "order_approach": approach,
-            "bought_asset_price": coin_price * coin_size_to_buy,
-            "bought_asset_size": coin_size_to_buy,
-            "asset_market_price": ticker_data["price"],
-            "asset_used_price": coin_price,
+            "bought_asset_price": coin_price * coin_size,
+            "bought_asset_size": coin_size,
+            "asset_price": coin_price,
             "api_response": api_response,
         }
 
-    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
-
-        symbol_lot_size = self.__get_lot_size(
-            base_currency = coin,
-            quote_currency = used_currency,
-        )
-
-        available_coin_assets = self.__get_available_currency_percent_price(
-            percent_size = coin_percent_size_to_sell,
-            currency = coin
-        )
+    def __prepare_coin_size_to_sell(self, available_coin_assets: float, symbol_lot_size: dict) -> float:
 
         coin_sell_proportion = float(available_coin_assets)
 
-        print("")
-        print("pre-sell")
-        print(f"\tcoin_sell_size / coin_sell_proportion ({coin_sell_proportion}) = available_coin_assets ({available_coin_assets})")
-
-        coin_sell_size = self.__truncate_float(
+        return self.__truncate_float(
             value = coin_sell_proportion,
             precision = int(symbol_lot_size["base_asset_precision"])
         )
 
-        self.__actual_size = float(available_coin_assets) - float(coin_sell_size)
 
-        ticker_data = self.__get_ticker(
-            base_currency = coin,
-            quote_currency = used_currency
-        )
+    def __prepare_coin_price_to_sell(self, price_sell_balance_percent: float, coin_bid_price: dict) -> float:
 
-        best_ticker_data = self.__get_bid_and_ask_prices(
-            base_currency = coin,
-            quote_currency = used_currency
-        )
+        price_one_houndred_percent = float(coin_bid_price)
 
-        price_one_houndred_percent = float(best_ticker_data["bid_price"])
         price_percent_balance = float(
             format(
                 price_one_houndred_percent * float(price_sell_balance_percent),
@@ -301,74 +261,68 @@ class AbstractAPI:
             )
         )
 
-        self.__actual_price = float(ticker_data["price"])
-
-        coin_low_limit_price = float(
+        return float(
             format(
                 price_one_houndred_percent - price_percent_balance,
                 f".{len(str(price_one_houndred_percent))}f"
             )
         )
 
-        coin_high_limit_price = float(best_ticker_data["ask_price"])
+    def sell(self, coin: str, coin_percent_size_to_sell: float, used_currency: str = "USDT", price_sell_balance_percent: float = 0.1):
 
-        print(f"\tcoin_low_limit_price ({coin_low_limit_price})")
+        #gather data
 
-        print(f"\tcoin_high_limit_price ({coin_high_limit_price})")
+        symbol_lot_size = self.__get_lot_size(
+            base_currency = coin,
+            quote_currency = used_currency,
+        )
 
-        coin_price = coin_low_limit_price
+        best_ticker_data = self.__get_bid_and_ask_prices(
+            base_currency = coin,
+            quote_currency = used_currency
+        )
 
-        approach = "market"
-
-        #print("")
-        #print(f"sell ({approach}):")
-        #print(f"\tcoin: {coin}")
-        #print(f"\tcoin sell quantity (size): {coin_sell_size}")
-        #print(f"\tcoin price: {ticker_data['price']}")
-        #print(f"\tused currency: {used_currency}")
-
-        #transaction_dict = self._market_order_request(
-        #    transaction_side = "SELL",
-        #    coin = coin,
-        #    currency_size = coin_sell_size,
-        #    used_currency = used_currency
-        #)
-
-        transaction_dict = {}
-
-        sell_asset_size = self.__get_available_currency_percent_price(
+        available_coin_assets = self.__get_available_currency_percent_price(
             percent_size = coin_percent_size_to_sell,
             currency = coin
         )
 
-        if float(sell_asset_size) == float(available_coin_assets):
+        #compute
 
-            #print("")
-            #print("market price no available!")
+        coin_size = self.__prepare_coin_size_to_sell(
+            available_coin_assets = available_coin_assets,
+            symbol_lot_size = symbol_lot_size
+        )
 
-            approach = "limit"
+        coin_price = self.__prepare_coin_price_to_sell(
+            price_sell_balance_percent = price_sell_balance_percent,
+            coin_bid_price = best_ticker_data["bid_price"]
+        )
 
-            print("")
-            print(f"sell ({approach}):")
-            print(f"\tcoin: {coin}")
-            print(f"\tcoin sell quantity (size): {coin_sell_size}")
-            print(f"\tcoin price: {coin_price}")
-            print(f"\tused currency: {used_currency}")
+        #transaction request
 
-            api_response = self._limit_order_request(
-                transaction_side = "SELL",
-                coin = coin,
-                coin_size = coin_sell_size,
-                coin_price = coin_price,
-                used_currency = used_currency,
-            )
+        approach = "limit"
+
+        print("")
+        print(f"sell ({approach}):")
+        print(f"\tcoin: {coin}")
+        print(f"\tquote: {used_currency}")
+        print(f"\tquantity (size): {coin_size}")
+        print(f"\tprice: {coin_price}")
+
+        api_response = self._limit_order_request(
+            transaction_side = "SELL",
+            coin = coin,
+            coin_size = coin_size,
+            coin_price = coin_price,
+            used_currency = used_currency,
+        )
 
         return {
             "order_approach": approach,
-            "sold_asset_price": coin_sell_size * coin_price,
-            "sold_asset_size": coin_sell_size,
-            "asset_market_price": ticker_data["price"],
-            "asset_used_price": coin_price,
+            "sold_asset_price": coin_size * coin_price,
+            "sold_asset_size": coin_size,
+            "asset_price": coin_price,
             "api_response": api_response,
         }
 
