@@ -7,7 +7,7 @@ class MexcAPI(
 ):
     __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
 
-    def __init__(self, api_key: str, api_secret: str) -> None:
+    def __init__(self, api_key: str, api_secret: str, DEBUG: bool = False) -> None:
         self.__api_key = api_key
         self.__api_secret = api_secret
 
@@ -16,35 +16,58 @@ class MexcAPI(
             api_secret = self.__api_secret
         )
 
+        self.__DEBUG = DEBUG
+
         super().__init__()
 
     def _market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str):
-        return self.__spot_client.new_order(
-            symbol = f"{ coin }{ used_currency }",
-            side = transaction_side,
-            order_type = "MARKET",
-            quantity = currency_size
-        )
+        if self.__DEBUG == False:
+            return self.__spot_client.new_order(
+                symbol = f"{ coin }{ used_currency }",
+                side = transaction_side,
+                order_type = "MARKET",
+                quantity = currency_size
+            )
+        if self.__DEBUG == True:
+            return {
+                "DEBUG": self.__DEBUG
+            }
 
     def _limit_order_request(self, transaction_side: str, coin: str, coin_size: float, coin_price: float, used_currency: str):
-        return self.__spot_client.new_order(
-            symbol = f"{ coin }{ used_currency }",
-            side = transaction_side,
-            order_type = "LIMIT",
-            quantity = coin_size,
-            price = coin_price,
-        )
+        if self.__DEBUG == False:
+            return self.__spot_client.new_order(
+                symbol = f"{ coin }{ used_currency }",
+                side = transaction_side,
+                order_type = "LIMIT",
+                quantity = coin_size,
+                price = coin_price,
+            )
+        if self.__DEBUG == True:
+            return {
+                "DEBUG": self.__DEBUG
+            }
 
     def _cancel_all_orders(self, coin: str, used_currency: str):
-        return self.__spot_client.cancel_all_open_orders(
-            symbol = f"{ coin }{ used_currency }"
-        )
+        if self.__DEBUG == False:
+            return self.__spot_client.cancel_all_open_orders(
+                symbol = f"{ coin }{ used_currency }"
+            )
+        if self.__DEBUG == True:
+            return {
+                "DEBUG": self.__DEBUG
+            }
 
     def _AbstractAPI__get_available_currency_amount_price(self, currency: str = None, asset_type: str = "SPOT"):
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
         """
-        available_assets = self.__spot_client.account_information()
+        try:
+            available_assets = self.__spot_client.account_information()
+        except Exception as error:
+            if self.__DEBUG == False:
+                raise error
+            if self.__DEBUG == True:
+                return 250.0
 
         if available_assets["accountType"] == asset_type:
             for asset in available_assets["balances"]:
@@ -56,7 +79,13 @@ class MexcAPI(
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
         """
-        available_assets = self.__spot_client.account_information()
+        try:
+            available_assets = self.__spot_client.account_information()
+        except Exception as error:
+            if self.__DEBUG == False:
+                raise error
+            if self.__DEBUG == True:
+                return 50.0
 
         if available_assets["accountType"] == asset_type:
             for asset in available_assets["balances"]:
