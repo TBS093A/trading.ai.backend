@@ -3,6 +3,7 @@ from api.telegram import TelegramAPI
 from time import sleep, time
 from concurrent.futures import ThreadPoolExecutor
 
+import os
 import asyncio
 
 
@@ -269,7 +270,8 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         loop = asyncio.get_event_loop()
 
-        with ThreadPoolExecutor() as pool:
+        with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4)) as pool:
+
             tasks = []
 
             for transaction_no in range(1, self.buy_transactions + 1):
@@ -346,7 +348,8 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             loop = asyncio.get_event_loop()
 
-            with ThreadPoolExecutor() as pool:
+            with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4)) as pool:
+
                 tasks = []
 
                 for transaction_no in range(1, self.sell_transactions + 1):
