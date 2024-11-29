@@ -96,6 +96,8 @@ class Pump:
         self.__loop_single_iteration_short_waiting_time = loop_single_iteration_short_waiting_time
         self.__telegram_api = telegram_api
 
+        sefl.__used_transaction_strategies = {}
+
     def get_channels(self):
         return self.__channels
 
@@ -131,6 +133,15 @@ class Pump:
 
     async def __pump_investment(self):
         for channel_name, channel_info in self.__channels.items():
+
+            if channel_name not in self.__used_transaction_strategies:
+
+                self.__used_transaction_strategies[channel_name] = channel_info["strategy"](
+                    exchange_api = channel_info["exchange"],
+                    telegram_api = self.__telegram_api,
+                    DEBUG = self.__DEBUG
+                )
+
             for pump_info in channel_info['pumps']:
 
                 if pump_info['is_realised']:
@@ -173,19 +184,10 @@ class Pump:
                                 print("No Coin Found!")
 
                             if captured_coin != None:
-                                message = f"Captured Coin: {captured_coin}"
 
-                                await self.__telegram_api.send_as_bot(
-                                    message = message
-                                )
+                                print(f"Captured Coin: {captured_coin}")
 
-                                used_transaction_strategy = channel_info["strategy"](
-                                    exchange_api = channel_info["exchange"],
-                                    telegram_api = self.__telegram_api,
-                                    DEBUG = self.__DEBUG
-                                )
-
-                                await used_transaction_strategy.invoke(
+                                await self.__used_transaction_strategies[channel_name].invoke(
                                     coin = captured_coin,
                                     currency = channel_info["currency"],
                                     buy = True,

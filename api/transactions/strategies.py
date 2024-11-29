@@ -155,33 +155,32 @@ class AbstractTransactionStrategy:
         sell = True,
     ):
 
+        buy_report = None
+
+        sell_report = None
+
         if buy:
 
-            message = await self.__buy_strategy(
+            buy_report = await self.__buy_strategy(
                 coin = coin,
                 currency = currency
             )
 
-            if type(message) == str:
-                message += f"\n\nWaiting { self.time_between_buy_and_sell }s for sell transactions loop..."
-
-            await self.telegram_api.send_as_bot(
-                message = message
-            )
-
-        sleep(self.time_between_buy_and_sell)
+        asyncio.sleep(self.time_between_buy_and_sell)
 
         if sell:
 
-            message = await self.__sell_strategy(
+            sell_report = await self.__sell_strategy(
                 coin = coin,
                 currency = currency,
                 last_sell_percent = last_sell_percent
             )
 
-            await self.telegram_api.send_as_bot(
-                message = message
-            )
+        message = f"Captured Coin: { coin }\n\nBuy Information: { buy_report }\n\nSell Information:\n\n { sell_report }"
+
+        await self.telegram_api.send_as_bot(
+            message = message
+        )
 
         if self.__DEBUG:
 
@@ -232,7 +231,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         telegram_api: TelegramAPI,
         qoute_currency_amount_per_transaction_used_to_buy: int = 50.0,
         buy_transactions: int = None,
-        time_between_buy_and_sell: int = 1.0,
+        time_between_buy_and_sell: int = 7.0,
         qoute_currency_amount_per_transaction_used_to_sell: int = 50.0,
         sell_transactions: int = None,
         DEBUG: bool = False,
@@ -388,16 +387,12 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                         currency = coin
                     )
 
-                tasks.append(
-                    loop.run_in_executor(
-                        pool,
-                        self.sell,
-                        coin,
-                        currency,
-                        last_sell_percent
-                    )
-                )
-
                 await asyncio.gather(*tasks)
+
+        self.sell(
+            coin,
+            currency,
+            last_sell_percent
+        )
 
         return f"Sell { coin } by { self.get_sell_transactions_count() } x { sell_percent_per_transaction * 100} { currency } transactions\n\nSell Information:\n\n{ self.get_sell_transaction_info() }"
