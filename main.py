@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 
 from pump import (
     const_channels,
@@ -34,11 +35,11 @@ async def main() -> None:
 
     except Exception as error:
 
-        logging.error(f"closed by issue:\n\n{error}")
+        logging.error(f"closed by issue:\n\n'{error}' ->\n{traceback.format_exc()}")
 
     except KeyboardInterrupt as error:
 
-        logging.warning(f"closed by user keyboard interrupt:\n\n{error}")
+        logging.warning(f"closed by user keyboard interrupt:\n\n{error} ->\n{traceback.format_exc()}")
 
         try:
 
@@ -46,7 +47,7 @@ async def main() -> None:
 
         except Exception as cleanup_error:
 
-            logging.error(f"error at cleanup: {cleanup_error}")
+            logging.error(f"error at cleanup: {cleanup_error} ->\n{traceback.format_exc()}")
 
     finally:
 
@@ -56,7 +57,7 @@ async def main() -> None:
 
         except Exception as cleanup_error:
 
-            logging.error(f"error at finally cleanup: {cleanup_error}")
+            logging.error(f"error at finally cleanup: {cleanup_error} ->\n{traceback.format_exc()}")
 
 
 if __name__ == "__main__":
@@ -78,7 +79,7 @@ if __name__ == "__main__":
 
     except Exception as error:
 
-        logging.error(f"Unexpected error in async loop: {error}", exc_info=True)
+        logging.error(f"Unexpected error in async loop: {error} ->\n{traceback.format_exc()}", exc_info=True)
 
     finally:
 
