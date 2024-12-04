@@ -313,10 +313,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         available_quote_in_asset = available_size * actual_coin_price
 
-        if available_quote_in_asset < self.qoute_currency_amount_per_transaction_used_to_sell:
-
-            break
-
         possible_transactions = int(available_quote_in_asset / self.qoute_currency_amount_per_transaction_used_to_sell)
 
         if self.sell_transactions == None or self.sell_transactions > possible_transactions:
