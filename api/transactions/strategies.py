@@ -275,6 +275,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             tasks = []
 
             for transaction_no in range(1, self.buy_transactions + 1):
+
                 available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
                     currency=currency
                 )
@@ -354,10 +355,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                         currency,
                         sell_percent_per_transaction
                     )
-                )
-
-                available_size = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
-                    currency = coin
                 )
 
             await asyncio.gather(*tasks)
