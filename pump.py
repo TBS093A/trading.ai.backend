@@ -96,7 +96,7 @@ class Pump:
         self.__loop_single_iteration_short_waiting_time = loop_single_iteration_short_waiting_time
         self.__telegram_api = telegram_api
 
-        sefl.__used_transaction_strategies = {}
+        self.__used_transaction_strategies = {}
 
     def get_channels(self):
         return self.__channels
