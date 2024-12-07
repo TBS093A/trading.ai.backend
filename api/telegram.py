@@ -6,6 +6,7 @@ from time import sleep, time
 from datetime import datetime, timezone
 from collections import namedtuple
 
+import traceback
 import logging
 
 
@@ -92,17 +93,17 @@ class TelegramAPI:
 
     async def stop(self):
         try:
-            if await self.__user_client.is_connected():
+            if self.__user_client.is_connected():
                 print("Closing User Client Telegram Session")
-                self.__user_client.disconnect()
+                await self.__user_client.disconnect()
         except Exception as error:
-            logging.error(error)
+            logging.error(f"'{error}' occured here:\n{traceback.format_exc()}")
         try:
-            if await self.__bot_client.is_connected():
+            if self.__bot_client.is_connected():
                 print("Closing Bot Client Telegram Session")
-                self.__bot_client.disconnect()
+                await self.__bot_client.disconnect()
         except Exception as error:
-            logging.error(error)
+            logging.error(f"'{error}' occured here:\n{traceback.format_exc()}")
 
     async def send_as_bot(self, message: str):
         print(message)
@@ -173,6 +174,12 @@ class TelegramAPI:
             1,
             self.__api_requests_limit_during_pump_detection["requests"] + 1
         ):
+
+            if request_no >= self.__api_requests_limit_during_pump_detection["requests"]:
+
+                raise Exception(
+                    message = f"Too Many Requests To Telegram API For Pumped Coin Name (Count: {request_no}, Limit: {self.__api_requests_limit_during_pump_detection['requests']})"
+                )
 
             print(f"Request Number -> {request_no}")
 

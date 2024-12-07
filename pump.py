@@ -66,6 +66,7 @@ const_channels = {
                 "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
                 "is_today": False,
                 "is_realised": False,
+                "quote_availability_is_updated": False,
             },
         ],
         "exchange": exchange_apis["mexc"],
@@ -198,6 +199,7 @@ class Pump:
 
                                 pump_info['is_realised'] = True
                                 pump_info['is_today'] = False
+                                pump_info['quote_availability_is_updated'] = False
 
                                 del self.__used_transaction_strategies[channel_name]
 
@@ -217,6 +219,12 @@ class Pump:
                         time_difference = abs(pump_time - current_time)
 
                         if time_difference <= timedelta(minutes=1):
+
+                            if pump_info['quote_availability_is_updated'] == False:
+
+                                pump_info['quote_availability_is_updated'] = True
+
+                                self.__used_transaction_strategies[channel_name].update_possible_buy_transactions()
 
                             print(f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
 

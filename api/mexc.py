@@ -6,9 +6,6 @@ class MexcAPI(
     AbstractAPI
 ):
 
-    __quote_is_available = True
-    __asset_is_available = True
-
     __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
 
     def __init__(self, api_key: str, api_secret: str, DEBUG: bool = False) -> None:
@@ -96,10 +93,6 @@ class MexcAPI(
             for asset in available_assets["balances"]:
                 if asset["asset"] == currency:
                     if float(asset["free"]) <= float(size):
-                        if currency == "USDT":
-                            self.__quote_is_available = False
-                        else:
-                            self.__asset_is_available = False
                         return float(asset["free"])
                     if float(asset["free"]) > float(size):
                         return float(size)

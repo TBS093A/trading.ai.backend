@@ -4,9 +4,6 @@ import logging
 
 class AbstractAPI:
 
-    __quote_is_available = True
-    __asset_is_available = True
-
     __general_endpoint = ""
     __buy_endpoint = ""
     __sell_endpoint = ""
@@ -63,7 +60,6 @@ class AbstractAPI:
             elif self.available_quote <= float(size):
                 size = self.available_quote
                 self.available_quote = 0.0
-                self.__quote_is_available = False
             elif self.available_quote == 0.0:
                 raise Exception(
                     message = "Overbought"
@@ -75,7 +71,6 @@ class AbstractAPI:
             else:
                 size = self.available_asset
                 self.available_asset = 0.0
-                self.__asset_is_available = False
             return size
 
     def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
