@@ -134,18 +134,18 @@ class Pump:
     async def __pump_investment(self):
         for channel_name, channel_info in self.__channels.items():
 
-            if channel_name not in self.__used_transaction_strategies:
-
-                self.__used_transaction_strategies[channel_name] = channel_info["strategy"](
-                    exchange_api = channel_info["exchange"],
-                    telegram_api = self.__telegram_api,
-                    currency = channel_info["currency"],
-                    pump_time = pump_info["time"],
-                    pump_time_zone = pump_info["zone"],
-                    DEBUG = self.__DEBUG
-                )
-
             for pump_info in channel_info['pumps']:
+
+                if channel_name not in self.__used_transaction_strategies:
+
+                    self.__used_transaction_strategies[channel_name] = channel_info["strategy"](
+                        exchange_api = channel_info["exchange"],
+                        telegram_api = self.__telegram_api,
+                        currency = channel_info["currency"],
+                        pump_time = pump_info["time"],
+                        pump_time_zone = pump_info["zone"],
+                        DEBUG = self.__DEBUG
+                    )
 
                 if pump_info['is_realised']:
                     continue
