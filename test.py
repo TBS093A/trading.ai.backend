@@ -535,7 +535,7 @@ class TestTransactionStrategies(unittest.TestCase):
         transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
             buy = True,
-            sell = False
+            sell = True
         )
 
         return transaction_infos

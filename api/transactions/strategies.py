@@ -150,7 +150,7 @@ class AbstractTransactionStrategy:
 
             sleep_time = time_diff.total_seconds()
 
-            print(f"Wait {sleep_time} For Sell Operation...")
+            print(f"Wait {sleep_time}s For Sell Operation...")
 
             await asyncio.sleep(
                 sleep_time
