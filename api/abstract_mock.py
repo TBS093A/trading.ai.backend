@@ -4,6 +4,9 @@ import logging
 
 class AbstractAPI:
 
+    __quote_is_available = True
+    __asset_is_available = True
+
     __general_endpoint = ""
     __buy_endpoint = ""
     __sell_endpoint = ""
@@ -27,6 +30,12 @@ class AbstractAPI:
     def get_api_transaction_requests_limit(self):
         return self.__api_transaction_requests_limit
 
+    def check_quote_is_available(self):
+        return self.__quote_is_available
+
+    def check_asset_is_available(self):
+        return self.__asset_is_available
+
     def _cancel_all_orders(self, coin: str, used_currency: str):
         """
             functionality which will define all orders cancel operation
@@ -43,6 +52,31 @@ class AbstractAPI:
             return self.available_quote
         if "ASSET".lower() in currency.lower():
             return self.available_coin_assets
+
+    def __pop_available_currency(self, size: float, currency: str = None, asset_type: str = ""):
+        """
+            currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
+        """
+        if "QUOTE".lower() in currency.lower():
+            if self.available_quote > float(size):
+                self.available_quote -= float(size)
+            elif self.available_quote <= float(size):
+                size = self.available_quote
+                self.available_quote = 0.0
+                self.__quote_is_available = False
+            elif self.available_quote == 0.0:
+                raise Exception(
+                    message = "Overbought"
+                )
+            return size
+        if "ASSET".lower() in currency.lower():
+            if self.available_asset > float(size):
+                self.available_asset -= float(size)
+            else:
+                size = self.available_asset
+                self.available_asset = 0.0
+                self.__asset_is_available = False
+            return size
 
     def __get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "") -> float:
         """
@@ -88,11 +122,12 @@ class AbstractAPI:
             "price": f"{self.coin_price_at_sell}"
         }
 
-    def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
+    def buy(self, coin: str, currency_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
-        bought_assets_price: float = self.available_quote * currency_percent_size_to_buy
-
-        self.available_quote -= bought_assets_price
+        bought_assets_price: float = self.__pop_available_currency(
+            size = currency_size_to_buy,
+            currency = "QUOTE"
+        )
 
         asset_used_price: float = self.ask_price - self.ask_price * price_buy_balance_percent # bought_assets_price / self.coin_price_at_buy
 
@@ -101,7 +136,7 @@ class AbstractAPI:
         self.available_coin_assets += bought_assets_size
 
         return {
-            "currency_percent_size_to_buy": currency_percent_size_to_buy,
+            "currency_size_to_buy": currency_size_to_buy,
             "bought_assets_size": bought_assets_size,
             "bought_assets_price": bought_assets_price,
             "available_quote_after": self.available_quote,

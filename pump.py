@@ -139,6 +139,9 @@ class Pump:
                 self.__used_transaction_strategies[channel_name] = channel_info["strategy"](
                     exchange_api = channel_info["exchange"],
                     telegram_api = self.__telegram_api,
+                    currency = channel_info["currency"],
+                    pump_time = pump_info["time"],
+                    pump_time_zone = pump_info["zone"],
                     DEBUG = self.__DEBUG
                 )
 
@@ -189,13 +192,14 @@ class Pump:
 
                                 await self.__used_transaction_strategies[channel_name].invoke(
                                     coin = captured_coin,
-                                    currency = channel_info["currency"],
                                     buy = True,
                                     sell = True,
                                 )
 
                                 pump_info['is_realised'] = True
                                 pump_info['is_today'] = False
+
+                                del self.__used_transaction_strategies[channel_name]
 
                                 break
 

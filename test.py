@@ -525,28 +525,22 @@ class TestTransactionStrategies(unittest.TestCase):
         used_strategy = DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             exchange_api = used_api,
             telegram_api = self.__telegram_api_mock,
-            DEBUG = True,
-            time_between_buy_and_sell = 0.0,
+            pump_time = datetime.now().strftime("%H:%M:%S"),
+            pump_time_zone = None,
+            time_between_buy_and_sell = 30.0,
+            currency = self.__currency,
+            DEBUG = True
         )
 
         transaction_infos = await used_strategy.invoke(
             coin = self.__coin,
-            currency = self.__currency
+            buy = True,
+            sell = False
         )
 
         return transaction_infos
 
     def test_distributed_risk_static_quote_and_asset_transaction_strategy_000(self):
-
-        transaction_info = asyncio.run(
-            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
-                available_quote = 500.0,
-                coin_price_at_buy = 0.0034,
-                coin_price_at_sell = 0.034,
-            )
-        )
-
-    def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
 
         transaction_info = asyncio.run(
             self.__distributed_risk_static_quote_and_asset_transaction_strategy(
@@ -556,7 +550,38 @@ class TestTransactionStrategies(unittest.TestCase):
             )
         )
 
+
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_001(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 500.0,
+                coin_price_at_buy = 0.0034,
+                coin_price_at_sell = 0.034,
+            )
+        )
+
     def test_distributed_risk_static_quote_and_asset_transaction_strategy_002(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 350.0,
+                coin_price_at_buy = 0.0034,
+                coin_price_at_sell = 0.034,
+            )
+        )
+
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
+
+        transaction_info = asyncio.run(
+            self.__distributed_risk_static_quote_and_asset_transaction_strategy(
+                available_quote = 300.0,
+                coin_price_at_buy = 0.0034,
+                coin_price_at_sell = 0.034,
+            )
+        )
+
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_004(self):
 
         transaction_info = asyncio.run(
             self.__distributed_risk_static_quote_and_asset_transaction_strategy(
@@ -566,7 +591,7 @@ class TestTransactionStrategies(unittest.TestCase):
             )
         )
 
-    def test_distributed_risk_static_quote_and_asset_transaction_strategy_003(self):
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_005(self):
 
         transaction_info = asyncio.run(
             self.__distributed_risk_static_quote_and_asset_transaction_strategy(
@@ -576,7 +601,7 @@ class TestTransactionStrategies(unittest.TestCase):
             )
         )
 
-    def test_distributed_risk_static_quote_and_asset_transaction_strategy_004(self):
+    def test_distributed_risk_static_quote_and_asset_transaction_strategy_006(self):
 
         transaction_info = asyncio.run(
             self.__distributed_risk_static_quote_and_asset_transaction_strategy(
