@@ -172,6 +172,7 @@ class AbstractTransactionStrategy:
                 ugly_dict = sell_info
             )
         except Exception as error:
+            logging.error(f"'{error}' occured here:\n{traceback.format_exc()}")
             sell_info = f"Error '{error}' occured here:\n{traceback.format_exc()}"
 
         self.__sell_transaction_info.append(
