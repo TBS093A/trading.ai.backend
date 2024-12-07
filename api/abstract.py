@@ -14,9 +14,6 @@ print = logging.info
 
 class AbstractAPI:
 
-    __quote_is_available = True
-    __asset_is_available = True
-
     __general_endpoint = ""
     __buy_endpoint = ""
     __sell_endpoint = ""
@@ -31,12 +28,6 @@ class AbstractAPI:
 
     def get_api_transaction_requests_limit(self):
         return self.__api_transaction_requests_limit
-
-    def check_quote_is_available(self):
-        return self.__quote_is_available
-
-    def check_asset_is_available(self):
-        return self.__asset_is_available
 
     def _market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str):
         """
@@ -404,7 +395,7 @@ class RequestsFactory:
                 return response.json()["data"]
             except Exception as error:
                 raise Exception(
-                    str(error) + f"\nused params:\n\tget: {get_parameters}\n\tpost: {post_parameters}"
+                    f"{error} \nused params:\n\tget: {get_parameters}\n\tpost: {post_parameters}"
                 )
         raise Exception(
             "Bad Request Method"
