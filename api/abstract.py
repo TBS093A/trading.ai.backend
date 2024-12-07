@@ -14,6 +14,9 @@ print = logging.info
 
 class AbstractAPI:
 
+    __quote_is_available = True
+    __asset_is_available = True
+
     __general_endpoint = ""
     __buy_endpoint = ""
     __sell_endpoint = ""
@@ -28,6 +31,12 @@ class AbstractAPI:
 
     def get_api_transaction_requests_limit(self):
         return self.__api_transaction_requests_limit
+
+    def check_quote_is_available(self):
+        return self.__quote_is_available
+
+    def check_asset_is_available(self):
+        return self.__asset_is_available
 
     def _market_order_request(self, transaction_side: str, coin: str, currency_size: float, used_currency: str):
         """
@@ -76,6 +85,12 @@ class AbstractAPI:
         return number
 
     def __get_available_currency_amount_price(self, currency: str = None, asset_type: str = "") -> float:
+        """
+            currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
+        """
+        return 0.0
+
+    def __pop_available_currency(self, size: float, currency: str = None, asset_type: str = ""):
         """
             currency availability on account. Currency in that meaning can be base (e.g. BTC) and quote (e.g. USDT)
         """
@@ -177,7 +192,7 @@ class AbstractAPI:
             )
         )
 
-    def buy(self, coin: str, currency_percent_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
+    def buy(self, coin: str, currency_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
         #gather data
 
@@ -193,8 +208,8 @@ class AbstractAPI:
 
         available_currency_assets = int(
             float(
-                self.__get_available_currency_percent_price(
-                    percent_size = currency_percent_size_to_buy,
+                self.__pop_available_currency(
+                    size = currency_size_to_buy,
                     currency = used_currency
                 )
             )

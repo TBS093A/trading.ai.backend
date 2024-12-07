@@ -56,7 +56,7 @@ class TelegramAPI:
 
     __api_requests_limit_during_pump_detection = {
         "requests": 20,
-        "in_seconds": 5
+        "in_seconds": 2.5
     }
 
     def __init__(self):
@@ -114,7 +114,7 @@ class TelegramAPI:
             self.__api_requests_limit["in_seconds"] / self.__api_requests_limit["requests"]
         )
 
-    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 5) -> dict:
+    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 1) -> dict:
         """
         That Function Yield Messages Objects Which Can Be Trait As namedtuple:
             Message(
@@ -173,8 +173,16 @@ class TelegramAPI:
             1,
             self.__api_requests_limit_during_pump_detection["requests"] + 1
         ):
-            now = datetime.now().strftime("%H:%M:%S")
-            print(f"request number -> {request_no} at {now}")
+
+            print(f"Request Number -> {request_no}")
+
+            if request_no > 1:
+
+                await asyncio.sleep(
+                    self.__api_requests_limit_during_pump_detection["in_seconds"] / self.__api_requests_limit_during_pump_detection["requests"]
+                )
+
+            print(f"Download Latest Telegram Messages (Count: {limit})")
 
             try:
 
@@ -191,10 +199,6 @@ class TelegramAPI:
                 )
 
             async for message in messages_generator:
-                print(f"yielded message:\n\n{message.message}\n")
+                print(f"Yielded Message:\n\n{message.message}\n")
                 yield message
-                await asyncio.sleep(
-                    self.__api_requests_limit_during_pump_detection["in_seconds"] / self.__api_requests_limit_during_pump_detection["requests"]
-                )
-
 
