@@ -310,6 +310,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         )
 
         self.quote_currency_amount_per_transaction_used_to_buy = quote_currency_amount_per_transaction_used_to_buy
+        self.quote_currency_amount_per_transaction_used_to_sell = quote_currency_amount_per_transaction_used_to_sell
 
         if buy_transactions == None:
             self.no_account_updates = False
@@ -318,7 +319,6 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             self.no_account_updates = True
             self.buy_transactions = buy_transactions
 
-        self.quote_currency_amount_per_transaction_used_to_sell = quote_currency_amount_per_transaction_used_to_sell
         self.sell_transactions = sell_transactions
 
     def update_possible_buy_transactions(self):
