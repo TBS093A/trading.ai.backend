@@ -312,10 +312,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         self.quote_currency_amount_per_transaction_used_to_buy = quote_currency_amount_per_transaction_used_to_buy
 
         if buy_transactions == None:
-            available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
-                currency = self.currency
-            )
-            self.buy_transactions = int(available_quote / quote_currency_amount_per_transaction_used_to_sell)
+            self.update_possible_buy_transactions()
             self.no_accout_updates = False
         else:
             self.buy_transactions = buy_transactions
