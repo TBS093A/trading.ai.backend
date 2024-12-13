@@ -210,7 +210,7 @@ class AbstractAPI:
 
         coin_price = self.__prepare_coin_price_to_buy(
             price_buy_balance_percent = price_buy_balance_percent,
-            coin_ask_price = best_ticker_data["ask_price"]
+            coin_ask_price = best_ticker_data["bid_price"]
         )
 
         coin_size = self.__prepare_coin_size_to_buy(
@@ -302,7 +302,7 @@ class AbstractAPI:
 
         coin_price = self.__prepare_coin_price_to_sell(
             price_sell_balance_percent = price_sell_balance_percent,
-            coin_bid_price = best_ticker_data["bid_price"]
+            coin_bid_price = best_ticker_data["ask_price"]
         )
 
         #transaction request
