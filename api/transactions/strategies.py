@@ -312,17 +312,17 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         self.quote_currency_amount_per_transaction_used_to_buy = quote_currency_amount_per_transaction_used_to_buy
 
         if buy_transactions == None:
+            self.no_account_updates = False
             self.update_possible_buy_transactions()
-            self.no_accout_updates = False
         else:
+            self.no_account_updates = True
             self.buy_transactions = buy_transactions
-            self.no_accout_updates = True
 
         self.quote_currency_amount_per_transaction_used_to_sell = quote_currency_amount_per_transaction_used_to_sell
         self.sell_transactions = sell_transactions
 
     def update_possible_buy_transactions(self):
-        if self.no_accout_updates == False:
+        if self.no_account_updates == False:
 
             print(f"Update Available Qoute (self.currency) Used To Pump Transactions (Possible Buy Transactions Count) Before Pump")
 
