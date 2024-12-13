@@ -284,10 +284,10 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         currency: str,
         pump_time: str = None,
         pump_time_zone: str = None,
-        qoute_currency_amount_per_transaction_used_to_buy: int = 50.0,
+        quote_currency_amount_per_transaction_used_to_buy: int = 50.0,
         buy_transactions: int = None,
         time_between_buy_and_sell: int = 20.0,
-        qoute_currency_amount_per_transaction_used_to_sell: int = 50.0,
+        quote_currency_amount_per_transaction_used_to_sell: int = 50.0,
         sell_transactions: int = None,
         DEBUG: bool = False,
     ):
@@ -309,19 +309,19 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             DEBUG = DEBUG,
         )
 
-        self.qoute_currency_amount_per_transaction_used_to_buy = qoute_currency_amount_per_transaction_used_to_buy
+        self.quote_currency_amount_per_transaction_used_to_buy = quote_currency_amount_per_transaction_used_to_buy
 
         if buy_transactions == None:
             available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
                 currency = self.currency
             )
-            self.buy_transactions = int(available_quote / qoute_currency_amount_per_transaction_used_to_sell)
+            self.buy_transactions = int(available_quote / quote_currency_amount_per_transaction_used_to_sell)
             self.no_accout_updates = False
         else:
             self.buy_transactions = buy_transactions
             self.no_accout_updates = True
 
-        self.qoute_currency_amount_per_transaction_used_to_sell = qoute_currency_amount_per_transaction_used_to_sell
+        self.quote_currency_amount_per_transaction_used_to_sell = quote_currency_amount_per_transaction_used_to_sell
         self.sell_transactions = sell_transactions
 
     def update_possible_buy_transactions(self):
@@ -332,7 +332,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
             available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
                 currency = self.currency
             )
-            self.buy_transactions = int(available_quote / qoute_currency_amount_per_transaction_used_to_sell)
+            self.buy_transactions = int(available_quote / self.quote_currency_amount_per_transaction_used_to_sell)
 
     @StrategyUtils.elapsed_time
     async def _AbstractTransactionStrategy__buy_strategy(self, coin: str):
@@ -351,13 +351,13 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
                         self.buy,
                         coin,
                         self.currency,
-                        self.qoute_currency_amount_per_transaction_used_to_buy
+                        self.quote_currency_amount_per_transaction_used_to_buy
                     )
                 )
 
             await asyncio.gather(*tasks)
 
-        return f"Buy { coin } by { self.buy_transactions } x { self.qoute_currency_amount_per_transaction_used_to_buy } { self.currency } transactions\n\nBuy Information:\n\n{ self.get_buy_transaction_info() }"
+        return f"Buy { coin } by { self.buy_transactions } x { self.quote_currency_amount_per_transaction_used_to_buy } { self.currency } transactions\n\nBuy Information:\n\n{ self.get_buy_transaction_info() }"
 
     @StrategyUtils.elapsed_time
     async def _AbstractTransactionStrategy__sell_strategy(self, coin: str, last_sell_percent: float = 1.0):
@@ -377,7 +377,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
         available_quote_in_asset = available_size * actual_coin_price
 
-        possible_transactions = int(available_quote_in_asset / self.qoute_currency_amount_per_transaction_used_to_sell)
+        possible_transactions = int(available_quote_in_asset / self.quote_currency_amount_per_transaction_used_to_sell)
 
         if self.sell_transactions == None or self.sell_transactions > possible_transactions:
 
@@ -404,7 +404,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
                 available_quote_in_asset = available_size * actual_coin_price
 
-                sell_percent_per_transaction = self.qoute_currency_amount_per_transaction_used_to_sell / available_quote_in_asset
+                sell_percent_per_transaction = self.quote_currency_amount_per_transaction_used_to_sell / available_quote_in_asset
 
                 if sell_percent_per_transaction >= 1.0:
 
