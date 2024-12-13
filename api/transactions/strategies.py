@@ -324,12 +324,13 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
     def update_possible_buy_transactions(self):
         if self.no_account_updates == False:
 
-            print(f"Update Available Qoute (self.currency) Used To Pump Transactions (Possible Buy Transactions Count) Before Pump")
-
             available_quote = self.exchange_api._AbstractAPI__get_available_currency_amount_price(
                 currency = self.currency
             )
+
             self.buy_transactions = int(available_quote / self.quote_currency_amount_per_transaction_used_to_sell)
+
+            print(f"Update Available Qoute  Used To Pump BUY Transactions (Possible Buy Transactions Count) Before Pump:\n\n{self.buy_transactions} x {self.quote_currency_amount_per_transaction_used_to_sell} {self.currency}\n")
 
     @StrategyUtils.elapsed_time
     async def _AbstractTransactionStrategy__buy_strategy(self, coin: str):
