@@ -61,21 +61,29 @@ const_channels = {
         "id": -1001625691880,
         "pumps": [
             {
-                "day": "wednesday",
+                "day": "tuesday",
                 "time": "17:00:00",
                 "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
                 "is_today": False,
                 "is_realised": False,
                 "quote_availability_is_updated": False,
             },
-            {
-                "day": "friday",
-                "time": "17:00:00",
-                "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
-                "is_today": False,
-                "is_realised": False,
-                "quote_availability_is_updated": False,
-            },
+            #{
+            #    "day": "wednesday",
+            #    "time": "17:00:00",
+            #    "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
+            #    "is_today": False,
+            #    "is_realised": False,
+            #    "quote_availability_is_updated": False,
+            #},
+            #{
+            #    "day": "friday",
+            #    "time": "17:00:00",
+            #    "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
+            #    "is_today": False,
+            #    "is_realised": False,
+            #    "quote_availability_is_updated": False,
+            #},
         ],
         "exchange": exchange_apis["mexc"],
         "currency": "USDT",
