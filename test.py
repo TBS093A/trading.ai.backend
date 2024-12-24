@@ -26,7 +26,7 @@ from pump import (
 )
 
 
-@unittest.skip("skip telegram tests")
+#@unittest.skip("skip telegram tests")
 class TestTelegram(unittest.TestCase):
 
     def setUp(self):
@@ -36,22 +36,26 @@ class TestTelegram(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    async def __get_messages_static(self, channel_name: str = "Crypto Pump Club", limit: int = 5):
+    async def __get_messages_static(self, channel_name: str = "Crypto Pump Club", limit: int = 5, scheduled = False):
 
         try:
 
             await self.__telegram_api.start()
 
             channel_id = const_channels[channel_name]["id"]
-            returned_message = ""
+            returned_messages = []
             async for message in self.__telegram_api.yield_last_messages_from_chat(
                 chat_id = channel_id,
-                limit = limit
+                limit = limit,
+                scheduled = scheduled
             ):
-                returned_message = message
-                break
+                returned_messages.append(message.message)
 
-            return returned_message
+                if limit == len(returned_messages) - 1:
+
+                    break
+
+            return returned_messages
 
         except Exception as error:
 
@@ -71,16 +75,35 @@ class TestTelegram(unittest.TestCase):
 
                 print(f"error at finally cleanup: {cleanup_error}")
 
+    @unittest.skip("skip last messages tests")
     def test_get_messages_static_000(self):
-        message = self.loop.run_until_complete(
+        messages = self.loop.run_until_complete(
             self.__get_messages_static(
                 channel_name = "Crypto Pump Club",
                 limit = 5,
             )
         )
 
+        print(f"last messages: { messages }")
+
         self.assertTrue(
-            type(message.message) == str
+            type(messages[0]) == str
+        )
+
+    #@unittest.skip("skip last scheduled messages tests")
+    def test_get_scheduled_messages_static_000(self):
+        messages = self.loop.run_until_complete(
+            self.__get_messages_static(
+                channel_name = "Crypto Pump Club",
+                limit = 10,
+                scheduled = True,
+            )
+        )
+
+        print(f"last scheduled messages: { messages}")
+
+        self.assertTrue(
+            type(messages[0]) == str
         )
 
 
@@ -506,7 +529,7 @@ class TestPumpMockLongTime(unittest.TestCase):
                 break
 
 
-#@unittest.skip("skip transaction strategies tests")
+@unittest.skip("skip transaction strategies tests")
 class TestTransactionStrategies(unittest.TestCase):
 
     __coin: str = "TEST_ASSET"

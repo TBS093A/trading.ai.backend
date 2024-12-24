@@ -115,7 +115,7 @@ class TelegramAPI:
             self.__api_requests_limit["in_seconds"] / self.__api_requests_limit["requests"]
         )
 
-    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 1) -> dict:
+    async def yield_last_messages_from_chat(self, chat_id: int, limit: int = 1, scheduled = False) -> dict:
         """
         That Function Yield Messages Objects Which Can Be Trait As namedtuple:
             Message(
@@ -195,14 +195,16 @@ class TelegramAPI:
 
                 messages_generator = self.__user_client.iter_messages(
                     chat_id,
-                    limit = limit
+                    limit = limit,
+                    scheduled = scheduled
                 )
 
             except:
 
                 messages_generator = await self.__user_client.iter_messages(
                     chat_id,
-                    limit = limit
+                    limit = limit,
+                    scheduled = scheduled
                 )
 
             async for message in messages_generator:
