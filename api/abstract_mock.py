@@ -62,7 +62,7 @@ class AbstractAPI:
                 self.available_quote = 0.0
             elif self.available_quote == 0.0:
                 raise Exception(
-                    message = "Overbought"
+                    "Overbought"
                 )
             return size
         if "ASSET".lower() in currency.lower():

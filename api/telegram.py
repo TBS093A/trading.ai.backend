@@ -178,7 +178,7 @@ class TelegramAPI:
             if request_no >= self.__api_requests_limit_during_pump_detection["requests"]:
 
                 raise Exception(
-                    message = f"Too Many Requests To Telegram API For Pumped Coin Name (Count: {request_no}, Limit: {self.__api_requests_limit_during_pump_detection['requests']})"
+                    f"Too Many Requests To Telegram API For Pumped Coin Name (Count: {request_no}, Limit: {self.__api_requests_limit_during_pump_detection['requests']})"
                 )
 
             print(f"Request Number -> {request_no}")
