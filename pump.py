@@ -253,7 +253,7 @@ class Pump:
                                 self.__used_transaction_strategies[channel_name].update_possible_buy_transactions()
 
                                 await self.__telegram_api.send_as_bot(
-                                    message = message + f"\n\nQuote Availability IS UPDATED"
+                                    message = message
                                 )
 
                             print(message)

@@ -330,7 +330,13 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             self.buy_transactions = int(available_quote / self.quote_currency_amount_per_transaction_used_to_sell)
 
-            print(f"Update Available Qoute ({available_quote} {self.currency}) Used To Pump BUY Transactions (Possible Buy Transactions Count) Before Pump -> {self.buy_transactions} x {self.quote_currency_amount_per_transaction_used_to_sell} {self.currency}")
+            message = f"Update Available Qoute ({available_quote} {self.currency}) Used To Pump BUY Transactions (Possible Buy Transactions Count) Before Pump -> {self.buy_transactions} x {self.quote_currency_amount_per_transaction_used_to_sell} {self.currency}"
+
+            print(message)
+
+            await self.__telegram_api.send_as_bot(
+                message = message
+            )
 
     @StrategyUtils.elapsed_time
     async def _AbstractTransactionStrategy__buy_strategy(self, coin: str):
