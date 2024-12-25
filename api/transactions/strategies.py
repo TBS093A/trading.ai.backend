@@ -286,7 +286,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
         pump_time_zone: str = None,
         quote_currency_amount_per_transaction_used_to_buy: int = 50.0,
         buy_transactions: int = None,
-        time_between_buy_and_sell: int = 20.0,
+        time_between_buy_and_sell: int = 30.0,
         quote_currency_amount_per_transaction_used_to_sell: int = 50.0,
         sell_transactions: int = None,
         DEBUG: bool = False,

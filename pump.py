@@ -67,6 +67,8 @@ const_channels = {
                 "is_today": False,
                 "is_realised": False,
                 "quote_availability_is_updated": False,
+                "long_time_is_reported": False,
+                "middle_time_is_reported": False,
             },
             #{
             #    "day": "wednesday",
@@ -75,6 +77,8 @@ const_channels = {
             #    "is_today": False,
             #    "is_realised": False,
             #    "quote_availability_is_updated": False,
+            #    "long_time_is_reported": False,
+            #    "middle_time_is_reported": False,
             #},
             #{
             #    "day": "friday",
@@ -83,6 +87,8 @@ const_channels = {
             #    "is_today": False,
             #    "is_realised": False,
             #    "quote_availability_is_updated": False,
+            #    "long_time_is_reported": False,
+            #    "middle_time_is_reported": False,
             #},
         ],
         "exchange": exchange_apis["mexc"],
@@ -216,6 +222,8 @@ class Pump:
                                 pump_info['is_realised'] = True
                                 pump_info['is_today'] = False
                                 pump_info['quote_availability_is_updated'] = False
+                                pump_info["middle_time_is_reported"] = False
+                                pump_info["long_time_is_reported"] = False
 
                                 del self.__used_transaction_strategies[channel_name]
 
@@ -236,25 +244,51 @@ class Pump:
 
                         if time_difference <= timedelta(minutes=1):
 
+                            message = f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})"
+
                             if pump_info['quote_availability_is_updated'] == False:
 
                                 pump_info['quote_availability_is_updated'] = True
 
                                 self.__used_transaction_strategies[channel_name].update_possible_buy_transactions()
 
-                            print(f"Wait {self.__loop_single_iteration_short_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                                await self.__telegram_api.send_as_bot(
+                                    message = message + f"\n\nQuote Availability IS UPDATED"
+                                )
+
+                            print(message)
 
                             await asyncio.sleep(self.__loop_single_iteration_short_waiting_time)
 
                         elif time_difference <= timedelta(minutes=30) and time_difference > timedelta(minutes=1):
 
-                            print(f"Wait {self.__loop_single_iteration_middle_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                            message = f"Wait {self.__loop_single_iteration_middle_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})"
+
+                            print(message)
+
+                            if pump_info["middle_time_is_reported"] == False:
+
+                                pump_info["middle_time_is_reported"] = True
+
+                                await self.__telegram_api.send_as_bot(
+                                    message = message
+                                )
 
                             await asyncio.sleep(self.__loop_single_iteration_middle_waiting_time)
 
                         elif time_difference > timedelta(minutes=30):
 
-                            print(f"Wait {self.__loop_single_iteration_long_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})")
+                            message = f"Wait {self.__loop_single_iteration_long_waiting_time}s To Today Pump ({channel_info['username']} -> ID: {channel_info['id']}, Time: {pump_info['time']}, Time Zone: {pump_info['zone'] if pump_info['zone'] is not None else 'LOCAL'})"
+
+                            print(message)
+
+                            if pump_info["long_time_is_reported"] == False:
+
+                                pump_info["long_time_is_reported"] = True
+
+                                await self.__telegram_api.send_as_bot(
+                                    message = message
+                                )
 
                             await asyncio.sleep(self.__loop_single_iteration_long_waiting_time)
 
