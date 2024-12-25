@@ -250,10 +250,10 @@ class Pump:
 
                                 pump_info['quote_availability_is_updated'] = True
 
-                                self.__used_transaction_strategies[channel_name].update_possible_buy_transactions()
+                                updated_quote_message = self.__used_transaction_strategies[channel_name].update_possible_buy_transactions()
 
                                 await self.__telegram_api.send_as_bot(
-                                    message = message
+                                    message = f"{ message }\n\n{ updated_quote_message }"
                                 )
 
                             print(message)

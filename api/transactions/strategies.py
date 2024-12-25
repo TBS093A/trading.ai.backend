@@ -334,9 +334,7 @@ class DistributedRiskStaticQuoteAndAssetTransactionStrategy(
 
             print(message)
 
-            await self.__telegram_api.send_as_bot(
-                message = message
-            )
+            return message
 
     @StrategyUtils.elapsed_time
     async def _AbstractTransactionStrategy__buy_strategy(self, coin: str):
