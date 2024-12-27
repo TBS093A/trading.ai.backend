@@ -1,10 +1,13 @@
 import os
 import unittest
 import asyncio
+import traceback
 
 import time
 from time import sleep
 from datetime import datetime, timedelta, timezone
+
+from collections import Counter
 
 from api.kucoin import KucoinAPI
 from api.mexc import MexcAPI
@@ -74,7 +77,7 @@ class TestTelegram(unittest.TestCase):
 
                 print(f"error at finally cleanup: {cleanup_error}")
 
-    #@unittest.skip("skip last messages tests")
+    @unittest.skip("skip last messages tests")
     def test_get_messages_static_000(self):
         messages = self.loop.run_until_complete(
             self.__get_messages_static(
@@ -113,6 +116,121 @@ class TestTelegram(unittest.TestCase):
         self.assertTrue(
             type(messages[0].message) == str
         )
+
+    @unittest.skip("skip coin message listing tests")
+    def test_get_coin_per_date_list_from_messages_static_000(self):
+        messages = self.loop.run_until_complete(
+            self.__get_messages_static(
+                channel_id = const_channels["Crypto Pump Club"]["id"],
+                limit = 10000, # 30 months data
+            )
+        )
+
+        print(f"last messages:")
+
+        coins = []
+
+        for message in messages:
+            if type(message) != None:
+                try:
+                    if message.message != '':
+                        if " " not in message.message and "^" not in message.message and ":" not in message.message:
+                            coin_is_added = False
+                            for coin in coins:
+                                if message.message == coin["message"]:
+                                    coin["objects"].append(
+                                        message
+                                    )
+                                    coin_is_added = True
+                                    break
+
+                            if coin_is_added == False:
+
+                                coins.append(
+                                    {
+                                        "objects": [message],
+                                        "message": message.message
+                                    }
+                                )
+
+                except Exception as error:
+                    pass
+                    #print(f"'{error}' occured here:\n{traceback.format_exc()}")
+
+        for coin in coins:
+            print(f"Coin '{ coin['message'] }' Appearance:\n")
+            appearance = 1
+            dates = []
+            for coin_message_metadata in coin["objects"]:
+                date = f"{ coin_message_metadata.date }"
+                if date not in dates:
+                    print(f"\t{ appearance } -> Date: { date }")
+                    appearance += 1
+                    dates.append(date)
+
+            print("\n")
+
+        self.assertTrue(
+            type(messages[0].message) == str
+        )
+
+    #@unittest.skip("skip coin message listing tests")
+    def test_get_date_per_coin_list_from_messages_static_000(self):
+        messages = self.loop.run_until_complete(
+            self.__get_messages_static(
+                channel_id = const_channels["Crypto Pump Club"]["id"],
+                limit = 20000, # 60 months data
+            )
+        )
+
+        print(f"last messages:")
+
+        coins = []
+
+        for message in messages:
+            if type(message) != None:
+                try:
+                    if message.message != '':
+                        if " " not in message.message and "^" not in message.message and ":" not in message.message:
+                            coin_is_added = False
+                            for coin in coins:
+                                if message.message == coin["message"]:
+                                    coin["objects"].append(
+                                        message
+                                    )
+                                    coin_is_added = True
+                                    break
+
+                            if coin_is_added == False:
+
+                                coins.append(
+                                    {
+                                        "objects": [message],
+                                        "message": message.message
+                                    }
+                                )
+
+                except Exception as error:
+                    pass
+                    #print(f"'{error}' occured here:\n{traceback.format_exc()}")
+
+        for coin in coins:
+            print(f"Coin '{ coin['message'] }' Appearance:\n")
+            appearance = 1
+            dates = []
+            for coin_message_metadata in coin["objects"]:
+                date = f"{ coin_message_metadata.date }"
+                if date not in dates:
+                    print(f"\t{ appearance } -> Date: { date }")
+                    appearance += 1
+                    dates.append(date)
+
+            print("\n")
+
+        self.assertTrue(
+            type(messages[0].message) == str
+        )
+
 
 
 @unittest.skip("skip pump real mechanizm tests")
