@@ -60,16 +60,16 @@ const_channels = {
         "username": "cryptoclubpump",
         "id": -1001625691880,
         "pumps": [
-            {
-                "day": "tuesday",
-                "time": "17:00:00",
-                "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
-                "is_today": False,
-                "is_realised": False,
-                "quote_availability_is_updated": False,
-                "long_time_is_reported": False,
-                "middle_time_is_reported": False,
-            },
+            #{
+            #    "day": "tuesday",
+            #    "time": "17:00:00",
+            #    "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
+            #    "is_today": False,
+            #    "is_realised": False,
+            #    "quote_availability_is_updated": False,
+            #    "long_time_is_reported": False,
+            #    "middle_time_is_reported": False,
+            #},
             #{
             #    "day": "wednesday",
             #    "time": "17:00:00",
@@ -80,16 +80,16 @@ const_channels = {
             #    "long_time_is_reported": False,
             #    "middle_time_is_reported": False,
             #},
-            #{
-            #    "day": "friday",
-            #    "time": "17:00:00",
-            #    "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
-            #    "is_today": False,
-            #    "is_realised": False,
-            #    "quote_availability_is_updated": False,
-            #    "long_time_is_reported": False,
-            #    "middle_time_is_reported": False,
-            #},
+            {
+                "day": "friday",
+                "time": "17:00:00",
+                "zone": timezone(timedelta(0), "GMT"), # timezone(timedelta(0), "GMT") - for GMT / timezone.utc - for UTC / None - for LOCAL
+                "is_today": False,
+                "is_realised": False,
+                "quote_availability_is_updated": False,
+                "long_time_is_reported": False,
+                "middle_time_is_reported": False,
+            },
         ],
         "exchange": exchange_apis["mexc"],
         "currency": "USDT",
