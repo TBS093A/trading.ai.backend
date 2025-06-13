@@ -1,5 +1,6 @@
 import requests
 import logging
+from typing import List, Dict, Union, Optional
 
 from pprint import pprint
 
@@ -44,6 +45,39 @@ class AbstractAPI:
     def _cancel_all_orders(self, coin: str, used_currency: str):
         """
             functionality which will define all orders cancel operation
+        """
+        pass
+
+    def _get_klines(
+        self,
+        base_currency: str = "BTC",
+        quote_currency: str = "USDT",
+        interval: str = "1m",
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        limit: int = 500
+    ) -> List[Dict[str, Union[int, float, str]]]:
+        """
+        Get kline/candlestick data for a symbol.
+        
+        Args:
+            base_currency: Base currency symbol (e.g. BTC)
+            quote_currency: Quote currency symbol (e.g. USDT)
+            interval: Kline interval (e.g. 1m, 5m, 15m, 1h, 4h, 1d)
+            start_time: Start time in milliseconds
+            end_time: End time in milliseconds
+            limit: Number of records to return (max 1000)
+            
+        Returns:
+            List of dictionaries containing kline data with keys:
+            - open_time: Open time in milliseconds
+            - open: Open price
+            - high: Highest price
+            - low: Lowest price
+            - close: Close price
+            - volume: Trading volume
+            - close_time: Close time in milliseconds
+            - quote_volume: Quote asset volume
         """
         pass
 
