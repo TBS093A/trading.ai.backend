@@ -2,6 +2,11 @@ import numpy as np
 from typing import List, Dict, Union, Optional, Tuple
 import logging
 from dataclasses import dataclass
+import mplfinance as mpf
+import pandas as pd
+import base64
+from io import BytesIO
+import matplotlib.pyplot as plt
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -433,4 +438,141 @@ class TechnicalAnalysis:
                 "fibonacci_levels": fib_levels
             })
             
-        return results 
+        return results
+
+    @classmethod
+    def create_candlestick_chart(
+        cls,
+        klines: List[Dict[str, Union[int, float, str]]],
+        save_path: Optional[str] = None,
+        title: str = "Wykres świecowy",
+        volume: bool = True,
+        rsi: bool = True,
+        macd: bool = True,
+        obv: bool = True,
+        harmonic_patterns: bool = True,
+        fibonacci: bool = True
+    ) -> Union[str, None]:
+        """
+        Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi.
+        
+        Args:
+            klines: Lista świeczek w formacie zwracanym przez _get_klines
+            save_path: Opcjonalna ścieżka do zapisu wykresu
+            title: Tytuł wykresu
+            volume: Czy pokazywać wolumen
+            rsi: Czy pokazywać RSI
+            macd: Czy pokazywać MACD
+            obv: Czy pokazywać OBV
+            harmonic_patterns: Czy pokazywać wzorce harmoniczne
+            fibonacci: Czy pokazywać poziomy Fibonacciego
+            
+        Returns:
+            Base64 string z obrazkiem wykresu lub None jeśli zapisano do pliku
+        """
+        # Konwersja danych do formatu pandas DataFrame
+        df = pd.DataFrame(klines)
+        df['date'] = pd.to_datetime(df['open_time'], unit='ms')
+        df.set_index('date', inplace=True)
+        
+        # Konwersja kolumn na float
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            df[col] = df[col].astype(float)
+            
+        # Przygotowanie stylu wykresu
+        mc = mpf.make_marketcolors(
+            up='green',
+            down='red',
+            edge='inherit',
+            wick='inherit',
+            volume='in'
+        )
+        
+        s = mpf.make_mpf_style(
+            marketcolors=mc,
+            gridstyle='dotted',
+            y_on_right=False
+        )
+        
+        # Przygotowanie dodatkowych wskaźników
+        add_plots = []
+        
+        if rsi:
+            rsi_values = cls.calculate_rsi(klines)
+            rsi_series = pd.Series(rsi_values, index=df.index[-len(rsi_values):])
+            add_plots.append(
+                mpf.make_addplot(rsi_series, panel=1, color='blue', title='RSI')
+            )
+            
+        if macd:
+            macd_data = cls.calculate_macd(klines)
+            macd_series = pd.Series(macd_data['macd_line'], index=df.index[-len(macd_data['macd_line']):])
+            signal_series = pd.Series(macd_data['signal_line'], index=df.index[-len(macd_data['signal_line']):])
+            add_plots.append(
+                mpf.make_addplot(macd_series, panel=2, color='blue', title='MACD')
+            )
+            add_plots.append(
+                mpf.make_addplot(signal_series, panel=2, color='red')
+            )
+            
+        if obv:
+            obv_values = cls.calculate_obv(klines)
+            obv_series = pd.Series(obv_values, index=df.index)
+            add_plots.append(
+                mpf.make_addplot(obv_series, panel=3, color='purple', title='OBV')
+            )
+            
+        # Dodanie wzorców harmonicznych i poziomów Fibonacciego
+        if harmonic_patterns or fibonacci:
+            patterns = cls.calculate_harmonic_patterns_with_fibonacci(klines)
+            
+            for pattern_data in patterns:
+                pattern = pattern_data['pattern']
+                fib_levels = pattern_data['fibonacci_levels']
+                
+                # Dodanie punktów wzorca
+                for point_name, price in pattern.xabcd_points.items():
+                    add_plots.append(
+                        mpf.make_addplot(
+                            pd.Series([price], index=[df.index[-1]]),
+                            type='scatter',
+                            marker='o',
+                            markersize=100,
+                            color='blue'
+                        )
+                    )
+                
+                # Dodanie poziomów Fibonacciego
+                if fibonacci:
+                    for level_name, level_price in fib_levels.retracement.items():
+                        add_plots.append(
+                            mpf.make_addplot(
+                                pd.Series([level_price], index=[df.index[-1]]),
+                                type='scatter',
+                                marker='_',
+                                markersize=100,
+                                color='orange'
+                            )
+                        )
+        
+        # Tworzenie wykresu
+        fig, axes = mpf.plot(
+            df,
+            type='candle',
+            style=s,
+            title=title,
+            volume=volume,
+            addplot=add_plots,
+            returnfig=True,
+            figsize=(15, 10)
+        )
+        
+        if save_path:
+            plt.savefig(save_path)
+            plt.close(fig)
+        
+        buf = BytesIO()
+        plt.savefig(buf, format='png')
+        plt.close(fig)
+        buf.seek(0)
+        return base64.b64encode(buf.getvalue()).decode('utf-8') 
