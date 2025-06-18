@@ -18,76 +18,133 @@ from api.mexc import MexcAPI
 from api.technical_analysis import TechnicalAnalysis as TA
 from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
 
+def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
+    """
+    Pobiera lub wczytuje dane testowe z pliku.
+    Jeśli plik nie istnieje, pobiera dane z MEXC API.
+    """
+    data_file = "test_data/btc_usdt_1w.json"
+    os.makedirs("test_data", exist_ok=True)
+    
+    if os.path.exists(data_file):
+        with open(data_file, 'r') as f:
+            return json.load(f)
+    
+    # Inicjalizacja MEXC API w trybie debug
+    mexc_api = MexcAPI(
+        api_key="",
+        api_secret="",
+        DEBUG=True
+    )
+    
+    # Konwersja dat na timestampy
+    start_time = int(datetime(2021, 5, 1).timestamp() * 1000)
+    end_time = int(datetime(2026, 6, 1).timestamp() * 1000)
+    
+    # Pobranie danych
+    klines = mexc_api._get_klines(
+        base_currency="BTC",
+        quote_currency="USDT",
+        interval="1W",
+        start_time=start_time,
+        end_time=end_time
+    )
+    
+    # Zapisywanie danych do pliku
+    with open(data_file, 'w') as f:
+        json.dump(klines, f)
+    
+    return klines
+
 class TestTechnicalAnalysis(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.__ta = TA()
+        # Tworzenie katalogu na wykresy testowe
+        self.test_charts_dir = "test_charts"
+        os.makedirs(self.test_charts_dir, exist_ok=True)
+        # Pobranie danych testowych
+        self.klines = get_test_data()
         
     def tearDown(self):
         self.loop.close()
 
     def test_calculate_rsi(self):
         """Test obliczania wskaźnika RSI"""
-        # Przygotowanie danych testowych
-        klines = [
-            {"timestamp": 1000, "open": 100, "high": 110, "low": 90, "close": 105, "volume": 1000},
-            {"timestamp": 2000, "open": 105, "high": 115, "low": 95, "close": 110, "volume": 1200},
-            {"timestamp": 3000, "open": 110, "high": 120, "low": 100, "close": 115, "volume": 1500},
-            {"timestamp": 4000, "open": 115, "high": 125, "low": 105, "close": 120, "volume": 1800},
-            {"timestamp": 5000, "open": 120, "high": 130, "low": 110, "close": 125, "volume": 2000}
-        ]
+        # Obliczenie RSI
+        rsi_values = self.__ta.calculate_rsi(self.klines)
         
-        rsi = self.__ta.calculate_rsi(klines)
+        # Dodanie RSI do danych
+        for i, rsi in enumerate(rsi_values):
+            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
         
-        self.assertIsInstance(rsi, list)
-        self.assertTrue(len(rsi) > 0)
-        self.assertTrue(all(0 <= x <= 100 for x in rsi))
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_rsi.png")
+        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test RSI - BTC/USDT 1W")
+        
+        self.assertIsInstance(rsi_values, list)
+        self.assertTrue(len(rsi_values) > 0)
+        self.assertTrue(all(0 <= x <= 100 for x in rsi_values))
+        self.assertTrue(os.path.exists(chart_path))
 
     def test_calculate_macd(self):
         """Test obliczania wskaźnika MACD"""
-        klines = [
-            {"timestamp": 1000, "open": 100, "high": 110, "low": 90, "close": 105, "volume": 1000},
-            {"timestamp": 2000, "open": 105, "high": 115, "low": 95, "close": 110, "volume": 1200},
-            {"timestamp": 3000, "open": 110, "high": 120, "low": 100, "close": 115, "volume": 1500},
-            {"timestamp": 4000, "open": 115, "high": 125, "low": 105, "close": 120, "volume": 1800},
-            {"timestamp": 5000, "open": 120, "high": 130, "low": 110, "close": 125, "volume": 2000}
-        ]
+        # Obliczenie MACD
+        macd_data = self.__ta.calculate_macd(self.klines)
         
-        macd = self.__ta.calculate_macd(klines)
+        # Dodanie MACD do danych
+        for i in range(len(macd_data['macd_line'])):
+            idx = -(len(macd_data['macd_line'])-i)
+            self.klines[idx]['macd'] = macd_data['macd_line'][i]
+            self.klines[idx]['signal'] = macd_data['signal_line'][i]
+            self.klines[idx]['histogram'] = macd_data['histogram'][i]
         
-        self.assertIsInstance(macd, dict)
-        self.assertIn("macd_line", macd)
-        self.assertIn("signal_line", macd)
-        self.assertIn("histogram", macd)
-        self.assertTrue(len(macd["macd_line"]) > 0)
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_macd.png")
+        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test MACD - BTC/USDT 1W")
+        
+        self.assertIsInstance(macd_data, dict)
+        self.assertIn("macd_line", macd_data)
+        self.assertIn("signal_line", macd_data)
+        self.assertIn("histogram", macd_data)
+        self.assertTrue(len(macd_data["macd_line"]) > 0)
+        self.assertTrue(os.path.exists(chart_path))
 
     def test_calculate_obv(self):
         """Test obliczania wskaźnika OBV"""
-        klines = [
-            {"timestamp": 1000, "open": 100, "high": 110, "low": 90, "close": 105, "volume": 1000},
-            {"timestamp": 2000, "open": 105, "high": 115, "low": 95, "close": 110, "volume": 1200},
-            {"timestamp": 3000, "open": 110, "high": 120, "low": 100, "close": 115, "volume": 1500},
-            {"timestamp": 4000, "open": 115, "high": 125, "low": 105, "close": 120, "volume": 1800},
-            {"timestamp": 5000, "open": 120, "high": 130, "low": 110, "close": 125, "volume": 2000}
-        ]
+        # Obliczenie OBV
+        obv_values = self.__ta.calculate_obv(self.klines)
         
-        obv = self.__ta.calculate_obv(klines)
+        # Dodanie OBV do danych
+        for i, obv in enumerate(obv_values):
+            self.klines[i]['obv'] = obv
         
-        self.assertIsInstance(obv, list)
-        self.assertTrue(len(obv) > 0)
-        self.assertTrue(all(isinstance(x, float) for x in obv))
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_obv.png")
+        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test OBV - BTC/USDT 1W")
+        
+        self.assertIsInstance(obv_values, list)
+        self.assertTrue(len(obv_values) > 0)
+        self.assertTrue(all(isinstance(x, float) for x in obv_values))
+        self.assertTrue(os.path.exists(chart_path))
 
     def test_calculate_harmonic_patterns(self):
         """Test obliczania wzorców harmonicznych"""
-        klines = [
-            {"timestamp": 1000, "open": 100, "high": 110, "low": 90, "close": 105, "volume": 1000},
-            {"timestamp": 2000, "open": 105, "high": 115, "low": 95, "close": 110, "volume": 1200},
-            {"timestamp": 3000, "open": 110, "high": 120, "low": 100, "close": 115, "volume": 1500},
-            {"timestamp": 4000, "open": 115, "high": 125, "low": 105, "close": 120, "volume": 1800},
-            {"timestamp": 5000, "open": 120, "high": 130, "low": 110, "close": 125, "volume": 2000}
-        ]
+        # Obliczenie wzorców harmonicznych
+        patterns = self.__ta.calculate_harmonic_patterns(self.klines)
         
-        patterns = self.__ta.calculate_harmonic_patterns(klines)
+        # Dodanie wzorców i poziomów Fibonacciego do danych
+        if patterns:
+            pattern = patterns[0]
+            for point_name, price in pattern.xabcd_points.items():
+                self.klines[-1][f'pattern_{point_name}'] = price
+            
+            for level_name, level_price in pattern.fibonacci_levels.retracement.items():
+                self.klines[-1][f'fib_{level_name}'] = level_price
+        
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns.png")
+        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test Harmonic Patterns - BTC/USDT 1W")
         
         self.assertIsInstance(patterns, list)
         if len(patterns) > 0:
@@ -97,6 +154,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.assertIsInstance(pattern.fibonacci_levels, object)
             self.assertIsInstance(pattern.direction, str)
             self.assertIsInstance(pattern.completion_zone, tuple)
+        self.assertTrue(os.path.exists(chart_path))
 
 class TestAITechnicalAnalysis(unittest.TestCase):
     def setUp(self):
