@@ -1,6 +1,7 @@
 .env
 .tox\
 .temp_pkg\
+test_charts\
 
 pump.*
 !pump.py
