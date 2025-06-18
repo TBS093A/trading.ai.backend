@@ -13,7 +13,7 @@ import numpy as np
 from api.telegram import TelegramAPI
 from api.openai import OpenaiAPI, OpenAIError, AnalysisError, ImageProcessingError
 from api.mexc import MexcAPI
-from api.technical.analysis import TechnicalAnalysis as TA
+from api.technical_analysis import TechnicalAnalysis as TA
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

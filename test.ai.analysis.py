@@ -15,8 +15,8 @@ import mplfinance as mpf
 from api.telegram import TelegramAPI, TelegramAPIMock
 from api.openai import OpenaiAPI
 from api.mexc import MexcAPI
-from api.technical.analysis import TechnicalAnalysis as TA
-from ai.analysis import TechnicalAnalysis as AITechnicalAnalysis
+from api.technical_analysis import TechnicalAnalysis as TA
+from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
 
 class TestTechnicalAnalysis(unittest.TestCase):
     def setUp(self):
