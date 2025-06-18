@@ -445,30 +445,18 @@ class TechnicalAnalysis:
         cls,
         klines: List[Dict[str, Union[int, float, str]]],
         save_path: Optional[str] = None,
-        title: str = "Wykres świecowy",
-        volume: bool = True,
-        rsi: bool = True,
-        macd: bool = True,
-        obv: bool = True,
-        harmonic_patterns: bool = True,
-        fibonacci: bool = True
-    ) -> Union[str, None]:
+        title: str = "Wykres świecowy"
+    ) -> str:
         """
-        Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi.
+        Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi na podstawie dostępnych danych.
         
         Args:
-            klines: Lista świeczek w formacie zwracanym przez _get_klines
+            klines: Lista świeczek zawierająca dane OHLCV oraz opcjonalnie wskaźniki techniczne
             save_path: Opcjonalna ścieżka do zapisu wykresu
             title: Tytuł wykresu
-            volume: Czy pokazywać wolumen
-            rsi: Czy pokazywać RSI
-            macd: Czy pokazywać MACD
-            obv: Czy pokazywać OBV
-            harmonic_patterns: Czy pokazywać wzorce harmoniczne
-            fibonacci: Czy pokazywać poziomy Fibonacciego
             
         Returns:
-            Base64 string z obrazkiem wykresu lub None jeśli zapisano do pliku
+            Base64 string z obrazkiem wykresu
         """
         # Konwersja danych do formatu pandas DataFrame
         df = pd.DataFrame(klines)
@@ -477,7 +465,8 @@ class TechnicalAnalysis:
         
         # Konwersja kolumn na float
         for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = df[col].astype(float)
+            if col in df.columns:
+                df[col] = df[col].astype(float)
             
         # Przygotowanie stylu wykresu
         mc = mpf.make_marketcolors(
@@ -496,64 +485,61 @@ class TechnicalAnalysis:
         
         # Przygotowanie dodatkowych wskaźników
         add_plots = []
+        panel = 1  # Licznik paneli dla wskaźników
         
-        if rsi:
-            rsi_values = cls.calculate_rsi(klines)
-            rsi_series = pd.Series(rsi_values, index=df.index[-len(rsi_values):])
+        # Dynamiczne wykrywanie i dodawanie wskaźników
+        if 'rsi' in df.columns:
             add_plots.append(
-                mpf.make_addplot(rsi_series, panel=1, color='blue', title='RSI')
+                mpf.make_addplot(df['rsi'], panel=panel, color='blue', title='RSI')
             )
+            panel += 1
             
-        if macd:
-            macd_data = cls.calculate_macd(klines)
-            macd_series = pd.Series(macd_data['macd_line'], index=df.index[-len(macd_data['macd_line']):])
-            signal_series = pd.Series(macd_data['signal_line'], index=df.index[-len(macd_data['signal_line']):])
+        if all(col in df.columns for col in ['macd', 'signal']):
             add_plots.append(
-                mpf.make_addplot(macd_series, panel=2, color='blue', title='MACD')
+                mpf.make_addplot(df['macd'], panel=panel, color='blue', title='MACD')
             )
             add_plots.append(
-                mpf.make_addplot(signal_series, panel=2, color='red')
+                mpf.make_addplot(df['signal'], panel=panel, color='red')
             )
+            if 'histogram' in df.columns:
+                add_plots.append(
+                    mpf.make_addplot(df['histogram'], panel=panel, type='bar', color='gray', alpha=0.5)
+                )
+            panel += 1
             
-        if obv:
-            obv_values = cls.calculate_obv(klines)
-            obv_series = pd.Series(obv_values, index=df.index)
+        if 'obv' in df.columns:
             add_plots.append(
-                mpf.make_addplot(obv_series, panel=3, color='purple', title='OBV')
+                mpf.make_addplot(df['obv'], panel=panel, color='purple', title='OBV')
             )
+            panel += 1
             
         # Dodanie wzorców harmonicznych i poziomów Fibonacciego
-        if harmonic_patterns or fibonacci:
-            patterns = cls.calculate_harmonic_patterns_with_fibonacci(klines)
-            
-            for pattern_data in patterns:
-                pattern = pattern_data['pattern']
-                fib_levels = pattern_data['fibonacci_levels']
-                
-                # Dodanie punktów wzorca
-                for point_name, price in pattern.xabcd_points.items():
-                    add_plots.append(
-                        mpf.make_addplot(
-                            pd.Series([price], index=[df.index[-1]]),
-                            type='scatter',
-                            marker='o',
-                            markersize=100,
-                            color='blue'
-                        )
+        pattern_columns = [col for col in df.columns if col.startswith('pattern_')]
+        fib_columns = [col for col in df.columns if col.startswith('fib_')]
+        
+        if pattern_columns:
+            for col in pattern_columns:
+                add_plots.append(
+                    mpf.make_addplot(
+                        df[col],
+                        type='scatter',
+                        marker='o',
+                        markersize=100,
+                        color='blue'
                     )
+                )
                 
-                # Dodanie poziomów Fibonacciego
-                if fibonacci:
-                    for level_name, level_price in fib_levels.retracement.items():
-                        add_plots.append(
-                            mpf.make_addplot(
-                                pd.Series([level_price], index=[df.index[-1]]),
-                                type='scatter',
-                                marker='_',
-                                markersize=100,
-                                color='orange'
-                            )
-                        )
+        if fib_columns:
+            for col in fib_columns:
+                add_plots.append(
+                    mpf.make_addplot(
+                        df[col],
+                        type='scatter',
+                        marker='_',
+                        markersize=100,
+                        color='orange'
+                    )
+                )
         
         # Tworzenie wykresu
         fig, axes = mpf.plot(
@@ -561,18 +547,20 @@ class TechnicalAnalysis:
             type='candle',
             style=s,
             title=title,
-            volume=volume,
+            volume='volume' in df.columns,
             addplot=add_plots,
             returnfig=True,
             figsize=(15, 10)
         )
         
+        # Zapisywanie wykresu
         if save_path:
             plt.savefig(save_path)
-            plt.close(fig)
         
+        # Konwersja do base64
         buf = BytesIO()
         plt.savefig(buf, format='png')
         plt.close(fig)
         buf.seek(0)
+        return base64.b64encode(buf.getvalue()).decode('utf-8') 
         return base64.b64encode(buf.getvalue()).decode('utf-8') 
