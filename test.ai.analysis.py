@@ -23,7 +23,14 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     Pobiera lub wczytuje dane testowe z pliku.
     Jeśli plik nie istnieje, pobiera dane z Binance API.
     """
-    data_file = "test_data/btc_usdt_1w_binance.json"
+
+    base_currency = "BTC"
+    quote_currency = "USDT"
+    interval = "1d"
+    start_time = int(datetime(2024, 1, 1).timestamp() * 1000)
+    end_time = int(datetime(2025, 6, 1).timestamp() * 1000)
+
+    data_file = f"test_data/{base_currency.lower()}_{quote_currency.lower()}_{interval}_{start_time}_{end_time}_binance.json"
     os.makedirs("test_data", exist_ok=True)
     
     if os.path.exists(data_file):
@@ -36,15 +43,11 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
         api_secret=os.environ.get("BINANCE_API_SECRET", default="")
     )
     
-    # Konwersja dat na timestampy
-    start_time = int(datetime(2021, 5, 1).timestamp() * 1000)
-    end_time = int(datetime(2026, 6, 1).timestamp() * 1000)
-    
     # Pobranie danych
     klines = binance_api._get_klines(
-        base_currency="BTC",
-        quote_currency="USDT",
-        interval="1w",
+        base_currency=base_currency,
+        quote_currency=quote_currency,
+        interval=interval,
         start_time=start_time,
         end_time=end_time
     )

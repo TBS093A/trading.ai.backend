@@ -97,199 +97,14 @@ class TechnicalAnalysis:
         
         return df
 
-    @staticmethod
-    def _timestamp_to_datetime(timestamp: Union[int, float]) -> str:
-        """
-        Konwertuje timestamp na czytelny format daty.
-        
-        Args:
-            timestamp: Timestamp w milisekundach
-            
-        Returns:
-            String z datą w formacie YYYY-MM-DD HH:MM:SS
-        """
-        try:
-            from datetime import datetime
-            dt = datetime.fromtimestamp(timestamp / 1000)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:
-            return str(timestamp)
-
-    @classmethod
-    def _convert_pyharmonics_pattern(cls, pattern, klines: List[Dict[str, Union[int, float, str]]]) -> HarmonicPattern:
-        """
-        Konwertuje wzorzec z pyharmonics na nasz format HarmonicPattern.
-        
-        Args:
-            pattern: Wzorzec z pyharmonics
-            klines: Oryginalne dane klines
-            
-        Returns:
-            HarmonicPattern w naszym formacie
-        """
-        try:
-            # Pobierz punkty XABCD z wzorca
-            x_points = pattern.x
-            y_points = pattern.y
-            
-            # Sprawdź czy mamy wystarczającą liczbę punktów
-            if len(y_points) < 3:
-                logger.warning(f"Wzorzec ma za mało punktów: {len(y_points)}")
-                return None
-            
-            # Sprawdź typy danych punktów
-            logger.debug(f"Typy x_points: {[type(x) for x in x_points]}")
-            logger.debug(f"Typy y_points: {[type(y) for y in y_points]}")
-            
-            # Stwórz DataFrame w tym samym formacie co używa create_candlestick_chart
-            df = pd.DataFrame(klines)
-            df['date'] = pd.to_datetime(df['open_time'], unit='ms')
-            df.set_index('date', inplace=True)
-            
-            # Funkcja do znajdowania najbliższej świecy w naszych danych
-            def find_closest_kline_datetime(x_point):
-                """
-                Znajduje najbliższą datę świecy w naszych danych klines
-                dla punktu x z pyharmonics.
-                """
-                print(f"Szukam najbliższej świecy dla: {x_point} (typ: {type(x_point)})")
-                
-                # Konwertuj punkt na datetime jeśli to potrzebne
-                if hasattr(x_point, 'timestamp'):
-                    # To jest już pandas Timestamp
-                    target_datetime = x_point
-                    print(f"  -> target datetime (pandas): {target_datetime}")
-                elif isinstance(x_point, (int, float)):
-                    # To może być timestamp lub indeks
-                    if x_point > 1000000000000:  # Timestamp w ms
-                        target_datetime = pd.to_datetime(x_point, unit='ms')
-                    elif x_point > 1000000000:  # Timestamp w s
-                        target_datetime = pd.to_datetime(x_point, unit='s')
-                    else:
-                        # To może być indeks DataFrame - użyj go bezpośrednio
-                        idx = int(x_point)
-                        if 0 <= idx < len(df):
-                            closest_datetime = df.index[idx]
-                            print(f"  -> użyto indeks {idx}: {closest_datetime}")
-                            return closest_datetime
-                        else:
-                            # Poza zakresem - użyj pierwszą lub ostatnią
-                            closest_datetime = df.index[0] if idx < 0 else df.index[-1]
-                            print(f"  -> indeks {idx} poza zakresem, użyto: {closest_datetime}")
-                            return closest_datetime
-                    print(f"  -> target datetime (konwersja): {target_datetime}")
-                else:
-                    # Spróbuj bezpośredniej konwersji
-                    try:
-                        target_datetime = pd.to_datetime(x_point)
-                        print(f"  -> target datetime (bezpośrednia): {target_datetime}")
-                    except:
-                        # Fallback - użyj pierwszą datę
-                        closest_datetime = df.index[0]
-                        print(f"  -> fallback na pierwszą datę: {closest_datetime}")
-                        return closest_datetime
-                
-                # Znajdź najbliższą datę w naszych danych klines
-                time_diffs = abs(df.index - target_datetime)
-                closest_idx = time_diffs.argmin()
-                closest_datetime = df.index[closest_idx]
-                
-                print(f"  -> najbliższa świeca: {closest_datetime} (indeks: {closest_idx})")
-                print(f"  -> różnica czasowa: {time_diffs[closest_idx]}")
-                
-                return closest_datetime
-            
-            # Znajdź najbliższe daty świec dla każdego punktu wzorca
-            x_datetimes = []
-            logger.info(f"Mapowanie {len(x_points)} punktów wzorca na daty klines:")
-            logger.info(f"Zakres klines: {df.index.min()} do {df.index.max()}")
-            logger.info(f"Typ indeksu: {type(df.index[0])}")
-            logger.info(f"Przykładowe daty z indeksu: {df.index[:3].tolist()}")
-            
-            for i, x_point in enumerate(x_points):
-                mapped_datetime = find_closest_kline_datetime(x_point)
-                x_datetimes.append(mapped_datetime)
-                logger.info(f"Punkt {i}: {x_point} -> {mapped_datetime} (typ: {type(mapped_datetime)})")
-            
-            logger.info(f"Pomyślnie zmapowano wszystkie {len(x_datetimes)} punktów")
-            
-            # Konwertuj punkty na nasz format w zależności od typu wzorca
-            if len(y_points) >= 5:
-                # Wzorzec XABCD (5 punktów)
-                xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_datetimes[0]},
-                    "A": {"price": y_points[1], "time": x_datetimes[1]},
-                    "B": {"price": y_points[2], "time": x_datetimes[2]},
-                    "C": {"price": y_points[3], "time": x_datetimes[3]},
-                    "D": {"price": y_points[4], "time": x_datetimes[4]}
-                }
-                pattern_name = pattern.name
-            elif len(y_points) == 4:
-                # Wzorzec ABCD (4 punkty)
-                xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_datetimes[0]},  # A jako X
-                    "A": {"price": y_points[1], "time": x_datetimes[1]},  # B jako A
-                    "B": {"price": y_points[2], "time": x_datetimes[2]},  # C jako B
-                    "C": {"price": y_points[3], "time": x_datetimes[3]},  # D jako C
-                    "D": {"price": y_points[3], "time": x_datetimes[3]}   # D jako D (ten sam punkt)
-                }
-                pattern_name = f"ABCD-{pattern.name}"
-            elif len(y_points) == 3:
-                # Wzorzec ABC (3 punkty)
-                xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_datetimes[0]},  # A jako X
-                    "A": {"price": y_points[1], "time": x_datetimes[1]},  # B jako A
-                    "B": {"price": y_points[2], "time": x_datetimes[2]},  # C jako B
-                    "C": {"price": y_points[2], "time": x_datetimes[2]},  # C jako C (ten sam punkt)
-                    "D": {"price": y_points[2], "time": x_datetimes[2]}   # C jako D (ten sam punkt)
-                }
-                # Konwertuj nazwę wzorca ABC na bardziej opisową
-                if isinstance(pattern.name, (int, float)):
-                    pattern_name = f"ABC-{pattern.name}"
-                else:
-                    pattern_name = f"ABC-{str(pattern.name)}"
-            else:
-                logger.warning(f"Nieznany typ wzorca z {len(y_points)} punktami")
-                return None
-            
-            # Określ kierunek wzorca
-            direction = "bullish" if pattern.bullish else "bearish"
-            
-            # Oblicz poziomy Fibonacciego
-            fib_levels = cls.calculate_fibonacci_levels(
-                xabcd_points["X"]["price"],
-                xabcd_points["D"]["price"],
-                direction == "bullish"
-            )
-            
-            # Oblicz strefę zakończenia
-            completion_zone = (
-                pattern.completion_min_price if hasattr(pattern, 'completion_min_price') else xabcd_points["D"]["price"] * 0.99,
-                pattern.completion_max_price if hasattr(pattern, 'completion_max_price') else xabcd_points["D"]["price"] * 1.01
-            )
-            
-            # Utwórz wzorzec
-            return HarmonicPattern(
-                name=pattern_name,
-                xabcd_points=xabcd_points,
-                fibonacci_levels=fib_levels,
-                direction=direction,
-                completion_zone=completion_zone,
-                formed=pattern.formed,
-                tolerance=0.1
-            )
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas konwersji wzorca: {e}")
-            return None
-
     @classmethod
     def calculate_harmonic_patterns(
         cls,
         klines: List[Dict[str, Union[int, float, str]]],
         min_points: int = 5,
-        tolerance: float = 0.1,
-        min_quality: float = 0.7
+        symbol: str = '',
+        interval: str = '',
+        find_only_xabcd: bool = True
     ) -> int:
         """
         Oblicza formacje harmoniczne XABCD używając biblioteki pyharmonics
@@ -298,8 +113,6 @@ class TechnicalAnalysis:
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
             min_points: Minimalna liczba punktów potrzebna do identyfikacji formacji
-            tolerance: Tolerancja dla wzorca (domyślnie 10%)
-            min_quality: Minimalna jakość wzorca (0-1)
             
         Returns:
             Liczba znalezionych wzorców
@@ -316,14 +129,17 @@ class TechnicalAnalysis:
             df = cls._convert_klines_to_dataframe(klines)
             
             # Inicjalizuj Technicals z pyharmonics
-            technicals = Technicals(df, 'BTCUSDT', '1w', peak_spacing=20)
+            technicals = Technicals(df, symbol, interval)
             
             # Wykonaj wyszukiwanie wzorców
             harmonic_search = HarmonicSearch(technicals)
             harmonic_search.search()
             
             # Pobierz wszystkie wzorce
-            patterns = harmonic_search.get_patterns()
+            if find_only_xabcd:
+                patterns = harmonic_search.get_patterns(family=harmonic_search.XABCD)
+            else:
+                patterns = harmonic_search.get_patterns()
             
             logger.info(f"Znaleziono wzorce: {list(patterns.keys()) if patterns else 'brak'}")
             
@@ -443,7 +259,10 @@ class TechnicalAnalysis:
     def calculate_harmonic_patterns_forming(
         cls,
         klines: List[Dict[str, Union[int, float, str]]],
-        min_points: int = 5
+        min_points: int = 5,
+        symbol: str = '',
+        interval: str = '',
+        find_only_xabcd: bool = True
     ) -> int:
         """
         Oblicza wzorce harmoniczne w trakcie formowania się (forming patterns)
@@ -468,14 +287,18 @@ class TechnicalAnalysis:
             df = cls._convert_klines_to_dataframe(klines)
             
             # Inicjalizuj Technicals z pyharmonics
-            technicals = Technicals(df, 'BTCUSDT', '1w', peak_spacing=20)
+            technicals = Technicals(df, symbol, interval)
             
             # Wykonaj wyszukiwanie wzorców w trakcie formowania
             harmonic_search = HarmonicSearch(technicals)
             harmonic_search.forming()
             
-            # Pobierz wzorce w trakcie formowania (formed=False)
-            patterns = harmonic_search.get_patterns(formed=False)
+            if find_only_xabcd:
+                # Pobierz wzorce w trakcie formowania (formed=False)
+                patterns = harmonic_search.get_patterns(formed=False, family=harmonic_search.XABCD)
+            else:
+                # Pobierz wzorce w trakcie formowania (formed=False)
+                patterns = harmonic_search.get_patterns(formed=False)
             
             patterns_count = 0
             
@@ -562,71 +385,6 @@ class TechnicalAnalysis:
         except Exception as e:
             logger.error(f"Błąd podczas wykrywania forming wzorców harmonicznych: {e}")
             return 0
-
-    @classmethod
-    def _find_swing_points(cls, highs: List[float], lows: List[float], window: int = 5) -> Tuple[List[int], List[int]]:
-        """
-        Znajduje punkty zwrotne (swing points) w danych cenowych.
-        
-        Args:
-            highs: Lista najwyższych cen
-            lows: Lista najniższych cen
-            window: Okno do analizy punktów zwrotnych
-            
-        Returns:
-            Tuple zawierający listy indeksów punktów zwrotnych (szczyty i dołki)
-        """
-        peaks = []
-        troughs = []
-        
-        for i in range(window, len(highs) - window):
-            # Sprawdź czy jest to szczyt
-            if all(highs[i] > highs[i-j] for j in range(1, window+1)) and \
-               all(highs[i] > highs[i+j] for j in range(1, window+1)):
-                peaks.append(i)
-            
-            # Sprawdź czy jest to dołek
-            if all(lows[i] < lows[i-j] for j in range(1, window+1)) and \
-               all(lows[i] < lows[i+j] for j in range(1, window+1)):
-                troughs.append(i)
-                
-        return peaks, troughs
-
-    @classmethod
-    def _calculate_ratio(cls, price1: float, price2: float, price3: float) -> float:
-        """
-        Oblicza stosunek Fibonacciego między trzema cenami.
-        
-        Args:
-            price1: Pierwsza cena
-            price2: Druga cena
-            price3: Trzecia cena
-            
-        Returns:
-            Stosunek Fibonacciego
-        """
-        if abs(price2 - price1) == 0:
-            return 0
-        return abs(price3 - price2) / abs(price2 - price1)
-
-    @classmethod
-    def _is_pattern_valid(cls, pattern_name: str, ratios: Dict[str, float]) -> bool:
-        """
-        Sprawdza czy stosunki Fibonacciego pasują do wzorca.
-        
-        Args:
-            pattern_name: Nazwa wzorca
-            ratios: Słownik ze stosunkami Fibonacciego
-            
-        Returns:
-            True jeśli wzorzec jest prawidłowy, False w przeciwnym razie
-        """
-        pattern_ratios = cls.PATTERN_RATIOS[pattern_name]
-        
-        for key, (min_ratio, max_ratio) in pattern_ratios.items():
-            if not (min_ratio <= ratios[key] <= max_ratio):
-                return False
-        return True
 
     @classmethod
     def calculate_fibonacci_levels(
