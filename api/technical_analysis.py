@@ -669,7 +669,8 @@ class TechnicalAnalysis:
         klines: List[Dict[str, Union[int, float, str]]],
         save_path: Optional[str] = None,
         title: str = "Wykres świecowy",
-        show_harmonic_patterns: bool = True
+        show_harmonic_patterns: bool = True,
+        harmonic_patterns: Optional[List[HarmonicPattern]] = None
     ) -> str:
         """
         Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi na podstawie dostępnych danych.
@@ -679,6 +680,7 @@ class TechnicalAnalysis:
             save_path: Opcjonalna ścieżka do zapisu wykresu
             title: Tytuł wykresu
             show_harmonic_patterns: Czy pokazać wzorce harmoniczne na wykresie
+            harmonic_patterns: Lista wzorców harmonicznych do narysowania
             
         Returns:
             Base64 string z obrazkiem wykresu
@@ -807,15 +809,6 @@ class TechnicalAnalysis:
                         pattern_groups[point_name] = []
                     pattern_groups[point_name].append(col)
             
-            # Kolory dla różnych punktów wzorca
-            point_colors = {
-                'X': 'red',
-                'A': 'blue', 
-                'B': 'green',
-                'C': 'orange',
-                'D': 'purple'
-            }
-            
             # Dodaj każdy typ punktu jako osobny scatter plot
             for point_name, columns in pattern_groups.items():
                 color = point_colors.get(point_name, 'black')
@@ -857,31 +850,6 @@ class TechnicalAnalysis:
                     )
                     logger.debug(f"Dodano poziom Fibonacci {col} = {fib_level.iloc[0]} w kolorze {color}")
         
-        # Dodanie wzorców harmonicznych z pyharmonics jeśli dostępne
-        if show_harmonic_patterns and PYHARMONICS_AVAILABLE:
-            try:
-                # Konwertuj dane na format wymagany przez pyharmonics
-                pyharmonics_df = cls._convert_klines_to_dataframe(klines)
-                
-                # Inicjalizuj Technicals
-                technicals = Technicals(pyharmonics_df, 'BTCUSDT', '1w', peak_spacing=20)
-                
-                # Wykonaj wyszukiwanie wzorców
-                harmonic_search = HarmonicSearch(technicals)
-                harmonic_search.search()
-                
-                # Pobierz wzorce
-                patterns = harmonic_search.get_patterns()
-                
-                # Dodaj wzorce do wykresu
-                if patterns:
-                    # Tutaj można dodać logikę rysowania wzorców harmonicznych
-                    # na wykresie używając add_plots
-                    pass
-                    
-            except Exception as e:
-                logger.warning(f"Nie udało się dodać wzorców harmonicznych: {e}")
-        
         # Tworzenie wykresu
         fig, axes = mpf.plot(
             df,
@@ -894,13 +862,191 @@ class TechnicalAnalysis:
             figsize=(15, 10)
         )
         
+        # Dodaj linie łączące punkty wzorców harmonicznych jeśli dostępne
+        if show_harmonic_patterns and harmonic_patterns:
+            main_ax = axes[0] if isinstance(axes, list) else axes
+            
+            for pattern in harmonic_patterns:
+                try:
+                    # Pobierz punkty wzorca
+                    points = pattern.xabcd_points
+                    
+                    # Konwertuj timestampy na daty
+                    dates = []
+                    prices = []
+                    
+                    for point_name in ['X', 'A', 'B', 'C', 'D']:
+                        if point_name in points:
+                            timestamp = points[point_name]['time']
+                            price = points[point_name]['price']
+                            
+                            # Konwertuj timestamp na datetime
+                            if isinstance(timestamp, (int, float)):
+                                date = pd.to_datetime(timestamp, unit='ms')
+                            else:
+                                date = pd.to_datetime(timestamp)
+                            
+                            dates.append(date)
+                            prices.append(price)
+                    
+                    # Narysuj linie łączące punkty wzorca
+                    if len(dates) >= 2:
+                        # Narysuj linie łączące punkty
+                        main_ax.plot(dates, prices, 
+                                   color='blue', 
+                                   linewidth=2, 
+                                   alpha=0.7,
+                                   linestyle='-')
+                        
+                        # Narysuj punkty w różnych kolorach
+                        point_colors = {
+                            'X': 'red',
+                            'A': 'blue', 
+                            'B': 'green',
+                            'C': 'orange',
+                            'D': 'purple'
+                        }
+                        
+                        # Dodaj kolorowe punkty
+                        for i, (date, price) in enumerate(zip(dates, prices)):
+                            point_names = ['X', 'A', 'B', 'C', 'D']
+                            if i < len(point_names):
+                                point_name = point_names[i]
+                                color = point_colors.get(point_name, 'black')
+                                main_ax.scatter(date, price, 
+                                              color=color, 
+                                              s=100, 
+                                              alpha=0.9,
+                                              zorder=5,
+                                              edgecolors='white',
+                                              linewidth=2)
+                                
+                                # Dodaj etykietę punktu
+                                main_ax.text(date, price, 
+                                           f' {point_name}',
+                                           fontsize=8,
+                                           ha='left',
+                                           va='bottom',
+                                           color=color,
+                                           weight='bold')
+                        
+                        # Dodaj etykietę wzorca
+                        if dates and prices:
+                            main_ax.text(dates[-1], prices[-1], 
+                                       f' {pattern.name}',
+                                       fontsize=10,
+                                       ha='left',
+                                       va='top',
+                                       bbox=dict(boxstyle="round,pad=0.3", 
+                                               facecolor='lightblue', 
+                                               alpha=0.8,
+                                               edgecolor='blue'))
+                    
+                    # Dodaj poziomy Fibonacciego jako linie poziome
+                    if pattern.fibonacci_levels:
+                        # Pobierz zakres dat dla linii poziomych
+                        x_min = df.index.min()
+                        x_max = df.index.max()
+                        
+                        # Kolory dla poziomów retracementu
+                        retracement_colors = {
+                            '0.236': '#FFD700',  # złoty
+                            '0.382': '#FF8C00',  # pomarańczowy
+                            '0.5': '#FF6347',    # czerwony
+                            '0.618': '#FF1493',  # różowy
+                            '0.786': '#9932CC'   # fioletowy
+                        }
+                        
+                        # Rysuj poziomy retracementu
+                        for level_name, level_price in pattern.fibonacci_levels.retracement.items():
+                            color = retracement_colors.get(level_name, '#808080')
+                            main_ax.axhline(y=level_price, 
+                                          color=color, 
+                                          linestyle='--', 
+                                          alpha=0.7,
+                                          linewidth=1.5)
+                            
+                            # Dodaj etykietę poziomu
+                            main_ax.text(x_max, level_price, 
+                                       f' Fib {level_name} ({level_price:.0f})',
+                                       fontsize=8,
+                                       ha='left',
+                                       va='center',
+                                       color=color,
+                                       bbox=dict(boxstyle="round,pad=0.2", 
+                                               facecolor='white', 
+                                               alpha=0.8,
+                                               edgecolor=color))
+                        
+                        # Kolory dla poziomów extension
+                        extension_colors = {
+                            '1.272': '#00CED1',  # turkusowy
+                            '1.618': '#00FF7F',  # zielony
+                            '2.0': '#32CD32',    # limonkowy
+                            '2.618': '#228B22'   # ciemnozielony
+                        }
+                        
+                        # Rysuj poziomy extension
+                        for level_name, level_price in pattern.fibonacci_levels.extension.items():
+                            color = extension_colors.get(level_name, '#696969')
+                            main_ax.axhline(y=level_price, 
+                                          color=color, 
+                                          linestyle=':', 
+                                          alpha=0.7,
+                                          linewidth=1.5)
+                            
+                            # Dodaj etykietę poziomu extension
+                            main_ax.text(x_max, level_price, 
+                                       f' Ext {level_name} ({level_price:.0f})',
+                                       fontsize=8,
+                                       ha='left',
+                                       va='center',
+                                       color=color,
+                                       bbox=dict(boxstyle="round,pad=0.2", 
+                                               facecolor='white', 
+                                               alpha=0.8,
+                                               edgecolor=color))
+                        
+                        # Kolory dla targetów
+                        target_colors = {
+                            'T1': '#FF4500',  # czerwono-pomarańczowy
+                            'T2': '#FF6347',  # pomidorowy
+                            'T3': '#FF7F50',  # koralowy
+                            'T4': '#FFA07A'   # łososiowy
+                        }
+                        
+                        # Rysuj targety
+                        for target_name, target_price in pattern.fibonacci_levels.targets.items():
+                            color = target_colors.get(target_name, '#B22222')
+                            main_ax.axhline(y=target_price, 
+                                          color=color, 
+                                          linestyle='-', 
+                                          alpha=0.8,
+                                          linewidth=2)
+                            
+                            # Dodaj etykietę targetu
+                            main_ax.text(x_min, target_price, 
+                                       f'{target_name} ({target_price:.0f}) ',
+                                       fontsize=9,
+                                       ha='right',
+                                       va='center',
+                                       color=color,
+                                       weight='bold',
+                                       bbox=dict(boxstyle="round,pad=0.3", 
+                                               facecolor='yellow', 
+                                               alpha=0.9,
+                                               edgecolor=color))
+                
+                except Exception as e:
+                    logger.warning(f"Nie udało się narysować wzorca {pattern.name}: {e}")
+        
         # Zapisywanie wykresu
         if save_path:
-            plt.savefig(save_path)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
         
         # Konwersja do base64
         buf = BytesIO()
-        plt.savefig(buf, format='png')
+        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
         plt.close(fig)
         buf.seek(0)
         return base64.b64encode(buf.getvalue()).decode('utf-8') 
