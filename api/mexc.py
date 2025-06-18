@@ -235,15 +235,15 @@ class MexcAPI(
         """
         try:
             params = {
-                "symbol": f"{base_currency}{quote_currency}",
+                "symbol": f"{base_currency}/{quote_currency}",
                 "interval": interval,
                 "limit": min(limit, 1000)  # MEXC limit is 1000
             }
             
             if start_time:
-                params["startTime"] = start_time
+                params["start_time"] = start_time
             if end_time:
-                params["endTime"] = end_time
+                params["end_time"] = end_time
                 
             klines = self.__spot_client.klines(**params)
             
@@ -264,17 +264,5 @@ class MexcAPI(
             return formatted_klines
             
         except Exception as error:
-            if self.__DEBUG:
-                # Return sample data in debug mode
-                return [{
-                    "open_time": 1640804880000,
-                    "open": 47482.36,
-                    "high": 47482.36,
-                    "low": 47416.57,
-                    "close": 47436.1,
-                    "volume": 3.550717,
-                    "close_time": 1640804940000,
-                    "quote_volume": 168387.3
-                }]
             raise error
 
