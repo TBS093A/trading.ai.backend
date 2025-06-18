@@ -32,7 +32,7 @@ class TechnicalAnalysis:
     # Stałe dla wzorców harmonicznych
     PATTERN_RATIOS = {
         "Gartley": {
-            "AB": (0.618, 0.786),  # AB powinno być 61.8% - 78.6% XA
+            "AB": (0.618, 0.618),  # AB powinno być 61.8% XA
             "BC": (0.382, 0.886),  # BC powinno być 38.2% - 88.6% AB
             "CD": (1.272, 1.618),  # CD powinno być 127.2% - 161.8% BC
             "AD": (0.786, 0.786)   # AD powinno być 78.6% XA
@@ -41,10 +41,16 @@ class TechnicalAnalysis:
             "AB": (0.786, 0.786),  # AB powinno być 78.6% XA
             "BC": (0.382, 0.886),  # BC powinno być 38.2% - 88.6% AB
             "CD": (1.618, 2.618),  # CD powinno być 161.8% - 261.8% BC
-            "AD": (1.272, 1.618)   # AD powinno być 127.2% - 161.8% XA
+            "AD": (1.270, 1.612)   # AD powinno być 127% - 161.2% XA
+        },
+        "Crab": {
+            "AB": (0.382, 0.618),  # AB powinno być 38.2% lub 61.8% XA
+            "BC": (0.382, 0.886),  # BC powinno być 38.2% - 88.6% AB
+            "CD": (2.240, 3.618),  # CD powinno być 224% - 361.8% BC
+            "AD": (1.618, 1.618)   # AD powinno być 161.8% XA
         },
         "Bat": {
-            "AB": (0.382, 0.5),    # AB powinno być 38.2% - 50% XA
+            "AB": (0.382, 0.5),    # AB powinno być 38.2% lub 50% XA
             "BC": (0.382, 0.886),  # BC powinno być 38.2% - 88.6% AB
             "CD": (1.618, 2.618),  # CD powinno być 161.8% - 261.8% BC
             "AD": (0.886, 0.886)   # AD powinno być 88.6% XA
