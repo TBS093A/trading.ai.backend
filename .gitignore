@@ -1,8 +1,9 @@
 .env
-.tox\
-.temp_pkg\
-test_charts\
-test_data\
+.tox/
+.temp_pkg/
+test_charts/
+test_data/
+__pycache__/
 
 pump.*
 !pump.py
@@ -11,3 +12,4 @@ pump.*
 
 *.txt
 *.log
+*.png

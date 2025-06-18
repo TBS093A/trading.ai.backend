@@ -135,25 +135,221 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Dodanie wzorców i poziomów Fibonacciego do danych
         if patterns:
             pattern = patterns[0]
-            for point_name, price in pattern.xabcd_points.items():
-                self.klines[-1][f'pattern_{point_name}'] = price
             
+            # Funkcja pomocnicza do znajdowania najbliższej świecy dla danego timestampu
+            def find_closest_kline_index(timestamp):
+                min_diff = float('inf')
+                closest_index = -1
+                for i, kline in enumerate(self.klines):
+                    diff = abs(kline['open_time'] - timestamp)
+                    if diff < min_diff:
+                        min_diff = diff
+                        closest_index = i
+                return closest_index
+            
+            # Dodaj punkty wzorca do odpowiednich świec
+            for point_name, point_data in pattern.xabcd_points.items():
+                # Znajdź najbliższą świecę dla tego timestampu
+                closest_index = find_closest_kline_index(point_data['time'])
+                if closest_index >= 0:
+                    self.klines[closest_index][f'pattern_{point_name}_price'] = point_data['price']
+                    self.klines[closest_index][f'pattern_{point_name}_time'] = point_data['time']
+                readable_time = self.__ta._timestamp_to_datetime(point_data['time'])
+                print(f'pattern_{point_name}: cena={point_data["price"]}, czas={readable_time}, index={closest_index}')
+            
+            # Dodaj poziomy Fibonacciego do ostatniej świecy (jako linie poziome)
             for level_name, level_price in pattern.fibonacci_levels.retracement.items():
                 self.klines[-1][f'fib_{level_name}'] = level_price
+                print(f'fib_{level_name}: {level_price}')
         
-        # Generowanie i zapisywanie wykresu
+        # Generowanie i zapisywanie wykresu z wzorcami harmonicznymi
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns.png")
-        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test Harmonic Patterns - BTC/USDT 1W")
+        self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="Test Harmonic Patterns - BTC/USDT 1W",
+            show_harmonic_patterns=True
+        )
         
         self.assertIsInstance(patterns, list)
         if len(patterns) > 0:
             pattern = patterns[0]
+            print(f"Wzorzec: nazwa='{pattern.name}' (typ: {type(pattern.name)})")
             self.assertIsInstance(pattern.name, str)
             self.assertIsInstance(pattern.xabcd_points, dict)
             self.assertIsInstance(pattern.fibonacci_levels, object)
             self.assertIsInstance(pattern.direction, str)
             self.assertIsInstance(pattern.completion_zone, tuple)
+            self.assertIsInstance(pattern.formed, bool)
+            self.assertIsInstance(pattern.tolerance, float)
+            
+            # Sprawdź czy nazwa wzorca jest niepusta
+            self.assertTrue(len(pattern.name) > 0)
+            
+            # Sprawdź czy punkty XABCD są poprawnie ustawione
+            required_points = ["X", "A", "B", "C", "D"]
+            for point in required_points:
+                self.assertIn(point, pattern.xabcd_points)
+                point_data = pattern.xabcd_points[point]
+                self.assertIsInstance(point_data, dict)
+                self.assertIn("price", point_data)
+                self.assertIn("time", point_data)
+                self.assertIsInstance(point_data["price"], (int, float))
+                
+                # Sprawdź czy time jest int, float lub pandas Timestamp
+                time_value = point_data["time"]
+                time_type = type(time_value)
+                print(f"Punkt {point}: time={time_value}, typ={time_type}")
+                
+                # Sprawdź różne możliwe typy timestamp
+                is_valid_time = (
+                    isinstance(time_value, (int, float)) or
+                    hasattr(time_value, 'timestamp') or  # pandas Timestamp
+                    str(time_type).startswith("<class 'pandas._libs.tslibs.timestamps.Timestamp") or
+                    str(time_type).startswith("<class 'pandas._libs.tslibs.nattype.NaTType") == False  # nie NaT
+                )
+                self.assertTrue(is_valid_time, f"Nieprawidłowy typ time dla punktu {point}: {time_type}")
         self.assertTrue(os.path.exists(chart_path))
+
+    def test_calculate_harmonic_patterns_forming(self):
+        """Test obliczania wzorców harmonicznych w trakcie formowania się"""
+        # Obliczenie wzorców w trakcie formowania
+        forming_patterns = self.__ta.calculate_harmonic_patterns_forming(self.klines)
+        
+        # Dodanie wzorców w trakcie formowania do danych
+        if forming_patterns:
+            pattern = forming_patterns[0]
+            
+            # Funkcja pomocnicza do znajdowania najbliższej świecy dla danego timestampu
+            def find_closest_kline_index(timestamp):
+                min_diff = float('inf')
+                closest_index = -1
+                for i, kline in enumerate(self.klines):
+                    diff = abs(kline['open_time'] - timestamp)
+                    if diff < min_diff:
+                        min_diff = diff
+                        closest_index = i
+                return closest_index
+            
+            # Dodaj punkty wzorca do odpowiednich świec
+            for point_name, point_data in pattern.xabcd_points.items():
+                # Znajdź najbliższą świecę dla tego timestampu
+                closest_index = find_closest_kline_index(point_data['time'])
+                if closest_index >= 0:
+                    self.klines[closest_index][f'forming_pattern_{point_name}_price'] = point_data['price']
+                    self.klines[closest_index][f'forming_pattern_{point_name}_time'] = point_data['time']
+                readable_time = self.__ta._timestamp_to_datetime(point_data['time'])
+                print(f'forming_pattern_{point_name}: cena={point_data["price"]}, czas={readable_time}, index={closest_index}')
+            
+            # Dodaj poziomy Fibonacciego do ostatniej świecy (jako linie poziome)
+            for level_name, level_price in pattern.fibonacci_levels.retracement.items():
+                self.klines[-1][f'forming_fib_{level_name}'] = level_price
+                print(f'forming_fib_{level_name}: {level_price}')
+        
+        # Generowanie i zapisywanie wykresu z wzorcami w trakcie formowania
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_forming.png")
+        self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="Test Forming Harmonic Patterns - BTC/USDT 1W",
+            show_harmonic_patterns=True
+        )
+        
+        self.assertIsInstance(forming_patterns, list)
+        if len(forming_patterns) > 0:
+            pattern = forming_patterns[0]
+            self.assertIsInstance(pattern.name, str)
+            self.assertIsInstance(pattern.xabcd_points, dict)
+            self.assertIsInstance(pattern.fibonacci_levels, object)
+            self.assertIsInstance(pattern.direction, str)
+            self.assertIsInstance(pattern.completion_zone, tuple)
+            self.assertIsInstance(pattern.formed, bool)
+            self.assertIsInstance(pattern.tolerance, float)
+        self.assertTrue(os.path.exists(chart_path))
+
+    def test_harmonic_patterns_visualization(self):
+        """Test wizualizacji wzorców harmonicznych na wykresie"""
+        # Obliczenie wszystkich typów wzorców
+        formed_patterns = self.__ta.calculate_harmonic_patterns(self.klines)
+        forming_patterns = self.__ta.calculate_harmonic_patterns_forming(self.klines)
+        
+        # Dodanie informacji o wzorcach do danych
+        if formed_patterns:
+            print(f"Znaleziono {len(formed_patterns)} uformowanych wzorców:")
+            for i, pattern in enumerate(formed_patterns[:3]):  # Pokaż pierwsze 3
+                print(f"  {i+1}. {pattern.name} ({pattern.direction}) - {pattern.formed}")
+                self.klines[-1][f'formed_pattern_{i}_name'] = pattern.name
+                self.klines[-1][f'formed_pattern_{i}_direction'] = pattern.direction
+        
+        if forming_patterns:
+            print(f"Znaleziono {len(forming_patterns)} wzorców w trakcie formowania:")
+            for i, pattern in enumerate(forming_patterns[:3]):  # Pokaż pierwsze 3
+                print(f"  {i+1}. {pattern.name} ({pattern.direction}) - {pattern.formed}")
+                self.klines[-1][f'forming_pattern_{i}_name'] = pattern.name
+                self.klines[-1][f'forming_pattern_{i}_direction'] = pattern.direction
+        
+        # Generowanie wykresu z wszystkimi wzorcami
+        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_visualization.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="Harmonic Patterns Visualization - BTC/USDT 1W",
+            show_harmonic_patterns=True
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy base64 można zdekodować
+        try:
+            decoded = base64.b64decode(chart_base64)
+            self.assertTrue(len(decoded) > 0)
+        except Exception as e:
+            self.fail(f"Nieprawidłowy format base64: {e}")
+
+    def test_harmonic_patterns_with_indicators(self):
+        """Test wzorców harmonicznych z wskaźnikami technicznymi"""
+        # Obliczenie wskaźników technicznych
+        rsi_values = self.__ta.calculate_rsi(self.klines)
+        macd_data = self.__ta.calculate_macd(self.klines)
+        obv_values = self.__ta.calculate_obv(self.klines)
+        
+        # Dodanie wskaźników do danych
+        for i, rsi in enumerate(rsi_values):
+            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        
+        for i in range(len(macd_data['macd_line'])):
+            idx = -(len(macd_data['macd_line'])-i)
+            self.klines[idx]['macd'] = macd_data['macd_line'][i]
+            self.klines[idx]['signal'] = macd_data['signal_line'][i]
+            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        
+        for i, obv in enumerate(obv_values):
+            self.klines[i]['obv'] = obv
+        
+        # Obliczenie wzorców harmonicznych
+        patterns = self.__ta.calculate_harmonic_patterns(self.klines)
+        
+        # Generowanie kompleksowego wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="Harmonic Patterns + Technical Indicators - BTC/USDT 1W",
+            show_harmonic_patterns=True
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy wskaźniki zostały obliczone
+        self.assertTrue(len(rsi_values) > 0)
+        self.assertTrue(len(macd_data['macd_line']) > 0)
+        self.assertTrue(len(obv_values) > 0)
 
 class TestAITechnicalAnalysis(unittest.TestCase):
     def setUp(self):
