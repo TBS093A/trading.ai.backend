@@ -1,5 +1,6 @@
 from binance.spot import Spot
 from .abstract import AbstractAPI
+from typing import List, Dict, Union, Optional
 
 
 class BinanceAPI(
@@ -36,6 +37,77 @@ class BinanceAPI(
             price = coin_price,
         )
 
+    def _get_klines(
+        self,
+        base_currency: str = "BTC",
+        quote_currency: str = "USDT",
+        interval: str = "1m",
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        limit: int = 500
+    ) -> List[Dict[str, Union[int, float, str]]]:
+        """
+        Get kline/candlestick data for a symbol from Binance.
+        
+        Args:
+            base_currency: Base currency symbol (e.g. BTC)
+            quote_currency: Quote currency symbol (e.g. USDT)
+            interval: Kline interval (e.g. 1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
+            start_time: Start time in milliseconds
+            end_time: End time in milliseconds
+            limit: Number of records to return (max 1000)
+            
+        Returns:
+            List of dictionaries containing kline data with keys:
+            - open_time: Open time in milliseconds
+            - open: Open price
+            - high: Highest price
+            - low: Lowest price
+            - close: Close price
+            - volume: Trading volume
+            - close_time: Close time in milliseconds
+            - quote_volume: Quote asset volume
+            - trades: Number of trades
+            - taker_buy_base_volume: Taker buy base asset volume
+            - taker_buy_quote_volume: Taker buy quote asset volume
+        """
+        try:
+            params = {
+                "symbol": f"{base_currency}{quote_currency}",
+                "interval": interval,
+                "limit": min(limit, 1000)  # Binance limit is 1000
+            }
+            
+            if start_time:
+                params["startTime"] = start_time
+            if end_time:
+                params["endTime"] = end_time
+                
+            klines = self.__spot_client.klines(**params)
+            
+            # Transform raw kline data into dictionary format
+            # Binance response format:
+            # [open_time, open, high, low, close, volume, close_time, quote_volume, trades, taker_buy_base_volume, taker_buy_quote_volume, ignore]
+            formatted_klines = []
+            for kline in klines:
+                formatted_klines.append({
+                    "open_time": int(kline[0]),
+                    "open": float(kline[1]),
+                    "high": float(kline[2]),
+                    "low": float(kline[3]),
+                    "close": float(kline[4]),
+                    "volume": float(kline[5]),
+                    "close_time": int(kline[6]),
+                    "quote_volume": float(kline[7]),
+                    "trades": int(kline[8]),
+                    "taker_buy_base_volume": float(kline[9]),
+                    "taker_buy_quote_volume": float(kline[10])
+                })
+                
+            return formatted_klines
+            
+        except Exception as error:
+            raise error
 
     def _AbstractAPI__get_available_currency_percent_price(self, percent_size: float, currency: str = None, asset_type: str = "assets"):
         """

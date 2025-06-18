@@ -14,27 +14,26 @@ import mplfinance as mpf
 
 from api.telegram import TelegramAPI, TelegramAPIMock
 from api.openai import OpenaiAPI
-from api.mexc import MexcAPI
+from api.binance import BinanceAPI
 from api.technical_analysis import TechnicalAnalysis as TA
 from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
 
 def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     """
     Pobiera lub wczytuje dane testowe z pliku.
-    Jeśli plik nie istnieje, pobiera dane z MEXC API.
+    Jeśli plik nie istnieje, pobiera dane z Binance API.
     """
-    data_file = "test_data/btc_usdt_1w.json"
+    data_file = "test_data/btc_usdt_1w_binance.json"
     os.makedirs("test_data", exist_ok=True)
     
     if os.path.exists(data_file):
         with open(data_file, 'r') as f:
             return json.load(f)
     
-    # Inicjalizacja MEXC API w trybie debug
-    mexc_api = MexcAPI(
-        api_key="",
-        api_secret="",
-        DEBUG=True
+    # Inicjalizacja Binance API
+    binance_api = BinanceAPI(
+        api_key=os.environ.get("BINANCE_API_KEY", default=""),
+        api_secret=os.environ.get("BINANCE_API_SECRET", default="")
     )
     
     # Konwersja dat na timestampy
@@ -42,10 +41,10 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     end_time = int(datetime(2026, 6, 1).timestamp() * 1000)
     
     # Pobranie danych
-    klines = mexc_api._get_klines(
+    klines = binance_api._get_klines(
         base_currency="BTC",
         quote_currency="USDT",
-        interval="1W",
+        interval="1w",
         start_time=start_time,
         end_time=end_time
     )
@@ -161,10 +160,9 @@ class TestAITechnicalAnalysis(unittest.TestCase):
         self.loop = asyncio.get_event_loop()
         self.__telegram_api = TelegramAPIMock()
         self.__openai_api = OpenaiAPI()
-        self.__mexc_api = MexcAPI(
-            api_key=os.environ.get("MEXC_API_KEY", default=""),
-            api_secret=os.environ.get("MEXC_API_SECRET", default=""),
-            DEBUG=True
+        self.__binance_api = BinanceAPI(
+            api_key=os.environ.get("BINANCE_API_KEY", default=""),
+            api_secret=os.environ.get("BINANCE_API_SECRET", default="")
         )
         self.__channels = {
             "Test Channel": {
@@ -176,7 +174,7 @@ class TestAITechnicalAnalysis(unittest.TestCase):
         self.__ai_ta = AITechnicalAnalysis(
             telegram_api=self.__telegram_api,
             openai_api=self.__openai_api,
-            mexc_api=self.__mexc_api,
+            mexc_api=self.__binance_api,
             channels=self.__channels,
             DEBUG=True
         )
