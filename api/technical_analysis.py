@@ -141,50 +141,107 @@ class TechnicalAnalysis:
             logger.debug(f"Typy x_points: {[type(x) for x in x_points]}")
             logger.debug(f"Typy y_points: {[type(y) for y in y_points]}")
             
-            # Konwertuj timestampy na int jeśli są pandas Timestamp
-            def convert_timestamp(ts):
-                if hasattr(ts, 'timestamp'):
-                    # pandas Timestamp
-                    return int(ts.timestamp() * 1000)
-                elif isinstance(ts, (int, float)):
-                    # już w formacie timestamp
-                    return int(ts)
-                else:
-                    # nieznany typ, spróbuj konwersji
-                    return int(ts)
+            # Stwórz DataFrame w tym samym formacie co używa create_candlestick_chart
+            df = pd.DataFrame(klines)
+            df['date'] = pd.to_datetime(df['open_time'], unit='ms')
+            df.set_index('date', inplace=True)
             
-            # Konwertuj x_points na timestampy
-            x_timestamps = [convert_timestamp(x) for x in x_points]
+            # Funkcja do znajdowania najbliższej świecy w naszych danych
+            def find_closest_kline_datetime(x_point):
+                """
+                Znajduje najbliższą datę świecy w naszych danych klines
+                dla punktu x z pyharmonics.
+                """
+                print(f"Szukam najbliższej świecy dla: {x_point} (typ: {type(x_point)})")
+                
+                # Konwertuj punkt na datetime jeśli to potrzebne
+                if hasattr(x_point, 'timestamp'):
+                    # To jest już pandas Timestamp
+                    target_datetime = x_point
+                    print(f"  -> target datetime (pandas): {target_datetime}")
+                elif isinstance(x_point, (int, float)):
+                    # To może być timestamp lub indeks
+                    if x_point > 1000000000000:  # Timestamp w ms
+                        target_datetime = pd.to_datetime(x_point, unit='ms')
+                    elif x_point > 1000000000:  # Timestamp w s
+                        target_datetime = pd.to_datetime(x_point, unit='s')
+                    else:
+                        # To może być indeks DataFrame - użyj go bezpośrednio
+                        idx = int(x_point)
+                        if 0 <= idx < len(df):
+                            closest_datetime = df.index[idx]
+                            print(f"  -> użyto indeks {idx}: {closest_datetime}")
+                            return closest_datetime
+                        else:
+                            # Poza zakresem - użyj pierwszą lub ostatnią
+                            closest_datetime = df.index[0] if idx < 0 else df.index[-1]
+                            print(f"  -> indeks {idx} poza zakresem, użyto: {closest_datetime}")
+                            return closest_datetime
+                    print(f"  -> target datetime (konwersja): {target_datetime}")
+                else:
+                    # Spróbuj bezpośredniej konwersji
+                    try:
+                        target_datetime = pd.to_datetime(x_point)
+                        print(f"  -> target datetime (bezpośrednia): {target_datetime}")
+                    except:
+                        # Fallback - użyj pierwszą datę
+                        closest_datetime = df.index[0]
+                        print(f"  -> fallback na pierwszą datę: {closest_datetime}")
+                        return closest_datetime
+                
+                # Znajdź najbliższą datę w naszych danych klines
+                time_diffs = abs(df.index - target_datetime)
+                closest_idx = time_diffs.argmin()
+                closest_datetime = df.index[closest_idx]
+                
+                print(f"  -> najbliższa świeca: {closest_datetime} (indeks: {closest_idx})")
+                print(f"  -> różnica czasowa: {time_diffs[closest_idx]}")
+                
+                return closest_datetime
+            
+            # Znajdź najbliższe daty świec dla każdego punktu wzorca
+            x_datetimes = []
+            logger.info(f"Mapowanie {len(x_points)} punktów wzorca na daty klines:")
+            logger.info(f"Zakres klines: {df.index.min()} do {df.index.max()}")
+            logger.info(f"Typ indeksu: {type(df.index[0])}")
+            logger.info(f"Przykładowe daty z indeksu: {df.index[:3].tolist()}")
+            
+            for i, x_point in enumerate(x_points):
+                mapped_datetime = find_closest_kline_datetime(x_point)
+                x_datetimes.append(mapped_datetime)
+                logger.info(f"Punkt {i}: {x_point} -> {mapped_datetime} (typ: {type(mapped_datetime)})")
+            
+            logger.info(f"Pomyślnie zmapowano wszystkie {len(x_datetimes)} punktów")
             
             # Konwertuj punkty na nasz format w zależności od typu wzorca
             if len(y_points) >= 5:
                 # Wzorzec XABCD (5 punktów)
                 xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_timestamps[0]},
-                    "A": {"price": y_points[1], "time": x_timestamps[1]},
-                    "B": {"price": y_points[2], "time": x_timestamps[2]},
-                    "C": {"price": y_points[3], "time": x_timestamps[3]},
-                    "D": {"price": y_points[4], "time": x_timestamps[4]}
+                    "X": {"price": y_points[0], "time": x_datetimes[0]},
+                    "A": {"price": y_points[1], "time": x_datetimes[1]},
+                    "B": {"price": y_points[2], "time": x_datetimes[2]},
+                    "C": {"price": y_points[3], "time": x_datetimes[3]},
+                    "D": {"price": y_points[4], "time": x_datetimes[4]}
                 }
                 pattern_name = pattern.name
             elif len(y_points) == 4:
                 # Wzorzec ABCD (4 punkty)
                 xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_timestamps[0]},  # A jako X
-                    "A": {"price": y_points[1], "time": x_timestamps[1]},  # B jako A
-                    "B": {"price": y_points[2], "time": x_timestamps[2]},  # C jako B
-                    "C": {"price": y_points[3], "time": x_timestamps[3]},  # D jako C
-                    "D": {"price": y_points[3], "time": x_timestamps[3]}   # D jako D (ten sam punkt)
+                    "X": {"price": y_points[0], "time": x_datetimes[0]},  # A jako X
+                    "A": {"price": y_points[1], "time": x_datetimes[1]},  # B jako A
+                    "B": {"price": y_points[2], "time": x_datetimes[2]},  # C jako B
+                    "C": {"price": y_points[3], "time": x_datetimes[3]},  # D jako C
+                    "D": {"price": y_points[3], "time": x_datetimes[3]}   # D jako D (ten sam punkt)
                 }
                 pattern_name = f"ABCD-{pattern.name}"
             elif len(y_points) == 3:
                 # Wzorzec ABC (3 punkty)
                 xabcd_points = {
-                    "X": {"price": y_points[0], "time": x_timestamps[0]},  # A jako X
-                    "A": {"price": y_points[1], "time": x_timestamps[1]},  # B jako A
-                    "B": {"price": y_points[2], "time": x_timestamps[2]},  # C jako B
-                    "C": {"price": y_points[2], "time": x_timestamps[2]},  # C jako C (ten sam punkt)
-                    "D": {"price": y_points[2], "time": x_timestamps[2]}   # C jako D (ten sam punkt)
+                    "X": {"price": y_points[0], "time": x_datetimes[0]},  # A jako X
+                    "A": {"price": y_points[1], "time": x_datetimes[1]},  # B jako A
+                    "B": {"price": y_points[2], "time": x_datetimes[2]},  # C jako B
+                    "C": {"price": y_points[2], "time": x_datetimes[2]},  # C jako C (ten sam punkt)
+                    "D": {"price": y_points[2], "time": x_datetimes[2]}   # C jako D (ten sam punkt)
                 }
                 # Konwertuj nazwę wzorca ABC na bardziej opisową
                 if isinstance(pattern.name, (int, float)):
@@ -233,10 +290,10 @@ class TechnicalAnalysis:
         min_points: int = 5,
         tolerance: float = 0.1,
         min_quality: float = 0.7
-    ) -> List[HarmonicPattern]:
+    ) -> int:
         """
-        Oblicza formacje harmoniczne XABCD używając biblioteki pyharmonics.
-        Implementacja bazująca na algorytmie pyharmonics z optymalizacją O(n²/2).
+        Oblicza formacje harmoniczne XABCD używając biblioteki pyharmonics
+        i nanosi punkty wzorców bezpośrednio na odpowiednie świece w klines.
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
@@ -245,21 +302,20 @@ class TechnicalAnalysis:
             min_quality: Minimalna jakość wzorca (0-1)
             
         Returns:
-            Lista znalezionych formacji harmonicznych
+            Liczba znalezionych wzorców
         """
         if not PYHARMONICS_AVAILABLE:
             logger.error("pyharmonics nie jest dostępne. Zainstaluj: pip install pyharmonics")
-            return []
+            return 0
         
         if len(klines) < min_points:
-            return []
+            return 0
 
         try:
             # Konwertuj dane na DataFrame wymagany przez pyharmonics
             df = cls._convert_klines_to_dataframe(klines)
             
             # Inicjalizuj Technicals z pyharmonics
-            # Używamy symbolu BTCUSDT jako domyślnego
             technicals = Technicals(df, 'BTCUSDT', '1w', peak_spacing=20)
             
             # Wykonaj wyszukiwanie wzorców
@@ -271,65 +327,141 @@ class TechnicalAnalysis:
             
             logger.info(f"Znaleziono wzorce: {list(patterns.keys()) if patterns else 'brak'}")
             
-            # Konwertuj wzorce XABCD na nasz format
-            harmonic_patterns = []
+            patterns_count = 0
             
-            # Sprawdź wzorce XABCD
-            if hasattr(harmonic_search, 'XABCD') and harmonic_search.XABCD in patterns:
-                logger.info(f"Przetwarzanie {len(patterns[harmonic_search.XABCD])} wzorców XABCD")
-                for pattern in patterns[harmonic_search.XABCD]:
-                    harmonic_pattern = cls._convert_pyharmonics_pattern(pattern, klines)
-                    if harmonic_pattern is not None:
-                        harmonic_patterns.append(harmonic_pattern)
+            # Przetwórz wzorce i nanieś punkty na klines
+            for pattern_type_key in patterns:
+                pattern_list = patterns[pattern_type_key]
+                logger.info(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key}")
+                
+                for pattern_idx, pattern in enumerate(pattern_list):
+                    try:
+                        # Pobierz punkty z wzorca
+                        x_points = pattern.x
+                        y_points = pattern.y
+                        
+                        if len(y_points) < 3:
+                            continue
+                        
+                        # Utwórz DataFrame dla mapowania
+                        df_map = pd.DataFrame(klines)
+                        df_map['date'] = pd.to_datetime(df_map['open_time'], unit='ms')
+                        df_map.set_index('date', inplace=True)
+                        
+                        # Funkcja do znajdowania indeksu świecy w klines
+                        def find_kline_index(x_point):
+                            if hasattr(x_point, 'timestamp'):
+                                target_datetime = x_point
+                            elif isinstance(x_point, (int, float)):
+                                if x_point > 1000000000000:
+                                    target_datetime = pd.to_datetime(x_point, unit='ms')
+                                elif x_point > 1000000000:
+                                    target_datetime = pd.to_datetime(x_point, unit='s')
+                                else:
+                                    idx = int(x_point)
+                                    return max(0, min(idx, len(klines) - 1))
+                            else:
+                                try:
+                                    target_datetime = pd.to_datetime(x_point)
+                                except:
+                                    return 0
+                            
+                            # Znajdź najbliższą datę
+                            time_diffs = abs(df_map.index - target_datetime)
+                            closest_idx = time_diffs.argmin()
+                            return closest_idx
+                        
+                        # Określ nazwę wzorca
+                        if len(y_points) >= 5:
+                            point_names = ["X", "A", "B", "C", "D"]
+                            pattern_name = f"{pattern.name}_{patterns_count}"
+                        elif len(y_points) == 4:
+                            point_names = ["A", "B", "C", "D"]
+                            pattern_name = f"ABCD_{pattern.name}_{patterns_count}"
+                        elif len(y_points) == 3:
+                            point_names = ["A", "B", "C"]
+                            pattern_name = f"ABC_{pattern.name}_{patterns_count}"
+                        else:
+                            continue
+                        
+                        # Nanieś punkty na odpowiednie świece
+                        for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
+                            if i >= len(point_names):
+                                break
+                                
+                            kline_idx = find_kline_index(x_point)
+                            point_name = point_names[i]
+                            
+                            # Dodaj informacje o punkcie do świecy
+                            klines[kline_idx][f'pattern_{point_name}_price'] = float(y_point)
+                            klines[kline_idx][f'pattern_{point_name}_name'] = pattern_name
+                            klines[kline_idx][f'pattern_{point_name}_type'] = str(pattern.name)
+                            klines[kline_idx][f'pattern_{point_name}_bullish'] = bool(pattern.bullish)
+                            
+                            logger.debug(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
+                        
+                        # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
+                        if len(y_points) >= 2:
+                            first_kline_idx = find_kline_index(x_points[0])
+                            
+                            # Znajdź najwyższą i najniższą cenę wzorca
+                            max_price = max(y_points)
+                            min_price = min(y_points)
+                            is_uptrend = bool(pattern.bullish)
+                            
+                            # Oblicz poziomy Fibonacciego
+                            fib_levels = cls.calculate_fibonacci_levels(
+                                start_price=max_price if is_uptrend else min_price,
+                                end_price=min_price if is_uptrend else max_price,
+                                is_uptrend=is_uptrend
+                            )
+                            
+                            # Dodaj poziomy do pierwszej świecy wzorca
+                            for level_name, level_price in fib_levels.retracement.items():
+                                klines[first_kline_idx][f'fib_ret_{level_name}_{pattern_name}'] = float(level_price)
+                            
+                            for level_name, level_price in fib_levels.extension.items():
+                                klines[first_kline_idx][f'fib_ext_{level_name}_{pattern_name}'] = float(level_price)
+                            
+                            for target_name, target_price in fib_levels.targets.items():
+                                klines[first_kline_idx][f'fib_target_{target_name}_{pattern_name}'] = float(target_price)
+                        
+                        patterns_count += 1
+                        
+                    except Exception as e:
+                        logger.warning(f"Błąd podczas przetwarzania wzorca {pattern_idx}: {e}")
+                        continue
             
-            # Sprawdź wzorce ABCD
-            if hasattr(harmonic_search, 'ABCD') and harmonic_search.ABCD in patterns:
-                logger.info(f"Przetwarzanie {len(patterns[harmonic_search.ABCD])} wzorców ABCD")
-                for pattern in patterns[harmonic_search.ABCD]:
-                    harmonic_pattern = cls._convert_pyharmonics_pattern(pattern, klines)
-                    if harmonic_pattern is not None:
-                        harmonic_patterns.append(harmonic_pattern)
-            
-            # Sprawdź wzorce ABC
-            if hasattr(harmonic_search, 'ABC') and harmonic_search.ABC in patterns:
-                logger.info(f"Przetwarzanie {len(patterns[harmonic_search.ABC])} wzorców ABC")
-                for pattern in patterns[harmonic_search.ABC]:
-                    logger.debug(f"Wzorzec ABC: nazwa={pattern.name}, typ={type(pattern.name)}")
-                    harmonic_pattern = cls._convert_pyharmonics_pattern(pattern, klines)
-                    if harmonic_pattern is not None:
-                        harmonic_patterns.append(harmonic_pattern)
-                        logger.debug(f"Skonwertowano wzorzec: {harmonic_pattern.name}")
-            
-            logger.info(f"Pomyślnie skonwertowano {len(harmonic_patterns)} wzorców")
-            
-            return harmonic_patterns
+            logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
+            return patterns_count
             
         except Exception as e:
             logger.error(f"Błąd podczas wykrywania wzorców harmonicznych: {e}")
-            return []
+            return 0
 
     @classmethod
     def calculate_harmonic_patterns_forming(
         cls,
         klines: List[Dict[str, Union[int, float, str]]],
         min_points: int = 5
-    ) -> List[HarmonicPattern]:
+    ) -> int:
         """
-        Oblicza wzorce harmoniczne w trakcie formowania się (forming patterns).
+        Oblicza wzorce harmoniczne w trakcie formowania się (forming patterns)
+        i nanosi punkty bezpośrednio na odpowiednie świece w klines.
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
             min_points: Minimalna liczba punktów potrzebna do identyfikacji formacji
             
         Returns:
-            Lista wzorców w trakcie formowania się
+            Liczba znalezionych wzorców w trakcie formowania
         """
         if not PYHARMONICS_AVAILABLE:
             logger.error("pyharmonics nie jest dostępne. Zainstaluj: pip install pyharmonics")
-            return []
+            return 0
         
         if len(klines) < min_points:
-            return []
+            return 0
 
         try:
             # Konwertuj dane na DataFrame wymagany przez pyharmonics
@@ -345,21 +477,91 @@ class TechnicalAnalysis:
             # Pobierz wzorce w trakcie formowania (formed=False)
             patterns = harmonic_search.get_patterns(formed=False)
             
-            # Konwertuj wzorce na nasz format
-            harmonic_patterns = []
+            patterns_count = 0
             
-            # Sprawdź wszystkie typy wzorców
-            for pattern_type in patterns:
-                for pattern in patterns[pattern_type]:
-                    harmonic_pattern = cls._convert_pyharmonics_pattern(pattern, klines)
-                    if harmonic_pattern is not None:
-                        harmonic_patterns.append(harmonic_pattern)
+            # Przetwórz wzorce i nanieś punkty na klines
+            for pattern_type_key in patterns:
+                pattern_list = patterns[pattern_type_key]
+                logger.info(f"Przetwarzanie {len(pattern_list)} wzorców forming typu {pattern_type_key}")
+                
+                for pattern_idx, pattern in enumerate(pattern_list):
+                    try:
+                        # Pobierz punkty z wzorca
+                        x_points = pattern.x
+                        y_points = pattern.y
+                        
+                        if len(y_points) < 3:
+                            continue
+                        
+                        # Utwórz DataFrame dla mapowania
+                        df_map = pd.DataFrame(klines)
+                        df_map['date'] = pd.to_datetime(df_map['open_time'], unit='ms')
+                        df_map.set_index('date', inplace=True)
+                        
+                        # Funkcja do znajdowania indeksu świecy w klines
+                        def find_kline_index(x_point):
+                            if hasattr(x_point, 'timestamp'):
+                                target_datetime = x_point
+                            elif isinstance(x_point, (int, float)):
+                                if x_point > 1000000000000:
+                                    target_datetime = pd.to_datetime(x_point, unit='ms')
+                                elif x_point > 1000000000:
+                                    target_datetime = pd.to_datetime(x_point, unit='s')
+                                else:
+                                    idx = int(x_point)
+                                    return max(0, min(idx, len(klines) - 1))
+                            else:
+                                try:
+                                    target_datetime = pd.to_datetime(x_point)
+                                except:
+                                    return 0
+                            
+                            # Znajdź najbliższą datę
+                            time_diffs = abs(df_map.index - target_datetime)
+                            closest_idx = time_diffs.argmin()
+                            return closest_idx
+                        
+                        # Określ nazwę wzorca (dodaj prefix 'forming_')
+                        if len(y_points) >= 5:
+                            point_names = ["X", "A", "B", "C", "D"]
+                            pattern_name = f"forming_{pattern.name}_{patterns_count}"
+                        elif len(y_points) == 4:
+                            point_names = ["A", "B", "C", "D"]
+                            pattern_name = f"forming_ABCD_{pattern.name}_{patterns_count}"
+                        elif len(y_points) == 3:
+                            point_names = ["A", "B", "C"]
+                            pattern_name = f"forming_ABC_{pattern.name}_{patterns_count}"
+                        else:
+                            continue
+                        
+                        # Nanieś punkty na odpowiednie świece
+                        for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
+                            if i >= len(point_names):
+                                break
+                                
+                            kline_idx = find_kline_index(x_point)
+                            point_name = point_names[i]
+                            
+                            # Dodaj informacje o punkcie do świecy (z prefiksem forming_)
+                            klines[kline_idx][f'forming_pattern_{point_name}_price'] = float(y_point)
+                            klines[kline_idx][f'forming_pattern_{point_name}_name'] = pattern_name
+                            klines[kline_idx][f'forming_pattern_{point_name}_type'] = str(pattern.name)
+                            klines[kline_idx][f'forming_pattern_{point_name}_bullish'] = bool(pattern.bullish)
+                            
+                            logger.debug(f"Dodano forming punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
+                        
+                        patterns_count += 1
+                        
+                    except Exception as e:
+                        logger.warning(f"Błąd podczas przetwarzania forming wzorca {pattern_idx}: {e}")
+                        continue
             
-            return harmonic_patterns
+            logger.info(f"Pomyślnie naniesiono {patterns_count} forming wzorców na świece")
+            return patterns_count
             
         except Exception as e:
-            logger.error(f"Błąd podczas wykrywania wzorców w trakcie formowania: {e}")
-            return []
+            logger.error(f"Błąd podczas wykrywania forming wzorców harmonicznych: {e}")
+            return 0
 
     @classmethod
     def _find_swing_points(cls, highs: List[float], lows: List[float], window: int = 5) -> Tuple[List[int], List[int]]:
@@ -622,46 +824,22 @@ class TechnicalAnalysis:
     def calculate_harmonic_patterns_with_fibonacci(
         cls,
         klines: List[Dict[str, Union[int, float, str]]]
-    ) -> List[Dict[str, Union[HarmonicPattern, FibonacciLevels]]]:
+    ) -> int:
         """
-        Oblicza formacje harmoniczne XABCD wraz z poziomami Fibonacciego dla każdego wzorca.
-        Poziomy Fibonacciego są obliczane od najwyższego do najniższego punktu w zakresie cenowym.
+        Oblicza formacje harmoniczne XABCD wraz z poziomami Fibonacciego.
+        Wzorce i poziomy są dodawane bezpośrednio do klines.
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
             
         Returns:
-            Lista słowników zawierających wzorzec harmoniczny i odpowiadające mu poziomy Fibonacciego
+            Liczba znalezionych wzorców z poziomami Fibonacciego
         """
-        # Znajdź wzorce harmoniczne
-        patterns = cls.calculate_harmonic_patterns(klines)
-        results = []
+        # Znajdź wzorce harmoniczne (dodaje punkty i poziomy Fibonacci do klines)
+        patterns_count = cls.calculate_harmonic_patterns(klines)
         
-        for pattern in patterns:
-            # Pobierz wszystkie ceny z wzorca
-            prices = list(pattern.xabcd_points.values())
-            
-            # Znajdź najwyższą i najniższą cenę
-            max_price = max(prices)
-            min_price = min(prices)
-            
-            # Określ kierunek trendu na podstawie wzorca
-            is_uptrend = pattern.direction == "bullish"
-            
-            # Oblicz poziomy Fibonacciego
-            fib_levels = cls.calculate_fibonacci_levels(
-                start_price=max_price if is_uptrend else min_price,
-                end_price=min_price if is_uptrend else max_price,
-                is_uptrend=is_uptrend
-            )
-            
-            # Dodaj wynik do listy
-            results.append({
-                "pattern": pattern,
-                "fibonacci_levels": fib_levels
-            })
-            
-        return results
+        logger.info(f"Obliczono {patterns_count} wzorców harmonicznych z poziomami Fibonacciego")
+        return patterns_count
 
     @classmethod
     def create_candlestick_chart(
@@ -669,18 +847,20 @@ class TechnicalAnalysis:
         klines: List[Dict[str, Union[int, float, str]]],
         save_path: Optional[str] = None,
         title: str = "Wykres świecowy",
-        show_harmonic_patterns: bool = True,
-        harmonic_patterns: Optional[List[HarmonicPattern]] = None
+        show_fibonacci: bool = True,
+        show_patterns: bool = True,
+        show_rsi: bool = True,
+        show_macd: bool = True,
+        show_obv: bool = True,
     ) -> str:
         """
-        Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi na podstawie dostępnych danych.
+        Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi oraz wzorcami harmonicznymi
+        na podstawie danych zawartych w klines.
         
         Args:
-            klines: Lista świeczek zawierająca dane OHLCV oraz opcjonalnie wskaźniki techniczne
+            klines: Lista świeczek zawierająca dane OHLCV, wskaźniki techniczne oraz punkty wzorców harmonicznych
             save_path: Opcjonalna ścieżka do zapisu wykresu
             title: Tytuł wykresu
-            show_harmonic_patterns: Czy pokazać wzorce harmoniczne na wykresie
-            harmonic_patterns: Lista wzorców harmonicznych do narysowania
             
         Returns:
             Base64 string z obrazkiem wykresu
@@ -718,12 +898,14 @@ class TechnicalAnalysis:
         
         # Sprawdź i napraw typy danych - upewnij się że wszystkie kolumny są numeryczne
         for col in df.columns:
-            if col != 'volume':  # volume może być NaN
-                # Usuń wiersze z NaN dla kolumn cenowych
+            if col in ['open', 'high', 'low', 'close']:  # Kolumny podstawowe - wymagane
                 df = df.dropna(subset=[col])
-            else:
-                # Dla volume zastąp NaN zerami
+            elif col == 'volume':  # Volume może być NaN
                 df[col] = df[col].fillna(0)
+            elif col.startswith(('pattern_', 'forming_pattern_', 'fib_')):  # Kolumny wzorców - nie usuwaj wierszy
+                df[col] = df[col].fillna(0)  # Wypełnij zerami dla brakujących wartości
+            else:  # Wskaźniki techniczne
+                pass  # Zostaw NaN dla wskaźników - będą obsłużone w add_plots
         
         # Sprawdź czy DataFrame nie jest pusty po filtrowaniu
         if df.empty:
@@ -764,13 +946,13 @@ class TechnicalAnalysis:
         panel = 1  # Licznik paneli dla wskaźników
         
         # Dynamiczne wykrywanie i dodawanie wskaźników
-        if 'rsi' in df.columns:
+        if show_rsi and 'rsi' in df.columns:
             add_plots.append(
                 mpf.make_addplot(df['rsi'], panel=panel, color='blue', title='RSI')
             )
             panel += 1
             
-        if all(col in df.columns for col in ['macd', 'signal']):
+        if show_macd and all(col in df.columns for col in ['macd', 'signal']):
             add_plots.append(
                 mpf.make_addplot(df['macd'], panel=panel, color='blue', title='MACD')
             )
@@ -783,7 +965,7 @@ class TechnicalAnalysis:
                 )
             panel += 1
             
-        if 'obv' in df.columns:
+        if show_obv and 'obv' in df.columns:
             add_plots.append(
                 mpf.make_addplot(df['obv'], panel=panel, color='purple', title='OBV')
             )
@@ -791,16 +973,31 @@ class TechnicalAnalysis:
             
         # Dodanie wzorców harmonicznych i poziomów Fibonacciego
         pattern_columns = [col for col in df.columns if col.startswith('pattern_') and col.endswith('_price')]
+        forming_pattern_columns = [col for col in df.columns if col.startswith('forming_pattern_') and col.endswith('_price')]
         fib_columns = [col for col in df.columns if col.startswith('fib_')]
         
-        logger.debug(f"Znalezione kolumny wzorców: {pattern_columns}")
-        logger.debug(f"Znalezione kolumny Fibonacci: {fib_columns}")
+        logger.info(f"Znalezione kolumny wzorców: {len(pattern_columns)} zwykłych, {len(forming_pattern_columns)} forming")
+        logger.info(f"Znalezione kolumny Fibonacci: {len(fib_columns)}")
+        logger.debug(f"Szczegóły wzorców: {pattern_columns + forming_pattern_columns}")
+        logger.debug(f"Szczegóły Fibonacci: {fib_columns}")
         
         # Dodaj punkty wzorców harmonicznych jako scatter plots
-        if pattern_columns:
+        if show_patterns and (pattern_columns or forming_pattern_columns):
+            # Kolory dla punktów wzorców harmonicznych
+            point_colors = {
+                'X': 'red',
+                'A': 'blue', 
+                'B': 'green',
+                'C': 'orange',
+                'D': 'purple'
+            }
+            
+            # Kombinuj wszystkie kolumny wzorców (zwykłe + forming)
+            all_pattern_columns = pattern_columns + forming_pattern_columns
+            
             # Grupuj punkty według wzorców
             pattern_groups = {}
-            for col in pattern_columns:
+            for col in all_pattern_columns:
                 # Wyciągnij nazwę punktu (X, A, B, C, D)
                 parts = col.split('_')
                 if len(parts) >= 3:
@@ -813,42 +1010,70 @@ class TechnicalAnalysis:
             for point_name, columns in pattern_groups.items():
                 color = point_colors.get(point_name, 'black')
                 for col in columns:
-                    # Utwórz series tylko z wartościami nie-NaN
-                    series = df[col].dropna()
+                    # Utwórz series tylko z wartościami nie-NaN i nie-zero
+                    series = df[col].replace(0, np.nan).dropna()
                     if not series.empty:
+                        # Różne markery dla forming vs zwykłych wzorców
+                        marker = '^' if col.startswith('forming_') else 'o'
+                        alpha = 0.6 if col.startswith('forming_') else 0.8
+                        size = 120 if col.startswith('forming_') else 150
+                        
                         add_plots.append(
                             mpf.make_addplot(
-                                df[col],
+                                df[col].replace(0, np.nan),  # Zastąp 0 na NaN żeby nie rysować
                                 type='scatter',
-                                marker='o',
-                                markersize=150,
+                                marker=marker,
+                                markersize=size,
                                 color=color,
-                                alpha=0.8
+                                alpha=alpha
                             )
                         )
-                        logger.debug(f"Dodano punkt {point_name} ({col}) w kolorze {color}")
+                        pattern_type = "forming" if col.startswith('forming_') else "formed"
+                        logger.debug(f"Dodano punkt {point_name} ({pattern_type}) w kolorze {color}")
                 
         # Dodaj poziomy Fibonacciego jako linie poziome
-        if fib_columns:
-            fib_colors = ['orange', 'yellow', 'cyan', 'magenta', 'brown']
-            for i, col in enumerate(fib_columns):
-                color = fib_colors[i % len(fib_colors)]
-                # Utwórz series z poziomem Fibonacciego dla całego zakresu
-                fib_level = df[col].dropna()
-                if not fib_level.empty:
-                    # Wypełnij całą serię tym samym poziomem
-                    fib_series = pd.Series(fib_level.iloc[0], index=df.index)
-                    add_plots.append(
-                        mpf.make_addplot(
-                            fib_series,
-                            type='line',
-                            color=color,
-                            alpha=0.6,
-                            linestyle='--',
-                            width=1
+        if show_fibonacci and fib_columns:
+            # Kolory dla różnych typów poziomów Fibonacci
+            fib_type_colors = {
+                'ret': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
+                'ext': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],            # Extension - turkus do zieleni
+                'target': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']          # Target - czerwono-pomarańczowe
+            }
+            
+            # Grupuj poziomy według typu
+            fib_groups = {'ret': [], 'ext': [], 'target': []}
+            for col in fib_columns:
+                if 'ret_' in col:
+                    fib_groups['ret'].append(col)
+                elif 'ext_' in col:
+                    fib_groups['ext'].append(col)
+                elif 'target_' in col:
+                    fib_groups['target'].append(col)
+            
+            # Rysuj każdy typ poziomów
+            for fib_type, columns in fib_groups.items():
+                colors = fib_type_colors.get(fib_type, ['gray'])
+                linestyle = '--' if fib_type == 'ret' else (':' if fib_type == 'ext' else '-')
+                alpha = 0.6 if fib_type == 'ret' else (0.5 if fib_type == 'ext' else 0.8)
+                
+                for i, col in enumerate(columns):
+                    color = colors[i % len(colors)]
+                    # Utwórz series z poziomem Fibonacciego - tylko dla niepustych wartości
+                    fib_level = df[col].replace(0, np.nan).dropna()
+                    if not fib_level.empty:
+                        # Wypełnij całą serię tym samym poziomem
+                        fib_series = pd.Series(fib_level.iloc[0], index=df.index)
+                        add_plots.append(
+                            mpf.make_addplot(
+                                fib_series,
+                                type='line',
+                                color=color,
+                                alpha=alpha,
+                                linestyle=linestyle,
+                                width=1.5 if fib_type == 'target' else 1
+                            )
                         )
-                    )
-                    logger.debug(f"Dodano poziom Fibonacci {col} = {fib_level.iloc[0]} w kolorze {color}")
+                        logger.debug(f"Dodano poziom {fib_type} Fibonacci {col} = {fib_level.iloc[0]:.2f} w kolorze {color}")
         
         # Tworzenie wykresu
         fig, axes = mpf.plot(
@@ -862,191 +1087,29 @@ class TechnicalAnalysis:
             figsize=(15, 10)
         )
         
-        # Dodaj linie łączące punkty wzorców harmonicznych jeśli dostępne
-        if show_harmonic_patterns and harmonic_patterns:
-            main_ax = axes[0] if isinstance(axes, list) else axes
-            
-            for pattern in harmonic_patterns:
-                try:
-                    # Pobierz punkty wzorca
-                    points = pattern.xabcd_points
-                    
-                    # Konwertuj timestampy na daty
-                    dates = []
-                    prices = []
-                    
-                    for point_name in ['X', 'A', 'B', 'C', 'D']:
-                        if point_name in points:
-                            timestamp = points[point_name]['time']
-                            price = points[point_name]['price']
-                            
-                            # Konwertuj timestamp na datetime
-                            if isinstance(timestamp, (int, float)):
-                                date = pd.to_datetime(timestamp, unit='ms')
-                            else:
-                                date = pd.to_datetime(timestamp)
-                            
-                            dates.append(date)
-                            prices.append(price)
-                    
-                    # Narysuj linie łączące punkty wzorca
-                    if len(dates) >= 2:
-                        # Narysuj linie łączące punkty
-                        main_ax.plot(dates, prices, 
-                                   color='blue', 
-                                   linewidth=2, 
-                                   alpha=0.7,
-                                   linestyle='-')
-                        
-                        # Narysuj punkty w różnych kolorach
-                        point_colors = {
-                            'X': 'red',
-                            'A': 'blue', 
-                            'B': 'green',
-                            'C': 'orange',
-                            'D': 'purple'
-                        }
-                        
-                        # Dodaj kolorowe punkty
-                        for i, (date, price) in enumerate(zip(dates, prices)):
-                            point_names = ['X', 'A', 'B', 'C', 'D']
-                            if i < len(point_names):
-                                point_name = point_names[i]
-                                color = point_colors.get(point_name, 'black')
-                                main_ax.scatter(date, price, 
-                                              color=color, 
-                                              s=100, 
-                                              alpha=0.9,
-                                              zorder=5,
-                                              edgecolors='white',
-                                              linewidth=2)
-                                
-                                # Dodaj etykietę punktu
-                                main_ax.text(date, price, 
-                                           f' {point_name}',
-                                           fontsize=8,
-                                           ha='left',
-                                           va='bottom',
-                                           color=color,
-                                           weight='bold')
-                        
-                        # Dodaj etykietę wzorca
-                        if dates and prices:
-                            main_ax.text(dates[-1], prices[-1], 
-                                       f' {pattern.name}',
-                                       fontsize=10,
-                                       ha='left',
-                                       va='top',
-                                       bbox=dict(boxstyle="round,pad=0.3", 
-                                               facecolor='lightblue', 
-                                               alpha=0.8,
-                                               edgecolor='blue'))
-                    
-                    # Dodaj poziomy Fibonacciego jako linie poziome
-                    if pattern.fibonacci_levels:
-                        # Pobierz zakres dat dla linii poziomych
-                        x_min = df.index.min()
-                        x_max = df.index.max()
-                        
-                        # Kolory dla poziomów retracementu
-                        retracement_colors = {
-                            '0.236': '#FFD700',  # złoty
-                            '0.382': '#FF8C00',  # pomarańczowy
-                            '0.5': '#FF6347',    # czerwony
-                            '0.618': '#FF1493',  # różowy
-                            '0.786': '#9932CC'   # fioletowy
-                        }
-                        
-                        # Rysuj poziomy retracementu
-                        for level_name, level_price in pattern.fibonacci_levels.retracement.items():
-                            color = retracement_colors.get(level_name, '#808080')
-                            main_ax.axhline(y=level_price, 
-                                          color=color, 
-                                          linestyle='--', 
-                                          alpha=0.7,
-                                          linewidth=1.5)
-                            
-                            # Dodaj etykietę poziomu
-                            main_ax.text(x_max, level_price, 
-                                       f' Fib {level_name} ({level_price:.0f})',
-                                       fontsize=8,
-                                       ha='left',
-                                       va='center',
-                                       color=color,
-                                       bbox=dict(boxstyle="round,pad=0.2", 
-                                               facecolor='white', 
-                                               alpha=0.8,
-                                               edgecolor=color))
-                        
-                        # Kolory dla poziomów extension
-                        extension_colors = {
-                            '1.272': '#00CED1',  # turkusowy
-                            '1.618': '#00FF7F',  # zielony
-                            '2.0': '#32CD32',    # limonkowy
-                            '2.618': '#228B22'   # ciemnozielony
-                        }
-                        
-                        # Rysuj poziomy extension
-                        for level_name, level_price in pattern.fibonacci_levels.extension.items():
-                            color = extension_colors.get(level_name, '#696969')
-                            main_ax.axhline(y=level_price, 
-                                          color=color, 
-                                          linestyle=':', 
-                                          alpha=0.7,
-                                          linewidth=1.5)
-                            
-                            # Dodaj etykietę poziomu extension
-                            main_ax.text(x_max, level_price, 
-                                       f' Ext {level_name} ({level_price:.0f})',
-                                       fontsize=8,
-                                       ha='left',
-                                       va='center',
-                                       color=color,
-                                       bbox=dict(boxstyle="round,pad=0.2", 
-                                               facecolor='white', 
-                                               alpha=0.8,
-                                               edgecolor=color))
-                        
-                        # Kolory dla targetów
-                        target_colors = {
-                            'T1': '#FF4500',  # czerwono-pomarańczowy
-                            'T2': '#FF6347',  # pomidorowy
-                            'T3': '#FF7F50',  # koralowy
-                            'T4': '#FFA07A'   # łososiowy
-                        }
-                        
-                        # Rysuj targety
-                        for target_name, target_price in pattern.fibonacci_levels.targets.items():
-                            color = target_colors.get(target_name, '#B22222')
-                            main_ax.axhline(y=target_price, 
-                                          color=color, 
-                                          linestyle='-', 
-                                          alpha=0.8,
-                                          linewidth=2)
-                            
-                            # Dodaj etykietę targetu
-                            main_ax.text(x_min, target_price, 
-                                       f'{target_name} ({target_price:.0f}) ',
-                                       fontsize=9,
-                                       ha='right',
-                                       va='center',
-                                       color=color,
-                                       weight='bold',
-                                       bbox=dict(boxstyle="round,pad=0.3", 
-                                               facecolor='yellow', 
-                                               alpha=0.9,
-                                               edgecolor=color))
-                
-                except Exception as e:
-                    logger.warning(f"Nie udało się narysować wzorca {pattern.name}: {e}")
+        # Podsumowanie tego co zostało narysowane
+        total_indicators = sum([
+            1 if show_rsi and 'rsi' in df.columns else 0,
+            1 if show_macd and all(col in df.columns for col in ['macd', 'signal']) else 0,
+            1 if show_obv and 'obv' in df.columns else 0
+        ])
+        
+        total_patterns = len(pattern_columns) + len(forming_pattern_columns) if show_patterns else 0
+        total_fib_levels = len(fib_columns) if show_fibonacci else 0
+        
+        logger.info(f"Wykres wygenerowany: {total_indicators} wskaźników, {total_patterns} punktów wzorców, {total_fib_levels} poziomów Fibonacci")
         
         # Zapisywanie wykresu
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            logger.info(f"Wykres zapisany: {save_path}")
         
         # Konwersja do base64
         buf = BytesIO()
         plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
         plt.close(fig)
         buf.seek(0)
-        return base64.b64encode(buf.getvalue()).decode('utf-8') 
+        chart_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        
+        logger.info(f"Wykres skonwertowany do base64 ({len(chart_base64)} znaków)")
+        return chart_base64 
