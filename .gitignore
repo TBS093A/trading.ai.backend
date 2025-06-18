@@ -10,3 +10,5 @@ pump.*
 
 *.txt
 *.log
+*.json
+*.png
