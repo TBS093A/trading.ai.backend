@@ -70,62 +70,50 @@ class TechnicalAnalysis:
         Returns:
             Base64 string z wykresem
         """
+        # Konwertuj DataFrame na listę słowników dla kompatybilności z TechnicalAnalysis
+        klines_data = df.to_dict('records')
+        
+        # Dodaj wymagane pola dla klines jeśli nie istnieją
+        for i, kline in enumerate(klines_data):
+            # Dodaj timestamp jako open_time jeśli nie istnieje
+            if 'open_time' not in kline:
+                kline['open_time'] = int(df.index[i].timestamp() * 1000)
+        
         # Obliczanie wskaźników
-        rsi = self.__ta.calculate_rsi(df.to_dict('records'))
-        macd = self.__ta.calculate_macd(df.to_dict('records'))
-        obv = self.__ta.calculate_obv(df.to_dict('records'))
-        harmonic_patterns = self.__ta.calculate_harmonic_patterns_with_fibonacci(df.to_dict('records'))
+        rsi = self.__ta.calculate_rsi(klines_data)
+        macd = self.__ta.calculate_macd(klines_data)
+        obv = self.__ta.calculate_obv(klines_data)
         
-        # Przygotowanie dodatkowych paneli
-        add_plots = []
+        # Dodaj wskaźniki do klines_data
+        for i, rsi_val in enumerate(rsi):
+            klines_data[-(len(rsi)-i)]['rsi'] = rsi_val
         
-        # RSI
-        rsi_series = pd.Series(rsi, index=df.index[-len(rsi):])
-        add_plots.append(mpf.make_addplot(rsi_series, panel=1, color='purple', title='RSI'))
+        for i in range(len(macd['macd_line'])):
+            idx = -(len(macd['macd_line'])-i)
+            klines_data[idx]['macd'] = macd['macd_line'][i]
+            klines_data[idx]['signal'] = macd['signal_line'][i]
+            klines_data[idx]['histogram'] = macd['histogram'][i]
         
-        # MACD
-        macd_series = pd.Series(macd['macd_line'], index=df.index[-len(macd['macd_line']):])
-        signal_series = pd.Series(macd['signal_line'], index=df.index[-len(macd['signal_line']):])
-        add_plots.append(mpf.make_addplot(macd_series, panel=2, color='blue', title='MACD'))
-        add_plots.append(mpf.make_addplot(signal_series, panel=2, color='red'))
+        for i, obv_val in enumerate(obv):
+            klines_data[i]['obv'] = obv_val
         
-        # OBV
-        obv_series = pd.Series(obv, index=df.index[-len(obv):])
-        add_plots.append(mpf.make_addplot(obv_series, panel=3, color='green', title='OBV'))
+        # Oblicz wzorce harmoniczne (dodaje je do klines_data)
+        patterns_count = self.__ta.calculate_harmonic_patterns_with_fibonacci(klines_data)
         
-        # Style wykresu
-        style = mpf.make_mpf_style(
-            base_mpf_style='charles',
-            gridstyle='',
-            y_on_right=False,
-            marketcolors=mpf.make_marketcolors(
-                up='green',
-                down='red',
-                edge='inherit',
-                wick='inherit',
-                volume='in'
-            )
+        # Użyj nowej funkcji create_candlestick_chart do generowania wykresu
+        # Wszystkie wskaźniki i wzorce są już w klines_data
+        chart_base64 = self.__ta.create_candlestick_chart(
+            klines_data,
+            title=f"{analysis['asset']}/{analysis['quote']} - Analiza Techniczna",
+            show_fibonacci=True,
+            show_patterns=True,
+            show_rsi=True,
+            show_macd=True,
+            show_obv=True
         )
         
-        # Generowanie wykresu
-        fig, axes = mpf.plot(
-            df,
-            type='candle',
-            style=style,
-            title=f'\n{analysis["asset"]}/{analysis["quote"]} - Analiza Techniczna',
-            volume=True,
-            addplot=add_plots,
-            panel_ratios=(3,1,1,1),
-            returnfig=True
-        )
-        
-        # Konwersja do base64
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight')
-        buf.seek(0)
-        img_str = base64.b64encode(buf.read()).decode('utf-8')
-        
-        return img_str
+        logger.info(f"Wygenerowano wykres z {patterns_count} wzorcami harmonicznymi")
+        return chart_base64
 
     async def analyze_message(self, message: str, image: Optional[Union[str, bytes]] = None) -> Optional[Dict]:
         """

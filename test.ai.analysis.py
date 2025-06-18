@@ -129,135 +129,160 @@ class TestTechnicalAnalysis(unittest.TestCase):
 
     def test_calculate_harmonic_patterns(self):
         """Test obliczania wzorców harmonicznych"""
-        # Obliczenie wzorców harmonicznych
-        patterns = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Obliczenie wzorców harmonicznych (teraz zwraca liczbę wzorców i modyfikuje klines)
+        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
         
-        # Generowanie i zapisywanie wykresu z wzorcami harmonicznymi
+        # Generowanie i zapisywanie wykresu (wzorce są już w klines)
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns.png")
-        self.__ta.create_candlestick_chart(
+        chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Harmonic Patterns - BTC/USDT 1W",
-            show_harmonic_patterns=True,
-            harmonic_patterns=patterns
+            title="Test Harmonic Patterns - BTC/USDT 1W"
         )
         
-        self.assertIsInstance(patterns, list)
-        if len(patterns) > 0:
-            pattern = patterns[0]
-            print(f"Wzorzec: nazwa='{pattern.name}' (typ: {type(pattern.name)})")
-            
-            # Wyświetl informacje o wzorcu
-            for point_name, point_data in pattern.xabcd_points.items():
-                readable_time = self.__ta._timestamp_to_datetime(point_data['time'])
-                print(f'pattern_{point_name}: cena={point_data["price"]}, czas={readable_time}')
-            
-            for level_name, level_price in pattern.fibonacci_levels.retracement.items():
-                print(f'fib_{level_name}: {level_price}')
-            
-            # Testy asercji
-            self.assertIsInstance(pattern.name, str)
-            self.assertIsInstance(pattern.xabcd_points, dict)
-            self.assertIsInstance(pattern.fibonacci_levels, object)
-            self.assertIsInstance(pattern.direction, str)
-            self.assertIsInstance(pattern.completion_zone, tuple)
-            self.assertIsInstance(pattern.formed, bool)
-            self.assertIsInstance(pattern.tolerance, float)
-            
-            # Sprawdź czy nazwa wzorca jest niepusta
-            self.assertTrue(len(pattern.name) > 0)
-            
-            # Sprawdź czy punkty XABCD są poprawnie ustawione
-            required_points = ["X", "A", "B", "C", "D"]
-            for point in required_points:
-                self.assertIn(point, pattern.xabcd_points)
-                point_data = pattern.xabcd_points[point]
-                self.assertIsInstance(point_data, dict)
-                self.assertIn("price", point_data)
-                self.assertIn("time", point_data)
-                self.assertIsInstance(point_data["price"], (int, float))
-                
-                # Sprawdź czy time jest int, float lub pandas Timestamp
-                time_value = point_data["time"]
-                time_type = type(time_value)
-                print(f"Punkt {point}: time={time_value}, typ={time_type}")
-                
-                # Sprawdź różne możliwe typy timestamp
-                is_valid_time = (
-                    isinstance(time_value, (int, float)) or
-                    hasattr(time_value, 'timestamp') or  # pandas Timestamp
-                    str(time_type).startswith("<class 'pandas._libs.tslibs.timestamps.Timestamp") or
-                    str(time_type).startswith("<class 'pandas._libs.tslibs.nattype.NaTType") == False  # nie NaT
-                )
-                self.assertTrue(is_valid_time, f"Nieprawidłowy typ time dla punktu {point}: {time_type}")
+        # Sprawdź czy zwrócono liczbę wzorców
+        self.assertIsInstance(patterns_count, int)
+        self.assertGreaterEqual(patterns_count, 0)
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+                    print(f"Znaleziono punkt wzorca: {key} = {kline[key]}")
+        
+        if patterns_count > 0:
+            self.assertTrue(len(pattern_keys) > 0, "Punkty wzorców powinny być dodane do klines")
+            
+            # Sprawdź strukturę danych wzorców w klines
+            for kline in self.klines:
+                for key in kline.keys():
+                    if key.startswith('pattern_') and key.endswith('_price'):
+                        # Sprawdź czy punkt ma odpowiednie dodatkowe informacje
+                        base_key = key.replace('_price', '')
+                        
+                        # Sprawdź czy istnieją powiązane klucze
+                        name_key = base_key + '_name'
+                        type_key = base_key + '_type'
+                        bullish_key = base_key + '_bullish'
+                        
+                        if name_key in kline:
+                            self.assertIsInstance(kline[name_key], str)
+                            print(f"Nazwa wzorca: {kline[name_key]}")
+                        
+                        if type_key in kline:
+                            self.assertIsInstance(kline[type_key], str)
+                            print(f"Typ wzorca: {kline[type_key]}")
+                        
+                        if bullish_key in kline:
+                            self.assertIsInstance(kline[bullish_key], bool)
+                            print(f"Bullish: {kline[bullish_key]}")
+                        
+                        # Sprawdź cenę punktu
+                        self.assertIsInstance(kline[key], (int, float))
+                        print(f"Cena punktu: {kline[key]}")
+        
+        print(f"Znaleziono {patterns_count} wzorców harmonicznych")
 
     def test_calculate_harmonic_patterns_forming(self):
         """Test obliczania wzorców harmonicznych w trakcie formowania się"""
-        # Obliczenie wzorców w trakcie formowania
-        forming_patterns = self.__ta.calculate_harmonic_patterns_forming(self.klines)
+        # Obliczenie wzorców w trakcie formowania (teraz zwraca liczbę wzorców i modyfikuje klines)
+        forming_patterns_count = self.__ta.calculate_harmonic_patterns_forming(self.klines)
         
-        # Generowanie i zapisywanie wykresu z wzorcami w trakcie formowania
+        # Generowanie i zapisywanie wykresu (wzorce forming są już w klines)
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_forming.png")
-        self.__ta.create_candlestick_chart(
+        chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Forming Harmonic Patterns - BTC/USDT 1W",
-            show_harmonic_patterns=True,
-            harmonic_patterns=forming_patterns
+            title="Test Forming Harmonic Patterns - BTC/USDT 1W"
         )
         
-        self.assertIsInstance(forming_patterns, list)
-        if len(forming_patterns) > 0:
-            pattern = forming_patterns[0]
-            
-            # Wyświetl informacje o wzorcu w trakcie formowania
-            print(f"Wzorzec w trakcie formowania: {pattern.name}")
-            for point_name, point_data in pattern.xabcd_points.items():
-                readable_time = self.__ta._timestamp_to_datetime(point_data['time'])
-                print(f'forming_pattern_{point_name}: cena={point_data["price"]}, czas={readable_time}')
-            
-            for level_name, level_price in pattern.fibonacci_levels.retracement.items():
-                print(f'forming_fib_{level_name}: {level_price}')
-            
-            # Testy asercji
-            self.assertIsInstance(pattern.name, str)
-            self.assertIsInstance(pattern.xabcd_points, dict)
-            self.assertIsInstance(pattern.fibonacci_levels, object)
-            self.assertIsInstance(pattern.direction, str)
-            self.assertIsInstance(pattern.completion_zone, tuple)
-            self.assertIsInstance(pattern.formed, bool)
-            self.assertIsInstance(pattern.tolerance, float)
+        # Sprawdź czy zwrócono liczbę wzorców
+        self.assertIsInstance(forming_patterns_count, int)
+        self.assertGreaterEqual(forming_patterns_count, 0)
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy punkty wzorców forming zostały dodane do klines
+        forming_pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('forming_pattern_') and key.endswith('_price'):
+                    forming_pattern_keys.append(key)
+                    print(f"Znaleziono punkt forming wzorca: {key} = {kline[key]}")
+        
+        if forming_patterns_count > 0:
+            self.assertTrue(len(forming_pattern_keys) > 0, "Punkty forming wzorców powinny być dodane do klines")
+            
+            # Sprawdź strukturę danych forming wzorców w klines
+            for kline in self.klines:
+                for key in kline.keys():
+                    if key.startswith('forming_pattern_') and key.endswith('_price'):
+                        # Sprawdź czy punkt ma odpowiednie dodatkowe informacje
+                        base_key = key.replace('_price', '')
+                        
+                        # Sprawdź czy istnieją powiązane klucze
+                        name_key = base_key + '_name'
+                        type_key = base_key + '_type'
+                        bullish_key = base_key + '_bullish'
+                        
+                        if name_key in kline:
+                            self.assertIsInstance(kline[name_key], str)
+                            print(f"Nazwa forming wzorca: {kline[name_key]}")
+                        
+                        if type_key in kline:
+                            self.assertIsInstance(kline[type_key], str)
+                            print(f"Typ forming wzorca: {kline[type_key]}")
+                        
+                        if bullish_key in kline:
+                            self.assertIsInstance(kline[bullish_key], bool)
+                            print(f"Forming Bullish: {kline[bullish_key]}")
+                        
+                        # Sprawdź cenę punktu
+                        self.assertIsInstance(kline[key], (int, float))
+                        print(f"Cena forming punktu: {kline[key]}")
+        
+        print(f"Znaleziono {forming_patterns_count} wzorców forming")
 
     def test_harmonic_patterns_visualization(self):
         """Test wizualizacji wzorców harmonicznych na wykresie"""
-        # Obliczenie wszystkich typów wzorców
-        formed_patterns = self.__ta.calculate_harmonic_patterns(self.klines)
-        forming_patterns = self.__ta.calculate_harmonic_patterns_forming(self.klines)
-        
-        # Połącz wszystkie wzorce do wizualizacji
-        all_patterns = formed_patterns + forming_patterns
+        # Obliczenie wszystkich typów wzorców (teraz modyfikują klines)
+        formed_patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        forming_patterns_count = self.__ta.calculate_harmonic_patterns_forming(self.klines)
         
         # Wyświetl informacje o wzorcach
-        if formed_patterns:
-            print(f"Znaleziono {len(formed_patterns)} uformowanych wzorców:")
-            for i, pattern in enumerate(formed_patterns[:3]):  # Pokaż pierwsze 3
-                print(f"  {i+1}. {pattern.name} ({pattern.direction}) - uformowany: {pattern.formed}")
+        print(f"Znaleziono {formed_patterns_count} uformowanych wzorców")
+        print(f"Znaleziono {forming_patterns_count} wzorców w trakcie formowania")
         
-        if forming_patterns:
-            print(f"Znaleziono {len(forming_patterns)} wzorców w trakcie formowania:")
-            for i, pattern in enumerate(forming_patterns[:3]):  # Pokaż pierwsze 3
-                print(f"  {i+1}. {pattern.name} ({pattern.direction}) - uformowany: {pattern.formed}")
+        # Zlicz wszystkie punkty wzorców w klines
+        pattern_points = 0
+        forming_pattern_points = 0
         
-        # Generowanie wykresu z wszystkimi wzorcami
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_points += 1
+                elif key.startswith('forming_pattern_') and key.endswith('_price'):
+                    forming_pattern_points += 1
+        
+        print(f"Znaleziono {pattern_points} punktów zwykłych wzorców w klines")
+        print(f"Znaleziono {forming_pattern_points} punktów forming wzorców w klines")
+        
+        # Generowanie wykresu z wszystkimi wzorcami (które są już w klines)
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_visualization.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns Visualization - BTC/USDT 1W",
-            show_harmonic_patterns=True,
-            harmonic_patterns=all_patterns
+            title="Harmonic Patterns Visualization - BTC/USDT 1W"
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -271,6 +296,10 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.assertTrue(len(decoded) > 0)
         except Exception as e:
             self.fail(f"Nieprawidłowy format base64: {e}")
+        
+        # Sprawdź czy wzorce zostały znalezione
+        total_patterns = formed_patterns_count + forming_patterns_count
+        self.assertGreaterEqual(total_patterns, 0)
 
     def test_harmonic_patterns_with_indicators(self):
         """Test wzorców harmonicznych z wskaźnikami technicznymi"""
@@ -292,17 +321,15 @@ class TestTechnicalAnalysis(unittest.TestCase):
         for i, obv in enumerate(obv_values):
             self.klines[i]['obv'] = obv
         
-        # Obliczenie wzorców harmonicznych
-        patterns = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Obliczenie wzorców harmonicznych (modyfikuje klines)
+        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
         
         # Generowanie kompleksowego wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns + Technical Indicators - BTC/USDT 1W",
-            show_harmonic_patterns=True,
-            harmonic_patterns=patterns
+            title="Harmonic Patterns + Technical Indicators - BTC/USDT 1W"
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -316,8 +343,28 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(len(obv_values) > 0)
         
         # Sprawdź czy wzorce zostały obliczone
-        self.assertIsInstance(patterns, list)
-        print(f"Znaleziono {len(patterns)} wzorców harmonicznych z wskaźnikami technicznymi")
+        self.assertIsInstance(patterns_count, int)
+        self.assertGreaterEqual(patterns_count, 0)
+        print(f"Znaleziono {patterns_count} wzorców harmonicznych z wskaźnikami technicznymi")
+        
+        # Sprawdź czy wzorce i wskaźniki są razem w klines
+        indicators_found = False
+        patterns_found = False
+        
+        for kline in self.klines:
+            # Sprawdź wskaźniki
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+            
+            # Sprawdź wzorce
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        if patterns_count > 0:
+            self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
 
 class TestAITechnicalAnalysis(unittest.TestCase):
     def setUp(self):
