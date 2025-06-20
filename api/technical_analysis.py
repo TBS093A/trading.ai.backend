@@ -110,15 +110,17 @@ class TechnicalAnalysis:
             'hard_restricted': 0.03,
             'restricted': 0.05,
             'normal': 0.1,
-            'loose': 0.2,
-            'very_loose': 1.0,
+            'loose': 0.15
         },
         peak_spacing_strategy: dict[str, int] = {
             'huge': 10,
+            'middle-huge-large': 9,
             'large': 8,
+            'middle-large-medium': 7,
             'medium': 6,
+            'middle-medium-small': 5,
             'small': 4,
-            'tiny': 2
+            'middle-small-tiny': 3,
         },
         check_anchor: bool = True
     ) -> int:
@@ -160,7 +162,6 @@ class TechnicalAnalysis:
                 )
 
                 # Wykonaj wyszukiwanie wzorców
-
                 for fib_tolerance_strategy_name, fib_tolerance in fib_tolerance_strategy.items():
                     logger.info(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
                     harmonic_search = HarmonicSearch(
@@ -236,26 +237,145 @@ class TechnicalAnalysis:
                                     continue
 
                                 # Nanieś punkty na odpowiednie świece
+                                pattern_points = {}  # Zbieranie punktów dla obliczenia proporcji
+                                
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
                                     if i >= len(point_names):
                                         break
 
                                     kline_idx = find_kline_index(x_point)
                                     point_name = point_names[i]
+                                    
+                                    # Zapisz punkt do obliczenia proporcji
+                                    pattern_points[point_name] = float(y_point)
 
-                                    # Dodaj informacje o punkcie do świecy
-                                    klines[kline_idx][f'pattern_{point_name}_price'] = float(y_point)
-                                    klines[kline_idx][f'pattern_{point_name}_name'] = pattern_name
-                                    klines[kline_idx][f'pattern_{point_name}_type'] = str(pattern.name)
-                                    klines[kline_idx][f'pattern_{point_name}_bullish'] = bool(pattern.bullish)
-                                    klines[kline_idx][f'pattern_{point_name}_fib_tolerance_strategy'] = fib_tolerance_strategy_name
-                                    klines[kline_idx][f'pattern_{point_name}_fib_tolerance'] = fib_tolerance
-                                    klines[kline_idx][f'pattern_{point_name}_peak_spacing_strategy'] = peak_spacing_strategy_name
-                                    klines[kline_idx][f'pattern_{point_name}_peak_spacing'] = peak_spacing
+                                    # Dodaj informacje o punkcie do świecy w nowej strukturze + kompatybilnej ze starą
+                                    klines[kline_idx]['patterns'] = {
+                                        f'{patterns_count}': {
+                                            f'pattern_id': patterns_count,
+                                            f'pattern_point_name': point_name,
+                                            f'pattern_point_price': float(y_point),
+                                            f'pattern_name': pattern_name,
+                                            f'pattern_type': str(pattern.name),
+                                            f'pattern_is_bullish': bool(pattern.bullish),
+                                            f'pattern_is_formed': bool(pattern.formed),
+                                            f'pattern_completion_max_price': float(pattern.completion_max_price),
+                                            f'pattern_completion_min_price': float(pattern.completion_min_price),
+                                            f'pattern_fib_tolerance_strategy': fib_tolerance_strategy_name,
+                                            f'pattern_fib_tolerance': fib_tolerance,
+                                            f'pattern_peak_spacing_strategy': peak_spacing_strategy_name,
+                                            f'pattern_peak_spacing': peak_spacing,
+                                        }
+                                    }
 
-                                    logger.debug(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
+                                # Oblicz proporcje między punktami
+                                proportions = {}
+                                if len(pattern_points) >= 4:  # Przynajmniej ABCD
+                                    
+                                    # Oblicz proporcje dla wzorców XABCD
+                                    if 'X' in pattern_points and 'A' in pattern_points and 'B' in pattern_points:
+                                        xa_distance = abs(pattern_points['A'] - pattern_points['X'])
+                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
+                                        if xa_distance != 0:
+                                            proportions['AB_XA_ratio'] = ab_distance / xa_distance
+                                    
+                                    if 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points:
+                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
+                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
+                                        if ab_distance != 0:
+                                            proportions['BC_AB_ratio'] = bc_distance / ab_distance
+                                    
+                                    if 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points:
+                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
+                                        cd_distance = abs(pattern_points['D'] - pattern_points['C'])
+                                        if bc_distance != 0:
+                                            proportions['CD_BC_ratio'] = cd_distance / bc_distance
+                                    
+                                    if 'X' in pattern_points and 'A' in pattern_points and 'D' in pattern_points:
+                                        xa_distance = abs(pattern_points['A'] - pattern_points['X'])
+                                        xd_distance = abs(pattern_points['D'] - pattern_points['X'])
+                                        if xa_distance != 0:
+                                            proportions['XD_XA_ratio'] = xd_distance / xa_distance
+                                    
+                                    # Oblicz proporcje dla wzorców ABCD (bez X)
+                                    elif len(pattern_points) == 4 and 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points:
+                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
+                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
+                                        cd_distance = abs(pattern_points['D'] - pattern_points['C'])
+                                        ad_distance = abs(pattern_points['D'] - pattern_points['A'])
+                                        
+                                        if ab_distance != 0:
+                                            proportions['BC_AB_ratio'] = bc_distance / ab_distance
+                                        if bc_distance != 0:
+                                            proportions['CD_BC_ratio'] = cd_distance / bc_distance
+                                        if ab_distance != 0:
+                                            proportions['AD_AB_ratio'] = ad_distance / ab_distance
+                                    
+                                    # Dodaj proporcje do wzorca w zagnieżdżonej strukturze
+                                    if proportions:
+                                        first_kline_idx = find_kline_index(x_points[0])
+                                        
+                                        # Upewnij się że istnieje struktura patterns
+                                        if 'patterns' not in klines[first_kline_idx]:
+                                            klines[first_kline_idx]['patterns'] = {}
+                                        if f'{patterns_count}' not in klines[first_kline_idx]['patterns']:
+                                            klines[first_kline_idx]['patterns'][f'{patterns_count}'] = {}
+                                        
+                                        for prop_name, prop_value in proportions.items():
+                                            logger.info(f"Dodano proporcję {prop_name} = {prop_value:.4f} do wzorca {patterns_count}")
+                                
+                                # Alternatywne obliczanie proporcji na podstawie już dodanych punktów w klines
+                                # Wykorzystuje pattern_id i pattern_point_name do znajdowania punktów tego samego wzorca
+                                if not proportions and len(pattern_points) >= 3:  # Jeśli nie udało się wcześniej obliczyć
+                                    logger.info(f"Obliczanie proporcji na podstawie dodanych punktów w klines dla wzorca {patterns_count}")
+                                    
+                                    # Znajdź wszystkie punkty tego wzorca w klines
+                                    pattern_kline_points = {}
+                                    for kline_idx, kline in enumerate(klines):
+                                        if 'patterns' in kline:
+                                            for pattern_id, pattern_info in kline['patterns'].items():
+                                                if pattern_id == f'{patterns_count}' and 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
+                                                    point_name = pattern_info['pattern_point_name']
+                                                    point_price = pattern_info['pattern_point_price']
+                                                    pattern_kline_points[point_name] = point_price
+                                    
+                                    logger.debug(f"Znalezione punkty w klines dla wzorca {patterns_count}: {pattern_kline_points}")
+                                    
+                                    # Oblicz proporcje na podstawie znalezionych punktów
+                                    if len(pattern_kline_points) >= 4:
+                                        # Proporcje XABCD
+                                        if 'X' in pattern_kline_points and 'A' in pattern_kline_points and 'B' in pattern_kline_points:
+                                            xa_distance = abs(pattern_kline_points['A'] - pattern_kline_points['X'])
+                                            ab_distance = abs(pattern_kline_points['B'] - pattern_kline_points['A'])
+                                            if xa_distance != 0:
+                                                proportions['AB_XA_ratio'] = ab_distance / xa_distance
+                                        
+                                        if 'A' in pattern_kline_points and 'B' in pattern_kline_points and 'C' in pattern_kline_points:
+                                            ab_distance = abs(pattern_kline_points['B'] - pattern_kline_points['A'])
+                                            bc_distance = abs(pattern_kline_points['C'] - pattern_kline_points['B'])
+                                            if ab_distance != 0:
+                                                proportions['BC_AB_ratio'] = bc_distance / ab_distance
+                                        
+                                        if 'B' in pattern_kline_points and 'C' in pattern_kline_points and 'D' in pattern_kline_points:
+                                            bc_distance = abs(pattern_kline_points['C'] - pattern_kline_points['B'])
+                                            cd_distance = abs(pattern_kline_points['D'] - pattern_kline_points['C'])
+                                            if bc_distance != 0:
+                                                proportions['CD_BC_ratio'] = cd_distance / bc_distance
+                                        
+                                        if 'X' in pattern_kline_points and 'A' in pattern_kline_points and 'D' in pattern_kline_points:
+                                            xa_distance = abs(pattern_kline_points['A'] - pattern_kline_points['X'])
+                                            xd_distance = abs(pattern_kline_points['D'] - pattern_kline_points['X'])
+                                            if xa_distance != 0:
+                                                proportions['XD_XA_ratio'] = xd_distance / xa_distance
+                                        
+                                        logger.info(f"Obliczono {len(proportions)} proporcji na podstawie klines dla wzorca {patterns_count}")
+                                        for prop_name, prop_value in proportions.items():
+                                            logger.info(f"Proporcja z klines: {prop_name} = {prop_value:.4f}")
+                                elif len(pattern_points) >= 3:
+                                    logger.debug(f"Wzorzec {patterns_count} ma tylko {len(pattern_points)} punktów - za mało dla proporcji")
 
                                 # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
+                                fibonacci_levels = {}
                                 if len(y_points) >= 2:
                                     first_kline_idx = find_kline_index(x_points[0])
 
@@ -271,20 +391,44 @@ class TechnicalAnalysis:
                                         is_uptrend=is_uptrend
                                     )
 
-                                    # Dodaj poziomy do pierwszej świecy wzorca
-                                    for level_name, level_price in fib_levels.retracement.items():
-                                        klines[first_kline_idx][f'fib_ret_{level_name}_{pattern_name}'] = float(level_price)
+                                    # Upewnij się że istnieje struktura patterns
+                                    if 'patterns' not in klines[first_kline_idx]:
+                                        klines[first_kline_idx]['patterns'] = {}
+                                    if f'{patterns_count}' not in klines[first_kline_idx]['patterns']:
+                                        klines[first_kline_idx]['patterns'][f'{patterns_count}'] = {}
 
-                                    for level_name, level_price in fib_levels.extension.items():
-                                        klines[first_kline_idx][f'fib_ext_{level_name}_{pattern_name}'] = float(level_price)
+                                    # Dodaj poziomy Fibonacciego do wzorca w zagnieżdżonej strukturze
+                                    fibonacci_levels = {
+                                        'retracement': fib_levels.retracement,
+                                        'extension': fib_levels.extension, 
+                                        'targets': fib_levels.targets
+                                    }
 
-                                    for target_name, target_price in fib_levels.targets.items():
-                                        klines[first_kline_idx][f'fib_target_{target_name}_{pattern_name}'] = float(target_price)
+                                # Teraz dodaj proporcje i fibonacci do każdego punktu tego wzorca
+                                for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
+                                    if i >= len(point_names):
+                                        break
+                                        
+                                    kline_idx = find_kline_index(x_point)
+                                    
+                                    # Dodaj proporcje do tego punktu wzorca
+                                    if proportions:
+                                        klines[kline_idx]['patterns'][f'{patterns_count}']['proportions'] = proportions
+                                    
+                                    # Dodaj fibonacci do tego punktu wzorca
+                                    if fibonacci_levels:
+                                        klines[kline_idx]['patterns'][f'{patterns_count}']['fibonacci'] = fibonacci_levels
+
+                                    logger.info(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: {str(klines[kline_idx]).replace(',', ',\n')}")
+                                
+                                
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z {len(proportions)} proporcjami i {len(fibonacci_levels)} poziomami Fibonacci")
 
                                 patterns_count += 1
 
                             except Exception as e:
                                 logger.warning(f"Błąd podczas przetwarzania wzorca {pattern_idx}: {e}")
+                                logger.error(traceback.format_exc())
                                 continue
 
             logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
@@ -406,11 +550,18 @@ class TechnicalAnalysis:
                             kline_idx = find_kline_index(x_point)
                             point_name = point_names[i]
                             
-                            # Dodaj informacje o punkcie do świecy (z prefiksem forming_)
-                            klines[kline_idx][f'forming_pattern_{point_name}_price'] = float(y_point)
-                            klines[kline_idx][f'forming_pattern_{point_name}_name'] = pattern_name
-                            klines[kline_idx][f'forming_pattern_{point_name}_type'] = str(pattern.name)
-                            klines[kline_idx][f'forming_pattern_{point_name}_bullish'] = bool(pattern.bullish)
+                            # Dodaj informacje o punkcie do świecy w nowej zagnieżdżonej strukturze
+                            if 'forming_patterns' not in klines[kline_idx]:
+                                klines[kline_idx]['forming_patterns'] = {}
+                            
+                            klines[kline_idx]['forming_patterns'][f'{patterns_count}'] = {
+                                'pattern_id': patterns_count,
+                                'pattern_point_name': point_name,
+                                'pattern_point_price': float(y_point),
+                                'pattern_name': pattern_name,
+                                'pattern_type': str(pattern.name),
+                                'pattern_is_bullish': bool(pattern.bullish),
+                            }
                             
                             logger.debug(f"Dodano forming punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
                         
@@ -770,18 +921,81 @@ class TechnicalAnalysis:
             )
             panel += 1
             
-        # Dodanie wzorców harmonicznych i poziomów Fibonacciego
-        pattern_columns = [col for col in df.columns if col.startswith('pattern_') and col.endswith('_price')]
-        forming_pattern_columns = [col for col in df.columns if col.startswith('forming_pattern_') and col.endswith('_price')]
-        fib_columns = [col for col in df.columns if col.startswith('fib_')]
+        # Przygotowanie danych wzorców harmonicznych z nowej zagnieżdżonej struktury
+        # Przeszukaj klines aby znaleźć wzorce w nowej strukturze
+        patterns_data = []
+        forming_patterns_data = []
+        fibonacci_data = []
+        proportions_data = []
         
-        logger.info(f"Znalezione kolumny wzorców: {len(pattern_columns)} zwykłych, {len(forming_pattern_columns)} forming")
-        logger.info(f"Znalezione kolumny Fibonacci: {len(fib_columns)}")
-        logger.debug(f"Szczegóły wzorców: {pattern_columns + forming_pattern_columns}")
-        logger.debug(f"Szczegóły Fibonacci: {fib_columns}")
+        for i, kline in enumerate(klines):
+            # Wzorce formed
+            if 'patterns' in kline:
+                for pattern_id, pattern_info in kline['patterns'].items():
+                    if 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
+                        patterns_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'point_name': pattern_info['pattern_point_name'],
+                            'price': pattern_info['pattern_point_price'],
+                            'pattern_name': pattern_info.get('pattern_name', ''),
+                            'pattern_type': pattern_info.get('pattern_type', ''),
+                            'is_bullish': pattern_info.get('pattern_is_bullish', False),
+                            'is_formed': pattern_info.get('pattern_is_formed', False),
+                            'tolerance_strategy': pattern_info.get('pattern_fib_tolerance_strategy', ''),
+                            'tolerance': pattern_info.get('pattern_fib_tolerance', 0),
+                        })
+                    
+                    # Fibonacci levels
+                    if 'fibonacci' in pattern_info:
+                        fibonacci_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'fibonacci': pattern_info['fibonacci']
+                        })
+                    
+                    # Proportions
+                    if 'proportions' in pattern_info:
+                        proportions_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'proportions': pattern_info['proportions']
+                        })
+            
+            # Wzorce forming
+            if 'forming_patterns' in kline:
+                for pattern_id, pattern_info in kline['forming_patterns'].items():
+                    if 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
+                        forming_patterns_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'point_name': pattern_info['pattern_point_name'],
+                            'price': pattern_info['pattern_point_price'],
+                            'pattern_name': pattern_info.get('pattern_name', ''),
+                            'pattern_type': pattern_info.get('pattern_type', ''),
+                            'is_bullish': pattern_info.get('pattern_is_bullish', False),
+                        })
+        
+        logger.info(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
+        logger.info(f"Znalezione poziomy Fibonacci: {len(fibonacci_data)}")
+        logger.info(f"Znalezione proporcje: {len(proportions_data)}")
+        
+        # Wyświetl szczegółowe informacje o wzorcach
+        if patterns_data:
+            logger.info("Szczegóły znalezionych wzorców:")
+            for pattern in patterns_data[:5]:  # Pokaż pierwsze 5
+                logger.info(f"Wzorzec {pattern['pattern_id']}: {pattern['point_name']} @ {pattern['price']:.2f} - {pattern['pattern_name']}")
+        
+        # Wyświetl informacje o proporcjach
+        if proportions_data:
+            logger.info("Znalezione proporcje wzorców:")
+            for prop_data in proportions_data[:5]:  # Pokaż pierwsze 5
+                for prop_name, prop_value in prop_data['proportions'].items():
+                    logger.info(f"Wzorzec {prop_data['pattern_id']}: {prop_name} = {prop_value:.4f}")
+                    break  # Tylko jedna na wzorzec dla czytelności
         
         # Dodaj punkty wzorców harmonicznych jako scatter plots
-        if show_patterns and (pattern_columns or forming_pattern_columns):
+        if show_patterns and (patterns_data or forming_patterns_data):
             # Kolory dla punktów wzorców harmonicznych
             point_colors = {
                 'X': 'red',
@@ -791,88 +1005,128 @@ class TechnicalAnalysis:
                 'D': 'purple'
             }
             
-            # Kombinuj wszystkie kolumny wzorców (zwykłe + forming)
-            all_pattern_columns = pattern_columns + forming_pattern_columns
+            # Przygotuj serie danych dla każdego typu punktu
+            point_series = {}
             
-            # Grupuj punkty według wzorców
-            pattern_groups = {}
-            for col in all_pattern_columns:
-                # Wyciągnij nazwę punktu (X, A, B, C, D)
-                parts = col.split('_')
-                if len(parts) >= 3:
-                    point_name = parts[-2]  # np. 'X', 'A', 'B', 'C', 'D'
-                    if point_name not in pattern_groups:
-                        pattern_groups[point_name] = []
-                    pattern_groups[point_name].append(col)
-            
-            # Dodaj każdy typ punktu jako osobny scatter plot
-            for point_name, columns in pattern_groups.items():
-                color = point_colors.get(point_name, 'black')
-                for col in columns:
-                    # Utwórz series tylko z wartościami nie-NaN i nie-zero
-                    series = df[col].replace(0, np.nan).dropna()
-                    if not series.empty:
-                        # Różne markery dla forming vs zwykłych wzorców
-                        marker = '^' if col.startswith('forming_') else 'o'
-                        alpha = 0.6 if col.startswith('forming_') else 0.8
-                        size = 120 if col.startswith('forming_') else 150
-                        
-                        add_plots.append(
-                            mpf.make_addplot(
-                                df[col].replace(0, np.nan),  # Zastąp 0 na NaN żeby nie rysować
-                                type='scatter',
-                                marker=marker,
-                                markersize=size,
-                                color=color,
-                                alpha=alpha
-                            )
-                        )
-                        pattern_type = "forming" if col.startswith('forming_') else "formed"
-                        logger.debug(f"Dodano punkt {point_name} ({pattern_type}) w kolorze {color}")
+            # Przetwórz wzorce formed
+            for pattern in patterns_data:
+                point_name = pattern['point_name']
+                if point_name not in point_series:
+                    point_series[point_name] = {
+                        'formed': pd.Series(index=df.index, dtype=float),
+                        'forming': pd.Series(index=df.index, dtype=float),
+                        'properties': []
+                    }
                 
+                # Dodaj punkt do odpowiedniej serii
+                point_series[point_name]['formed'].iloc[pattern['index']] = pattern['price']
+                point_series[point_name]['properties'].append({
+                    'index': pattern['index'],
+                    'is_bullish': pattern['is_bullish'],
+                    'tolerance': pattern['tolerance'],
+                    'pattern_name': pattern['pattern_name'],
+                    'is_forming': False
+                })
+            
+            # Przetwórz wzorce forming
+            for pattern in forming_patterns_data:
+                point_name = pattern['point_name']
+                if point_name not in point_series:
+                    point_series[point_name] = {
+                        'formed': pd.Series(index=df.index, dtype=float),
+                        'forming': pd.Series(index=df.index, dtype=float),
+                        'properties': []
+                    }
+                
+                # Dodaj punkt do odpowiedniej serii
+                point_series[point_name]['forming'].iloc[pattern['index']] = pattern['price']
+                point_series[point_name]['properties'].append({
+                    'index': pattern['index'],
+                    'is_bullish': pattern['is_bullish'],
+                    'pattern_name': pattern['pattern_name'],
+                    'is_forming': True
+                })
+            
+            # Rysuj punkty dla każdego typu
+            for point_name, data in point_series.items():
+                base_color = point_colors.get(point_name, 'black')
+                
+                # Rysuj formed patterns
+                formed_series = data['formed'].dropna()
+                if not formed_series.empty:
+                    add_plots.append(
+                        mpf.make_addplot(
+                            data['formed'].replace(0, np.nan),
+                            type='scatter',
+                            marker='o',
+                            markersize=150,
+                            color=base_color,
+                            alpha=0.8
+                        )
+                    )
+                    logger.debug(f"Dodano {len(formed_series)} punktów {point_name} (formed) w kolorze {base_color}")
+                
+                # Rysuj forming patterns
+                forming_series = data['forming'].dropna()
+                if not forming_series.empty:
+                    add_plots.append(
+                        mpf.make_addplot(
+                            data['forming'].replace(0, np.nan),
+                            type='scatter',
+                            marker='^',
+                            markersize=120,
+                            color=base_color,
+                            alpha=0.6
+                        )
+                    )
+                    logger.debug(f"Dodano {len(forming_series)} punktów {point_name} (forming) w kolorze {base_color}")
+                
+        # Dodaj legendę/adnotacje dla wzorców
+        if show_patterns and patterns_data:
+            # Znajdź wzorce z ich nazwami do wyświetlenia w tytule wykresu
+            pattern_names = set()
+            for pattern in patterns_data:
+                if pattern['pattern_name']:
+                    pattern_names.add(pattern['pattern_name'].split('_')[0])  # Tylko nazwa wzorca bez parametrów
+                            
+            if pattern_names:
+                title += f" | Wzorce: {', '.join(sorted(pattern_names))}"
+        
         # Dodaj poziomy Fibonacciego jako linie poziome
-        if show_fibonacci and fib_columns:
+        if show_fibonacci and fibonacci_data:
             # Kolory dla różnych typów poziomów Fibonacci
             fib_type_colors = {
-                'ret': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
-                'ext': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],            # Extension - turkus do zieleni
-                'target': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']          # Target - czerwono-pomarańczowe
+                'retracement': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
+                'extension': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],              # Extension - turkus do zieleni
+                'targets': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']                # Target - czerwono-pomarańczowe
             }
             
-            # Grupuj poziomy według typu
-            fib_groups = {'ret': [], 'ext': [], 'target': []}
-            for col in fib_columns:
-                if 'ret_' in col:
-                    fib_groups['ret'].append(col)
-                elif 'ext_' in col:
-                    fib_groups['ext'].append(col)
-                elif 'target_' in col:
-                    fib_groups['target'].append(col)
-            
-            # Rysuj każdy typ poziomów
-            for fib_type, columns in fib_groups.items():
-                colors = fib_type_colors.get(fib_type, ['gray'])
-                linestyle = '--' if fib_type == 'ret' else (':' if fib_type == 'ext' else '-')
-                alpha = 0.6 if fib_type == 'ret' else (0.5 if fib_type == 'ext' else 0.8)
+            # Przetwórz wszystkie poziomy Fibonacciego
+            for fib_data in fibonacci_data:
+                fibonacci = fib_data['fibonacci']
                 
-                for i, col in enumerate(columns):
-                    color = colors[i % len(colors)]
-                    # Utwórz series z poziomem Fibonacciego - tylko dla niepustych wartości
-                    fib_level = df[col].replace(0, np.nan).dropna()
-                    if not fib_level.empty:
-                        # Wypełnij całą serię tym samym poziomem
-                        fib_series = pd.Series(fib_level.iloc[0], index=df.index)
-                        add_plots.append(
-                            mpf.make_addplot(
-                                fib_series,
-                                type='line',
-                                color=color,
-                                alpha=alpha,
-                                linestyle=linestyle,
-                                width=1.5 if fib_type == 'target' else 1
+                # Przetwórz każdy typ poziomów Fibonacciego
+                for fib_type, levels in fibonacci.items():
+                    colors = fib_type_colors.get(fib_type, ['gray'])
+                    linestyle = '--' if fib_type == 'retracement' else (':' if fib_type == 'extension' else '-')
+                    alpha = 0.6 if fib_type == 'retracement' else (0.5 if fib_type == 'extension' else 0.8)
+                    
+                    for i, (level_name, level_price) in enumerate(levels.items()):
+                        if level_price != 0 and not pd.isna(level_price):
+                            color = colors[i % len(colors)]
+                            # Wypełnij całą serię tym samym poziomem
+                            fib_series = pd.Series(level_price, index=df.index)
+                            add_plots.append(
+                                mpf.make_addplot(
+                                    fib_series,
+                                    type='line',
+                                    color=color,
+                                    alpha=alpha,
+                                    linestyle=linestyle,
+                                    width=1.5 if fib_type == 'targets' else 1
+                                )
                             )
-                        )
-                        logger.debug(f"Dodano poziom {fib_type} Fibonacci {col} = {fib_level.iloc[0]:.2f} w kolorze {color}")
+                            logger.debug(f"Dodano poziom {fib_type} Fibonacci {level_name} = {level_price:.2f} w kolorze {color}")
         
         # Tworzenie wykresu
         fig, axes = mpf.plot(
@@ -893,10 +1147,15 @@ class TechnicalAnalysis:
             1 if show_obv and 'obv' in df.columns else 0
         ])
         
-        total_patterns = len(pattern_columns) + len(forming_pattern_columns) if show_patterns else 0
-        total_fib_levels = len(fib_columns) if show_fibonacci else 0
+        total_patterns = len(patterns_data) + len(forming_patterns_data) if show_patterns else 0
+        total_fib_levels = sum(len(fib['fibonacci']['retracement']) + len(fib['fibonacci']['extension']) + len(fib['fibonacci']['targets']) for fib in fibonacci_data) if show_fibonacci else 0
+        total_proportions = sum(len(prop['proportions']) for prop in proportions_data) if show_patterns else 0
         
-        logger.info(f"Wykres wygenerowany: {total_indicators} wskaźników, {total_patterns} punktów wzorców, {total_fib_levels} poziomów Fibonacci")
+        logger.info(f"Wykres wygenerowany: {total_indicators} wskaźników, {total_patterns} punktów wzorców, {total_fib_levels} poziomów Fibonacci, {total_proportions} proporcji")
+        
+        # Dodaj informacje o proporcjach do tytułu jeśli są dostępne
+        if total_proportions > 0:
+            title += f" | Proporcje: {total_proportions}"
         
         # Zapisywanie wykresu
         if save_path:
