@@ -298,115 +298,10 @@ class TechnicalAnalysis:
                                             f'pattern_fib_tolerance': fib_tolerance,
                                             f'pattern_peak_spacing_strategy': peak_spacing_strategy_name,
                                             f'pattern_peak_spacing': peak_spacing,
+                                            f'pattern_retraces': pattern.retraces,
                                         }
                                     }
-
-                                # Oblicz proporcje między punktami
-                                proportions = {}
-                                if len(pattern_points) >= 4:  # Przynajmniej ABCD
                                     
-                                    # Oblicz proporcje dla wzorców XABCD
-                                    if 'X' in pattern_points and 'A' in pattern_points and 'B' in pattern_points:
-                                        xa_distance = abs(pattern_points['A'] - pattern_points['X'])
-                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
-                                        if xa_distance != 0:
-                                            proportions['AB_XA_ratio'] = ab_distance / xa_distance
-                                    
-                                    if 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points:
-                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
-                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
-                                        if ab_distance != 0:
-                                            proportions['BC_AB_ratio'] = bc_distance / ab_distance
-                                    
-                                    if 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points:
-                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
-                                        cd_distance = abs(pattern_points['D'] - pattern_points['C'])
-                                        if bc_distance != 0:
-                                            proportions['CD_BC_ratio'] = cd_distance / bc_distance
-                                    
-                                    if 'X' in pattern_points and 'A' in pattern_points and 'D' in pattern_points:
-                                        xa_distance = abs(pattern_points['X'] - pattern_points['A'])
-                                        xd_distance = abs(pattern_points['X'] - pattern_points['D'])
-                                        if xa_distance != 0:
-                                            proportions['XD_XA_ratio'] = xd_distance / xa_distance
-                                    
-                                    # Oblicz proporcje dla wzorców ABCD (bez X)
-                                    elif len(pattern_points) == 4 and 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points:
-                                        ab_distance = abs(pattern_points['B'] - pattern_points['A'])
-                                        bc_distance = abs(pattern_points['C'] - pattern_points['B'])
-                                        cd_distance = abs(pattern_points['D'] - pattern_points['C'])
-                                        ad_distance = abs(pattern_points['D'] - pattern_points['A'])
-                                        
-                                        if ab_distance != 0:
-                                            proportions['BC_AB_ratio'] = bc_distance / ab_distance
-                                        if bc_distance != 0:
-                                            proportions['CD_BC_ratio'] = cd_distance / bc_distance
-                                        if ab_distance != 0:
-                                            proportions['AD_AB_ratio'] = ad_distance / ab_distance
-                                    
-                                    # Dodaj proporcje do wzorca w zagnieżdżonej strukturze
-                                    if proportions:
-                                        first_kline_idx = find_kline_index(x_points[0])
-                                        
-                                        # Upewnij się że istnieje struktura patterns
-                                        if 'patterns' not in klines[first_kline_idx]:
-                                            klines[first_kline_idx]['patterns'] = {}
-                                        if f'{patterns_count}' not in klines[first_kline_idx]['patterns']:
-                                            klines[first_kline_idx]['patterns'][f'{patterns_count}'] = {}
-                                        
-                                        for prop_name, prop_value in proportions.items():
-                                            logger.info(f"Dodano proporcję {prop_name} = {prop_value:.4f} do wzorca {patterns_count}")
-                                
-                                # Alternatywne obliczanie proporcji na podstawie już dodanych punktów w klines
-                                # Wykorzystuje pattern_id i pattern_point_name do znajdowania punktów tego samego wzorca
-                                if not proportions and len(pattern_points) >= 3:  # Jeśli nie udało się wcześniej obliczyć
-                                    logger.info(f"Obliczanie proporcji na podstawie dodanych punktów w klines dla wzorca {patterns_count}")
-                                    
-                                    # Znajdź wszystkie punkty tego wzorca w klines
-                                    pattern_kline_points = {}
-                                    for kline_idx, kline in enumerate(klines):
-                                        if 'patterns' in kline:
-                                            for pattern_id, pattern_info in kline['patterns'].items():
-                                                if pattern_id == f'{patterns_count}' and 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
-                                                    point_name = pattern_info['pattern_point_name']
-                                                    point_price = pattern_info['pattern_point_price']
-                                                    pattern_kline_points[point_name] = point_price
-                                    
-                                    logger.debug(f"Znalezione punkty w klines dla wzorca {patterns_count}: {pattern_kline_points}")
-                                    
-                                    # Oblicz proporcje na podstawie znalezionych punktów
-                                    if len(pattern_kline_points) >= 4:
-                                        # Proporcje XABCD
-                                        if 'X' in pattern_kline_points and 'A' in pattern_kline_points and 'B' in pattern_kline_points:
-                                            xa_distance = abs(pattern_kline_points['A'] - pattern_kline_points['X'])
-                                            ab_distance = abs(pattern_kline_points['B'] - pattern_kline_points['A'])
-                                            if xa_distance != 0:
-                                                proportions['AB_XA_ratio'] = ab_distance / xa_distance
-                                        
-                                        if 'A' in pattern_kline_points and 'B' in pattern_kline_points and 'C' in pattern_kline_points:
-                                            ab_distance = abs(pattern_kline_points['B'] - pattern_kline_points['A'])
-                                            bc_distance = abs(pattern_kline_points['C'] - pattern_kline_points['B'])
-                                            if ab_distance != 0:
-                                                proportions['BC_AB_ratio'] = bc_distance / ab_distance
-                                        
-                                        if 'B' in pattern_kline_points and 'C' in pattern_kline_points and 'D' in pattern_kline_points:
-                                            bc_distance = abs(pattern_kline_points['C'] - pattern_kline_points['B'])
-                                            cd_distance = abs(pattern_kline_points['D'] - pattern_kline_points['C'])
-                                            if bc_distance != 0:
-                                                proportions['CD_BC_ratio'] = cd_distance / bc_distance
-                                        
-                                        if 'X' in pattern_kline_points and 'A' in pattern_kline_points and 'D' in pattern_kline_points:
-                                            xa_distance = abs(pattern_kline_points['X'] - pattern_kline_points['A'])
-                                            xd_distance = abs(pattern_kline_points['X'] - pattern_kline_points['D'])
-                                            if xa_distance != 0:
-                                                proportions['XD_XA_ratio'] = xd_distance / xa_distance
-                                        
-                                        logger.info(f"Obliczono {len(proportions)} proporcji na podstawie klines dla wzorca {patterns_count}")
-                                        for prop_name, prop_value in proportions.items():
-                                            logger.info(f"Proporcja z klines: {prop_name} = {prop_value:.4f}")
-                                elif len(pattern_points) >= 3:
-                                    logger.debug(f"Wzorzec {patterns_count} ma tylko {len(pattern_points)} punktów - za mało dla proporcji")
-
                                 # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
                                 fibonacci_levels = {}
                                 if len(y_points) >= 2:
@@ -437,16 +332,12 @@ class TechnicalAnalysis:
                                         'targets': fib_levels.targets
                                     }
 
-                                # Teraz dodaj proporcje i fibonacci do każdego punktu tego wzorca
+                                # Teraz dodaj fibonacci do każdego punktu tego wzorca (pattern_retraces już są dodane w linii 301)
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
                                     if i >= len(point_names):
                                         break
                                         
                                     kline_idx = find_kline_index(x_point)
-                                    
-                                    # Dodaj proporcje do tego punktu wzorca
-                                    if proportions:
-                                        klines[kline_idx]['patterns'][f'{patterns_count}']['proportions'] = proportions
                                     
                                     # Dodaj fibonacci do tego punktu wzorca
                                     if fibonacci_levels:
@@ -455,7 +346,7 @@ class TechnicalAnalysis:
                                     logger.info(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: {str(klines[kline_idx]).replace(',', ',\n')}")
                                 
                                 
-                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z {len(proportions)} proporcjami i {len(fibonacci_levels)} poziomami Fibonacci")
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces i {len(fibonacci_levels)} poziomami Fibonacci")
 
                                 patterns_count += 1
 
@@ -959,7 +850,7 @@ class TechnicalAnalysis:
         patterns_data = []
         forming_patterns_data = []
         fibonacci_data = []
-        proportions_data = []
+        retraces_data = []
         
         for i, kline in enumerate(klines):
             # Wzorce formed
@@ -987,12 +878,12 @@ class TechnicalAnalysis:
                             'fibonacci': pattern_info['fibonacci']
                         })
                     
-                    # Proportions
-                    if 'proportions' in pattern_info:
-                        proportions_data.append({
+                    # Pattern retraces (nowa struktura zamiast proportions)
+                    if 'pattern_retraces' in pattern_info:
+                        retraces_data.append({
                             'index': i,
                             'pattern_id': pattern_id,
-                            'proportions': pattern_info['proportions']
+                            'pattern_retraces': pattern_info['pattern_retraces']
                         })
             
             # Wzorce forming
@@ -1011,7 +902,7 @@ class TechnicalAnalysis:
         
         logger.info(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
         logger.info(f"Znalezione poziomy Fibonacci: {len(fibonacci_data)}")
-        logger.info(f"Znalezione proporcje: {len(proportions_data)}")
+        logger.info(f"Znalezione retraces: {len(retraces_data)}")
         
         # Wyświetl szczegółowe informacje o wzorcach
         if patterns_data:
@@ -1019,12 +910,12 @@ class TechnicalAnalysis:
             for pattern in patterns_data[:5]:  # Pokaż pierwsze 5
                 logger.info(f"Wzorzec {pattern['pattern_id']}: {pattern['point_name']} @ {pattern['price']:.2f} - {pattern['pattern_name']}")
         
-        # Wyświetl informacje o proporcjach
-        if proportions_data:
-            logger.info("Znalezione proporcje wzorców:")
-            for prop_data in proportions_data[:5]:  # Pokaż pierwsze 5
-                for prop_name, prop_value in prop_data['proportions'].items():
-                    logger.info(f"Wzorzec {prop_data['pattern_id']}: {prop_name} = {prop_value:.4f}")
+        # Wyświetl informacje o retraces
+        if retraces_data:
+            logger.info("Znalezione retraces wzorców:")
+            for retraces_info in retraces_data[:5]:  # Pokaż pierwsze 5
+                for retrace_name, retrace_value in retraces_info['pattern_retraces'].items():
+                    logger.info(f"Wzorzec {retraces_info['pattern_id']}: {retrace_name} = {retrace_value:.4f}")
                     break  # Tylko jedna na wzorzec dla czytelności
         
         # Wzorce będą teraz rysowane jako litery bezpośrednio na wykresie
@@ -1117,7 +1008,7 @@ class TechnicalAnalysis:
                         if pattern_id not in pattern_groups:
                             pattern_groups[pattern_id] = {
                                 'points': {},
-                                'proportions': {},
+                                'pattern_retraces': {},
                                 'pattern_name': pattern['pattern_name'],
                                 'pattern_type': pattern['pattern_type'],
                                 'is_bullish': pattern['is_bullish']
@@ -1129,20 +1020,20 @@ class TechnicalAnalysis:
                             'price': pattern['price']
                         }
                         
-                        # Dodaj proporcje (z pierwszego punktu który je ma)
-                        if not pattern_groups[pattern_id]['proportions']:
-                            # Znajdź proporcje w klines
+                        # Dodaj pattern_retraces (z pierwszego punktu który je ma)
+                        if not pattern_groups[pattern_id]['pattern_retraces']:
+                            # Znajdź pattern_retraces w klines
                             kline = klines[pattern['index']]
                             if 'patterns' in kline and pattern_id in kline['patterns']:
-                                if 'proportions' in kline['patterns'][pattern_id]:
-                                    pattern_groups[pattern_id]['proportions'] = kline['patterns'][pattern_id]['proportions']
+                                if 'pattern_retraces' in kline['patterns'][pattern_id]:
+                                    pattern_groups[pattern_id]['pattern_retraces'] = kline['patterns'][pattern_id]['pattern_retraces']
                     
                     logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
                     
                     # Rysuj linie i trójkąty dla każdego wzorca
                     for pattern_id, pattern_group in pattern_groups.items():
                         points = pattern_group['points']
-                        proportions = pattern_group['proportions']
+                        pattern_retraces = pattern_group['pattern_retraces']
                         is_bullish = pattern_group['is_bullish']
                         pattern_name = pattern_group['pattern_name'].split('_')[0]  # Tylko nazwa bez parametrów
                         
@@ -1187,10 +1078,28 @@ class TechnicalAnalysis:
                                            bbox=dict(boxstyle="round,pad=0.5", 
                                                    facecolor='white', alpha=0.8, edgecolor=line_color))
                         
-                        # Rysuj linie łączące punkty zgodnie z kolejnością XABCD
-                        available_points = [p for p in point_sequence if p in points]
+                        # Funkcja pomocnicza do obliczania kąta linii i dodawania obróconych etykiet
+                        def add_rotated_label(p1, p2, text, color, offset_y=0):
+                            """Dodaje obrócony tekst na środku linii zgodnie z jej kątem nachylenia"""
+                            import math
+                            
+                            # Oblicz kąt nachylenia linii w stopniach
+                            dx = p2['index'] - p1['index']
+                            dy = p2['price'] - p1['price']
+                            angle = math.degrees(math.atan2(dy, dx))
+                            
+                            # Środek linii
+                            mid_x = (p1['index'] + p2['index']) / 2
+                            mid_y = (p1['price'] + p2['price']) / 2 + offset_y
+                            
+                            # Dodaj obrócony tekst
+                            main_ax.annotate(text, (mid_x, mid_y), 
+                                           ha='center', va='center', fontsize=9, weight='bold',
+                                           color=color, alpha=0.9, rotation=angle,
+                                           bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8, edgecolor=color))
                         
-                        # Rysuj główne linie wzorca harmonicznego (X-A-B-C-D)
+                        # Rysuj główne linie wzorca harmonicznego (X-A-B-C-D) z pattern_retraces
+                        available_points = [p for p in point_sequence if p in points]
                         for i in range(len(available_points) - 1):
                             p1_name = available_points[i]
                             p2_name = available_points[i + 1]
@@ -1202,24 +1111,9 @@ class TechnicalAnalysis:
                             main_ax.plot([p1['index'], p2['index']], [p1['price'], p2['price']], 
                                        color=line_color, alpha=alpha, linewidth=2, linestyle='-')
                             
-                            # Dodaj etykietę z proporcją na środku linii
-                            mid_x = (p1['index'] + p2['index']) / 2
-                            mid_y = (p1['price'] + p2['price']) / 2
-                            
-                            # Znajdź odpowiednią proporcję
-                            prop_text = ""
-                            if p1_name == 'A' and p2_name == 'B' and 'AB_XA_ratio' in proportions:
-                                prop_text = f"AB/XA: {proportions['AB_XA_ratio']:.3f}"
-                            elif p1_name == 'B' and p2_name == 'C' and 'BC_AB_ratio' in proportions:
-                                prop_text = f"BC/AB: {proportions['BC_AB_ratio']:.3f}"
-                            elif p1_name == 'C' and p2_name == 'D' and 'CD_BC_ratio' in proportions:
-                                prop_text = f"CD/BC: {proportions['CD_BC_ratio']:.3f}"
-                            
-                            if prop_text:
-                                main_ax.annotate(prop_text, (mid_x, mid_y), 
-                                               xytext=(5, 5), textcoords='offset points',
-                                               fontsize=8, color=line_color, alpha=0.8,
-                                               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+                            # Dodaj retrace XAB na głównej linii A-B (zmiana z AB_XA_ratio na XAB)
+                            if p1_name == 'A' and p2_name == 'B' and 'XAB' in pattern_retraces:
+                                add_rotated_label(p1, p2, f"XAB: {pattern_retraces['XAB']:.3f}", line_color)
                         
                         # Rysuj dodatkowe linie wzorca harmonicznego
                         # Linia X-D (completion line)
@@ -1229,29 +1123,31 @@ class TechnicalAnalysis:
                             main_ax.plot([p_x['index'], p_d['index']], [p_x['price'], p_d['price']], 
                                        color=line_color, alpha=alpha*0.7, linewidth=1, linestyle='--')
                             
-                            # Dodaj proporcję XD/XA
-                            if 'XD_XA_ratio' in proportions:
-                                mid_x = (p_x['index'] + p_d['index']) / 2
-                                mid_y = (p_x['price'] + p_d['price']) / 2
-                                prop_text = f"XD/XA: {proportions['XD_XA_ratio']:.3f}"
-                                main_ax.annotate(prop_text, (mid_x, mid_y), 
-                                               xytext=(5, -15), textcoords='offset points',
-                                               fontsize=8, color=line_color, alpha=0.8,
-                                               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+                            # Dodaj retrace XABCD jako obrócony tekst na linii X-D (zmiana z XD_XA_ratio na XABCD)
+                            if 'XABCD' in pattern_retraces:
+                                add_rotated_label(p_x, p_d, f"XABCD: {pattern_retraces['XABCD']:.3f}", line_color, offset_y=0)
                         
-                        # Linia A-C (impulse line)
+                        # Linia A-C (impulse line) - dodaj retrace ABC
                         if 'A' in points and 'C' in points:
                             p_a = points['A']
                             p_c = points['C']
                             main_ax.plot([p_a['index'], p_c['index']], [p_a['price'], p_c['price']], 
                                        color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                            
+                            # Dodaj retrace ABC na linii A-C (zmiana z BC_AB_ratio na ABC)
+                            if 'ABC' in pattern_retraces:
+                                add_rotated_label(p_a, p_c, f"ABC: {pattern_retraces['ABC']:.3f}", line_color, offset_y=5)
                         
-                        # Linia B-D (retrace line)
+                        # Linia B-D (retrace line) - dodaj retrace BCD
                         if 'B' in points and 'D' in points:
                             p_b = points['B']
                             p_d = points['D']
                             main_ax.plot([p_b['index'], p_d['index']], [p_b['price'], p_d['price']], 
                                        color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                            
+                            # Dodaj retrace BCD na linii B-D (zmiana z CD_BC_ratio na BCD)
+                            if 'BCD' in pattern_retraces:
+                                add_rotated_label(p_b, p_d, f"BCD: {pattern_retraces['BCD']:.3f}", line_color, offset_y=5)
                         
                         # Rysuj trójkąty z przezroczystym tłem
                         # Trójkąt X-A-B
@@ -1262,12 +1158,6 @@ class TechnicalAnalysis:
                             main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
                                        edgecolor=line_color, linewidth=1)
                             
-                            # Dodaj etykietę trójkąta XAB
-                            center_x = sum(x_coords[:3]) / 3
-                            center_y = sum(y_coords[:3]) / 3
-                            main_ax.annotate(f'{pattern_name} XAB', (center_x, center_y), 
-                                           ha='center', va='center', fontsize=9, 
-                                           color=line_color, alpha=0.9, weight='bold')
                         
                         # Trójkąt B-C-D
                         if 'B' in points and 'C' in points and 'D' in points:
@@ -1277,14 +1167,8 @@ class TechnicalAnalysis:
                             main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
                                        edgecolor=line_color, linewidth=1)
                             
-                            # Dodaj etykietę trójkąta BCD
-                            center_x = sum(x_coords[:3]) / 3
-                            center_y = sum(y_coords[:3]) / 3
-                            main_ax.annotate(f'{pattern_name} BCD', (center_x, center_y), 
-                                           ha='center', va='center', fontsize=9, 
-                                           color=line_color, alpha=0.9, weight='bold')
                         
-                        logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(proportions)} proporcjami")
+                        logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces")
                 
                 else:
                     logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
@@ -1302,13 +1186,13 @@ class TechnicalAnalysis:
         
         total_patterns = len(patterns_data) + len(forming_patterns_data) if show_patterns else 0
         total_fib_levels = sum(len(fib['fibonacci']['retracement']) + len(fib['fibonacci']['extension']) + len(fib['fibonacci']['targets']) for fib in fibonacci_data) if show_fibonacci else 0
-        total_proportions = sum(len(prop['proportions']) for prop in proportions_data) if show_patterns else 0
+        total_retraces = sum(len(retrace['pattern_retraces']) for retrace in retraces_data) if show_patterns else 0
         
-        logger.info(f"Wykres wygenerowany: {total_indicators} wskaźników, {total_patterns} punktów wzorców, {total_fib_levels} poziomów Fibonacci, {total_proportions} proporcji")
+        logger.info(f"Wykres wygenerowany: {total_indicators} wskaźników, {total_patterns} punktów wzorców, {total_fib_levels} poziomów Fibonacci, {total_retraces} retraces")
         
-        # Dodaj informacje o proporcjach do tytułu jeśli są dostępne
-        if total_proportions > 0:
-            title += f" | Proporcje: {total_proportions}"
+        # Dodaj informacje o retraces do tytułu jeśli są dostępne
+        if total_retraces > 0:
+            title += f" | Retraces: {total_retraces}"
         
         # Zapisywanie wykresu
         if save_path:
