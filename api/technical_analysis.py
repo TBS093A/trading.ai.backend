@@ -119,9 +119,6 @@ class TechnicalAnalysis:
         find_only_xabcd: bool = True,
         fib_tolerance_strategy: dict[str, float] = {
             'hard_restricted': 0.03,
-            #'restricted': 0.05,
-            #'normal': 0.1,
-            #'loose': 0.15
         },
         peak_spacing_strategy: dict[str, int] = {
             'extra_huge_30': 30,
@@ -145,13 +142,13 @@ class TechnicalAnalysis:
             'very_huge': 12,
             'middle-very_huge-huge': 11,
             'huge': 10,
-            #'middle-huge-large': 9,
-            #'large': 8,
-            #'middle-large-medium': 7,
-            #'medium': 6,
-            #'middle-medium-small': 5,
-            #'small': 4,
-            #'middle-small-tiny': 3,
+            'middle-huge-large': 9,
+            'large': 8,
+            'middle-large-medium': 7,
+            'medium': 6,
+            'middle-medium-small': 5,
+            'small': 4,
+            'middle-small-tiny': 3,
         },
         check_anchor: bool = True
     ) -> int:
