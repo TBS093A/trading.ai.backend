@@ -67,6 +67,17 @@ class TechnicalAnalysis:
             "BC": (0.382, 0.886),  # BC powinno być 38.2% - 88.6% AB
             "CD": (1.618, 2.618),  # CD powinno być 161.8% - 261.8% BC
             "AD": (0.886, 0.886)   # AD powinno być 88.6% XA
+        },
+        "Cypher": {
+            "AB": (0.382, 0.618),
+            "BC": (1.272, 1.414),
+            "CD": (0.786, 0.786),
+            "AD": (0.786, 0.786)
+        },
+        "Shark": {
+            "AB": (1.13, 1.618),
+            "BC": (1.618, 2.24),
+            "AD": (0.886, 1.13)
         }
     }
 
@@ -108,19 +119,39 @@ class TechnicalAnalysis:
         find_only_xabcd: bool = True,
         fib_tolerance_strategy: dict[str, float] = {
             'hard_restricted': 0.03,
-            'restricted': 0.05,
-            'normal': 0.1,
-            'loose': 0.15
+            #'restricted': 0.05,
+            #'normal': 0.1,
+            #'loose': 0.15
         },
         peak_spacing_strategy: dict[str, int] = {
+            'extra_huge_30': 30,
+            'extra_huge_29': 29,
+            'extra_huge_28': 28,
+            'extra_huge_27': 27,
+            'extra_huge_26': 26,
+            'extra_huge_25': 25,
+            'extra_huge_24': 24,
+            'extra_huge_23': 23,
+            'extra_huge_22': 22,
+            'extra_huge_21': 21,
+            'extra_huge_20': 20,
+            'extra_huge_19': 19,
+            'extra_huge_18': 18,
+            'extra_huge_17': 17,
+            'extra_huge_16': 16,
+            'extra_huge_15': 15,
+            'extra_huge_14': 14,
+            'extra_huge_13': 13,
+            'very_huge': 12,
+            'middle-very_huge-huge': 11,
             'huge': 10,
-            'middle-huge-large': 9,
-            'large': 8,
-            'middle-large-medium': 7,
-            'medium': 6,
-            'middle-medium-small': 5,
-            'small': 4,
-            'middle-small-tiny': 3,
+            #'middle-huge-large': 9,
+            #'large': 8,
+            #'middle-large-medium': 7,
+            #'medium': 6,
+            #'middle-medium-small': 5,
+            #'small': 4,
+            #'middle-small-tiny': 3,
         },
         check_anchor: bool = True
     ) -> int:
@@ -173,7 +204,9 @@ class TechnicalAnalysis:
 
                     # Pobierz wszystkie wzorce
                     if find_only_xabcd:
-                        patterns = harmonic_search.get_patterns(family=harmonic_search.XABCD)
+                        patterns = harmonic_search.get_patterns(
+                            family=harmonic_search.XABCD
+                        )
                     else:
                         patterns = harmonic_search.get_patterns()
 
@@ -292,8 +325,8 @@ class TechnicalAnalysis:
                                             proportions['CD_BC_ratio'] = cd_distance / bc_distance
                                     
                                     if 'X' in pattern_points and 'A' in pattern_points and 'D' in pattern_points:
-                                        xa_distance = abs(pattern_points['A'] - pattern_points['X'])
-                                        xd_distance = abs(pattern_points['D'] - pattern_points['X'])
+                                        xa_distance = abs(pattern_points['X'] - pattern_points['A'])
+                                        xd_distance = abs(pattern_points['X'] - pattern_points['D'])
                                         if xa_distance != 0:
                                             proportions['XD_XA_ratio'] = xd_distance / xa_distance
                                     
@@ -363,8 +396,8 @@ class TechnicalAnalysis:
                                                 proportions['CD_BC_ratio'] = cd_distance / bc_distance
                                         
                                         if 'X' in pattern_kline_points and 'A' in pattern_kline_points and 'D' in pattern_kline_points:
-                                            xa_distance = abs(pattern_kline_points['A'] - pattern_kline_points['X'])
-                                            xd_distance = abs(pattern_kline_points['D'] - pattern_kline_points['X'])
+                                            xa_distance = abs(pattern_kline_points['X'] - pattern_kline_points['A'])
+                                            xd_distance = abs(pattern_kline_points['X'] - pattern_kline_points['D'])
                                             if xa_distance != 0:
                                                 proportions['XD_XA_ratio'] = xd_distance / xa_distance
                                         
@@ -994,93 +1027,9 @@ class TechnicalAnalysis:
                     logger.info(f"Wzorzec {prop_data['pattern_id']}: {prop_name} = {prop_value:.4f}")
                     break  # Tylko jedna na wzorzec dla czytelności
         
-        # Dodaj punkty wzorców harmonicznych jako scatter plots
-        if show_patterns and (patterns_data or forming_patterns_data):
-            # Kolory dla punktów wzorców harmonicznych
-            point_colors = {
-                'X': 'red',
-                'A': 'blue', 
-                'B': 'green',
-                'C': 'orange',
-                'D': 'purple'
-            }
-            
-            # Przygotuj serie danych dla każdego typu punktu
-            point_series = {}
-            
-            # Przetwórz wzorce formed
-            for pattern in patterns_data:
-                point_name = pattern['point_name']
-                if point_name not in point_series:
-                    point_series[point_name] = {
-                        'formed': pd.Series(index=df.index, dtype=float),
-                        'forming': pd.Series(index=df.index, dtype=float),
-                        'properties': []
-                    }
-                
-                # Dodaj punkt do odpowiedniej serii
-                point_series[point_name]['formed'].iloc[pattern['index']] = pattern['price']
-                point_series[point_name]['properties'].append({
-                    'index': pattern['index'],
-                    'is_bullish': pattern['is_bullish'],
-                    'tolerance': pattern['tolerance'],
-                    'pattern_name': pattern['pattern_name'],
-                    'is_forming': False
-                })
-            
-            # Przetwórz wzorce forming
-            for pattern in forming_patterns_data:
-                point_name = pattern['point_name']
-                if point_name not in point_series:
-                    point_series[point_name] = {
-                        'formed': pd.Series(index=df.index, dtype=float),
-                        'forming': pd.Series(index=df.index, dtype=float),
-                        'properties': []
-                    }
-                
-                # Dodaj punkt do odpowiedniej serii
-                point_series[point_name]['forming'].iloc[pattern['index']] = pattern['price']
-                point_series[point_name]['properties'].append({
-                    'index': pattern['index'],
-                    'is_bullish': pattern['is_bullish'],
-                    'pattern_name': pattern['pattern_name'],
-                    'is_forming': True
-                })
-            
-            # Rysuj punkty dla każdego typu
-            for point_name, data in point_series.items():
-                base_color = point_colors.get(point_name, 'black')
-                
-                # Rysuj formed patterns
-                formed_series = data['formed'].dropna()
-                if not formed_series.empty:
-                    add_plots.append(
-                        mpf.make_addplot(
-                            data['formed'].replace(0, np.nan),
-                            type='scatter',
-                            marker='o',
-                            markersize=150,
-                            color=base_color,
-                            alpha=0.8
-                        )
-                    )
-                    logger.debug(f"Dodano {len(formed_series)} punktów {point_name} (formed) w kolorze {base_color}")
-                
-                # Rysuj forming patterns
-                forming_series = data['forming'].dropna()
-                if not forming_series.empty:
-                    add_plots.append(
-                        mpf.make_addplot(
-                            data['forming'].replace(0, np.nan),
-                            type='scatter',
-                            marker='^',
-                            markersize=120,
-                            color=base_color,
-                            alpha=0.6
-                        )
-                    )
-                    logger.debug(f"Dodano {len(forming_series)} punktów {point_name} (forming) w kolorze {base_color}")
-                
+        # Wzorce będą teraz rysowane jako litery bezpośrednio na wykresie
+        # zamiast scatter plots - sekcja usunięta
+        
         # Dodaj legendę/adnotacje dla wzorców
         if show_patterns and patterns_data:
             # Znajdź wzorce z ich nazwami do wyświetlenia w tytule wykresu
@@ -1139,6 +1088,210 @@ class TechnicalAnalysis:
             returnfig=True,
             figsize=(15, 10)
         )
+        
+        # Dodaj linie łączące punkty wzorców harmonicznych i trójkąty
+        if show_patterns and patterns_data:
+            # Pobierz główny subplot z cenami - obsługa różnych typów axes
+            main_ax = None
+            try:
+                if hasattr(axes, '__len__') and len(axes) > 0:
+                    # axes jest listą lub tablicą
+                    main_ax = axes[0]  # Pierwszy subplot to zawsze ceny
+                elif hasattr(axes, 'plot'):
+                    # axes jest pojedynczym subplot
+                    main_ax = axes
+                else:
+                    # Próba znalezienia prawidłowego subplot
+                    for ax in axes:
+                        if hasattr(ax, 'plot'):
+                            main_ax = ax
+                            break
+                
+                logger.debug(f"Typ axes: {type(axes)}, Użyto main_ax: {type(main_ax)}")
+                
+                if main_ax and hasattr(main_ax, 'plot'):
+                    # Grupuj punkty według pattern_id
+                    pattern_groups = {}
+                    for pattern in patterns_data:
+                        pattern_id = pattern['pattern_id']
+                        if pattern_id not in pattern_groups:
+                            pattern_groups[pattern_id] = {
+                                'points': {},
+                                'proportions': {},
+                                'pattern_name': pattern['pattern_name'],
+                                'pattern_type': pattern['pattern_type'],
+                                'is_bullish': pattern['is_bullish']
+                            }
+                        
+                        # Dodaj punkt do grupy
+                        pattern_groups[pattern_id]['points'][pattern['point_name']] = {
+                            'index': pattern['index'],
+                            'price': pattern['price']
+                        }
+                        
+                        # Dodaj proporcje (z pierwszego punktu który je ma)
+                        if not pattern_groups[pattern_id]['proportions']:
+                            # Znajdź proporcje w klines
+                            kline = klines[pattern['index']]
+                            if 'patterns' in kline and pattern_id in kline['patterns']:
+                                if 'proportions' in kline['patterns'][pattern_id]:
+                                    pattern_groups[pattern_id]['proportions'] = kline['patterns'][pattern_id]['proportions']
+                    
+                    logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
+                    
+                    # Rysuj linie i trójkąty dla każdego wzorca
+                    for pattern_id, pattern_group in pattern_groups.items():
+                        points = pattern_group['points']
+                        proportions = pattern_group['proportions']
+                        is_bullish = pattern_group['is_bullish']
+                        pattern_name = pattern_group['pattern_name'].split('_')[0]  # Tylko nazwa bez parametrów
+                        
+                        # Kolory dla wzorców
+                        line_color = 'green' if is_bullish else 'red'
+                        triangle_color = 'green' if is_bullish else 'red'
+                        alpha = 0.7
+                        triangle_alpha = 0.2
+                        
+                        logger.debug(f"Rysowanie wzorca {pattern_name} (ID: {pattern_id}) z punktami: {list(points.keys())}")
+                        
+                        # Rysuj oznaczenia literowe punktów (X, A, B, C, D)
+                        point_sequence = ['X', 'A', 'B', 'C', 'D']
+                        for point_name in point_sequence:
+                            if point_name in points:
+                                point = points[point_name]
+                                # Rysuj literę zamiast kropki
+                                main_ax.annotate(point_name, (point['index'], point['price']), 
+                                               ha='center', va='center', fontsize=12, weight='bold',
+                                               color='white', 
+                                               bbox=dict(boxstyle="circle,pad=0.3", 
+                                                       facecolor=line_color, alpha=0.8, edgecolor='black'))
+                        
+                        # Dodaj dużą etykietę wzorca przy punkcie D
+                        if 'D' in points:
+                            d_point = points['D']
+                            direction_text = "BULLISH" if is_bullish else "BEARISH"
+                            pattern_label = f"{pattern_name}\n{direction_text}"
+                            
+                            # Pozycjonowanie etykiety - pod punktem D dla bullish, nad dla bearish
+                            if is_bullish:
+                                y_offset = -20  # Pod punktem
+                                va = 'top'
+                            else:
+                                y_offset = 20   # Nad punktem
+                                va = 'bottom'
+                            
+                            main_ax.annotate(pattern_label, (d_point['index'], d_point['price']), 
+                                           xytext=(0, y_offset), textcoords='offset points',
+                                           ha='center', va=va, fontsize=14, weight='bold',
+                                           color=line_color, alpha=0.9,
+                                           bbox=dict(boxstyle="round,pad=0.5", 
+                                                   facecolor='white', alpha=0.8, edgecolor=line_color))
+                        
+                        # Rysuj linie łączące punkty zgodnie z kolejnością XABCD
+                        available_points = [p for p in point_sequence if p in points]
+                        
+                        # Rysuj główne linie wzorca harmonicznego (X-A-B-C-D)
+                        for i in range(len(available_points) - 1):
+                            p1_name = available_points[i]
+                            p2_name = available_points[i + 1]
+                            
+                            p1 = points[p1_name]
+                            p2 = points[p2_name]
+                            
+                            # Rysuj linię
+                            main_ax.plot([p1['index'], p2['index']], [p1['price'], p2['price']], 
+                                       color=line_color, alpha=alpha, linewidth=2, linestyle='-')
+                            
+                            # Dodaj etykietę z proporcją na środku linii
+                            mid_x = (p1['index'] + p2['index']) / 2
+                            mid_y = (p1['price'] + p2['price']) / 2
+                            
+                            # Znajdź odpowiednią proporcję
+                            prop_text = ""
+                            if p1_name == 'A' and p2_name == 'B' and 'AB_XA_ratio' in proportions:
+                                prop_text = f"AB/XA: {proportions['AB_XA_ratio']:.3f}"
+                            elif p1_name == 'B' and p2_name == 'C' and 'BC_AB_ratio' in proportions:
+                                prop_text = f"BC/AB: {proportions['BC_AB_ratio']:.3f}"
+                            elif p1_name == 'C' and p2_name == 'D' and 'CD_BC_ratio' in proportions:
+                                prop_text = f"CD/BC: {proportions['CD_BC_ratio']:.3f}"
+                            
+                            if prop_text:
+                                main_ax.annotate(prop_text, (mid_x, mid_y), 
+                                               xytext=(5, 5), textcoords='offset points',
+                                               fontsize=8, color=line_color, alpha=0.8,
+                                               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+                        
+                        # Rysuj dodatkowe linie wzorca harmonicznego
+                        # Linia X-D (completion line)
+                        if 'X' in points and 'D' in points:
+                            p_x = points['X']
+                            p_d = points['D']
+                            main_ax.plot([p_x['index'], p_d['index']], [p_x['price'], p_d['price']], 
+                                       color=line_color, alpha=alpha*0.7, linewidth=1, linestyle='--')
+                            
+                            # Dodaj proporcję XD/XA
+                            if 'XD_XA_ratio' in proportions:
+                                mid_x = (p_x['index'] + p_d['index']) / 2
+                                mid_y = (p_x['price'] + p_d['price']) / 2
+                                prop_text = f"XD/XA: {proportions['XD_XA_ratio']:.3f}"
+                                main_ax.annotate(prop_text, (mid_x, mid_y), 
+                                               xytext=(5, -15), textcoords='offset points',
+                                               fontsize=8, color=line_color, alpha=0.8,
+                                               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+                        
+                        # Linia A-C (impulse line)
+                        if 'A' in points and 'C' in points:
+                            p_a = points['A']
+                            p_c = points['C']
+                            main_ax.plot([p_a['index'], p_c['index']], [p_a['price'], p_c['price']], 
+                                       color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                        
+                        # Linia B-D (retrace line)
+                        if 'B' in points and 'D' in points:
+                            p_b = points['B']
+                            p_d = points['D']
+                            main_ax.plot([p_b['index'], p_d['index']], [p_b['price'], p_d['price']], 
+                                       color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                        
+                        # Rysuj trójkąty z przezroczystym tłem
+                        # Trójkąt X-A-B
+                        if 'X' in points and 'A' in points and 'B' in points:
+                            x_coords = [points['X']['index'], points['A']['index'], points['B']['index'], points['X']['index']]
+                            y_coords = [points['X']['price'], points['A']['price'], points['B']['price'], points['X']['price']]
+                            
+                            main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
+                                       edgecolor=line_color, linewidth=1)
+                            
+                            # Dodaj etykietę trójkąta XAB
+                            center_x = sum(x_coords[:3]) / 3
+                            center_y = sum(y_coords[:3]) / 3
+                            main_ax.annotate(f'{pattern_name} XAB', (center_x, center_y), 
+                                           ha='center', va='center', fontsize=9, 
+                                           color=line_color, alpha=0.9, weight='bold')
+                        
+                        # Trójkąt B-C-D
+                        if 'B' in points and 'C' in points and 'D' in points:
+                            x_coords = [points['B']['index'], points['C']['index'], points['D']['index'], points['B']['index']]
+                            y_coords = [points['B']['price'], points['C']['price'], points['D']['price'], points['B']['price']]
+                            
+                            main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
+                                       edgecolor=line_color, linewidth=1)
+                            
+                            # Dodaj etykietę trójkąta BCD
+                            center_x = sum(x_coords[:3]) / 3
+                            center_y = sum(y_coords[:3]) / 3
+                            main_ax.annotate(f'{pattern_name} BCD', (center_x, center_y), 
+                                           ha='center', va='center', fontsize=9, 
+                                           color=line_color, alpha=0.9, weight='bold')
+                        
+                        logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(proportions)} proporcjami")
+                
+                else:
+                    logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
+                    
+            except Exception as e:
+                logger.error(f"Błąd podczas rysowania wzorców harmonicznych: {e}")
+                logger.error(traceback.format_exc())
         
         # Podsumowanie tego co zostało narysowane
         total_indicators = sum([
