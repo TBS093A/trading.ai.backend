@@ -26,8 +26,8 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
 
     base_currency = "BTC"
     quote_currency = "USDT"
-    interval = "1d"
-    start_time = int(datetime(2024, 1, 1).timestamp() * 1000)
+    interval = "1w"
+    start_time = int(datetime(2022, 1, 1).timestamp() * 1000)
     end_time = int(datetime(2025, 6, 1).timestamp() * 1000)
 
     data_file = f"test_data/{base_currency.lower()}_{quote_currency.lower()}_{interval}_{start_time}_{end_time}_binance.json"

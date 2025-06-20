@@ -7,6 +7,7 @@ import pandas as pd
 import base64
 from io import BytesIO
 import matplotlib.pyplot as plt
+import traceback
 
 # Import pyharmonics
 try:
@@ -104,7 +105,22 @@ class TechnicalAnalysis:
         min_points: int = 5,
         symbol: str = '',
         interval: str = '',
-        find_only_xabcd: bool = True
+        find_only_xabcd: bool = True,
+        fib_tolerance_strategy: dict[str, float] = {
+            'hard_restricted': 0.03,
+            'restricted': 0.05,
+            'normal': 0.1,
+            'loose': 0.2,
+            'very_loose': 1.0,
+        },
+        peak_spacing_strategy: dict[str, int] = {
+            'huge': 10,
+            'large': 8,
+            'medium': 6,
+            'small': 4,
+            'tiny': 2
+        },
+        check_anchor: bool = True
     ) -> int:
         """
         Oblicza formacje harmoniczne XABCD używając biblioteki pyharmonics
@@ -113,6 +129,12 @@ class TechnicalAnalysis:
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
             min_points: Minimalna liczba punktów potrzebna do identyfikacji formacji
+            symbol: Symbol krypto
+            interval: Interwał czasowy
+            find_only_xabcd: Czy szukać tylko wzorców XABCD
+            fib_tolerance: Tolerancja dla poziomów Fibonacciego w wyznaczaniu wzorcow harmonicznych
+            peak_spacing_strategy: Strategia spacji między punktami wzorca (ilością świec między punktami)
+            check_anchor: Czy sprawdzać punkt anker
             
         Returns:
             Liczba znalezionych wzorców
@@ -129,130 +151,148 @@ class TechnicalAnalysis:
             df = cls._convert_klines_to_dataframe(klines)
             
             # Inicjalizuj Technicals z pyharmonics
-            technicals = Technicals(df, symbol, interval)
-            
-            # Wykonaj wyszukiwanie wzorców
-            harmonic_search = HarmonicSearch(technicals)
-            harmonic_search.search()
-            
-            # Pobierz wszystkie wzorce
-            if find_only_xabcd:
-                patterns = harmonic_search.get_patterns(family=harmonic_search.XABCD)
-            else:
-                patterns = harmonic_search.get_patterns()
-            
-            logger.info(f"Znaleziono wzorce: {list(patterns.keys()) if patterns else 'brak'}")
-            
-            patterns_count = 0
-            
-            # Przetwórz wzorce i nanieś punkty na klines
-            for pattern_type_key in patterns:
-                pattern_list = patterns[pattern_type_key]
-                logger.info(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key}")
-                
-                for pattern_idx, pattern in enumerate(pattern_list):
-                    try:
-                        # Pobierz punkty z wzorca
-                        x_points = pattern.x
-                        y_points = pattern.y
-                        
-                        if len(y_points) < 3:
-                            continue
-                        
-                        # Utwórz DataFrame dla mapowania
-                        df_map = pd.DataFrame(klines)
-                        df_map['date'] = pd.to_datetime(df_map['open_time'], unit='ms')
-                        df_map.set_index('date', inplace=True)
-                        
-                        # Funkcja do znajdowania indeksu świecy w klines
-                        def find_kline_index(x_point):
-                            if hasattr(x_point, 'timestamp'):
-                                target_datetime = x_point
-                            elif isinstance(x_point, (int, float)):
-                                if x_point > 1000000000000:
-                                    target_datetime = pd.to_datetime(x_point, unit='ms')
-                                elif x_point > 1000000000:
-                                    target_datetime = pd.to_datetime(x_point, unit='s')
+            for peak_spacing_strategy_name, peak_spacing in peak_spacing_strategy.items():
+                technicals = Technicals(
+                    df, 
+                    symbol, 
+                    interval,
+                    peak_spacing=peak_spacing
+                )
+
+                # Wykonaj wyszukiwanie wzorców
+
+                for fib_tolerance_strategy_name, fib_tolerance in fib_tolerance_strategy.items():
+                    logger.info(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
+                    harmonic_search = HarmonicSearch(
+                        technicals,
+                        fib_tolerance=fib_tolerance, 
+                        check_anchor=check_anchor
+                    )
+                    harmonic_search.search()
+
+                    # Pobierz wszystkie wzorce
+                    if find_only_xabcd:
+                        patterns = harmonic_search.get_patterns(family=harmonic_search.XABCD)
+                    else:
+                        patterns = harmonic_search.get_patterns()
+
+                    logger.info(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
+
+                    patterns_count = 0
+
+                    # Przetwórz wzorce i nanieś punkty na klines
+                    for pattern_type_key in patterns:
+                        pattern_list = patterns[pattern_type_key]
+                        logger.info(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key} dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}")
+
+                        for pattern_idx, pattern in enumerate(pattern_list):
+                            try:
+                                # Pobierz punkty z wzorca
+                                x_points = pattern.x
+                                y_points = pattern.y
+
+                                if len(y_points) < 3:
+                                    continue
+
+                                # Utwórz DataFrame dla mapowania
+                                df_map = pd.DataFrame(klines)
+                                df_map['date'] = pd.to_datetime(df_map['open_time'], unit='ms')
+                                df_map.set_index('date', inplace=True)
+
+                                # Funkcja do znajdowania indeksu świecy w klines
+                                def find_kline_index(x_point):
+                                    if hasattr(x_point, 'timestamp'):
+                                        target_datetime = x_point
+                                    elif isinstance(x_point, (int, float)):
+                                        if x_point > 1000000000000:
+                                            target_datetime = pd.to_datetime(x_point, unit='ms')
+                                        elif x_point > 1000000000:
+                                            target_datetime = pd.to_datetime(x_point, unit='s')
+                                        else:
+                                            idx = int(x_point)
+                                            return max(0, min(idx, len(klines) - 1))
+                                    else:
+                                        try:
+                                            target_datetime = pd.to_datetime(x_point)
+                                        except:
+                                            return 0
+
+                                    # Znajdź najbliższą datę
+                                    time_diffs = abs(df_map.index - target_datetime)
+                                    closest_idx = time_diffs.argmin()
+                                    return closest_idx
+
+                                # Określ nazwę wzorca
+                                if len(y_points) >= 5:
+                                    point_names = ["X", "A", "B", "C", "D"]
+                                    pattern_name = f"{pattern.name}_{patterns_count}/fib_tolerance_{fib_tolerance_strategy_name}:{fib_tolerance}/peak_spacing_{peak_spacing_strategy_name}:{peak_spacing}"
+                                elif len(y_points) == 4:
+                                    point_names = ["A", "B", "C", "D"]
+                                    pattern_name = f"ABCD_{pattern.name}_{patterns_count}/fib_tolerance_{fib_tolerance_strategy_name}:{fib_tolerance}/peak_spacing_{peak_spacing_strategy_name}:{peak_spacing}"
+                                elif len(y_points) == 3:
+                                    point_names = ["A", "B", "C"]
+                                    pattern_name = f"ABC_{pattern.name}_{patterns_count}/fib_tolerance_{fib_tolerance_strategy_name}:{fib_tolerance}/peak_spacing_{peak_spacing_strategy_name}:{peak_spacing}"
                                 else:
-                                    idx = int(x_point)
-                                    return max(0, min(idx, len(klines) - 1))
-                            else:
-                                try:
-                                    target_datetime = pd.to_datetime(x_point)
-                                except:
-                                    return 0
-                            
-                            # Znajdź najbliższą datę
-                            time_diffs = abs(df_map.index - target_datetime)
-                            closest_idx = time_diffs.argmin()
-                            return closest_idx
-                        
-                        # Określ nazwę wzorca
-                        if len(y_points) >= 5:
-                            point_names = ["X", "A", "B", "C", "D"]
-                            pattern_name = f"{pattern.name}_{patterns_count}"
-                        elif len(y_points) == 4:
-                            point_names = ["A", "B", "C", "D"]
-                            pattern_name = f"ABCD_{pattern.name}_{patterns_count}"
-                        elif len(y_points) == 3:
-                            point_names = ["A", "B", "C"]
-                            pattern_name = f"ABC_{pattern.name}_{patterns_count}"
-                        else:
-                            continue
-                        
-                        # Nanieś punkty na odpowiednie świece
-                        for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
-                            if i >= len(point_names):
-                                break
-                                
-                            kline_idx = find_kline_index(x_point)
-                            point_name = point_names[i]
-                            
-                            # Dodaj informacje o punkcie do świecy
-                            klines[kline_idx][f'pattern_{point_name}_price'] = float(y_point)
-                            klines[kline_idx][f'pattern_{point_name}_name'] = pattern_name
-                            klines[kline_idx][f'pattern_{point_name}_type'] = str(pattern.name)
-                            klines[kline_idx][f'pattern_{point_name}_bullish'] = bool(pattern.bullish)
-                            
-                            logger.debug(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
-                        
-                        # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
-                        if len(y_points) >= 2:
-                            first_kline_idx = find_kline_index(x_points[0])
-                            
-                            # Znajdź najwyższą i najniższą cenę wzorca
-                            max_price = max(y_points)
-                            min_price = min(y_points)
-                            is_uptrend = bool(pattern.bullish)
-                            
-                            # Oblicz poziomy Fibonacciego
-                            fib_levels = cls.calculate_fibonacci_levels(
-                                start_price=max_price if is_uptrend else min_price,
-                                end_price=min_price if is_uptrend else max_price,
-                                is_uptrend=is_uptrend
-                            )
-                            
-                            # Dodaj poziomy do pierwszej świecy wzorca
-                            for level_name, level_price in fib_levels.retracement.items():
-                                klines[first_kline_idx][f'fib_ret_{level_name}_{pattern_name}'] = float(level_price)
-                            
-                            for level_name, level_price in fib_levels.extension.items():
-                                klines[first_kline_idx][f'fib_ext_{level_name}_{pattern_name}'] = float(level_price)
-                            
-                            for target_name, target_price in fib_levels.targets.items():
-                                klines[first_kline_idx][f'fib_target_{target_name}_{pattern_name}'] = float(target_price)
-                        
-                        patterns_count += 1
-                        
-                    except Exception as e:
-                        logger.warning(f"Błąd podczas przetwarzania wzorca {pattern_idx}: {e}")
-                        continue
-            
+                                    continue
+
+                                # Nanieś punkty na odpowiednie świece
+                                for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
+                                    if i >= len(point_names):
+                                        break
+
+                                    kline_idx = find_kline_index(x_point)
+                                    point_name = point_names[i]
+
+                                    # Dodaj informacje o punkcie do świecy
+                                    klines[kline_idx][f'pattern_{point_name}_price'] = float(y_point)
+                                    klines[kline_idx][f'pattern_{point_name}_name'] = pattern_name
+                                    klines[kline_idx][f'pattern_{point_name}_type'] = str(pattern.name)
+                                    klines[kline_idx][f'pattern_{point_name}_bullish'] = bool(pattern.bullish)
+                                    klines[kline_idx][f'pattern_{point_name}_fib_tolerance_strategy'] = fib_tolerance_strategy_name
+                                    klines[kline_idx][f'pattern_{point_name}_fib_tolerance'] = fib_tolerance
+                                    klines[kline_idx][f'pattern_{point_name}_peak_spacing_strategy'] = peak_spacing_strategy_name
+                                    klines[kline_idx][f'pattern_{point_name}_peak_spacing'] = peak_spacing
+
+                                    logger.debug(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: cena={y_point}")
+
+                                # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
+                                if len(y_points) >= 2:
+                                    first_kline_idx = find_kline_index(x_points[0])
+
+                                    # Znajdź najwyższą i najniższą cenę wzorca
+                                    max_price = max(y_points)
+                                    min_price = min(y_points)
+                                    is_uptrend = bool(pattern.bullish)
+
+                                    # Oblicz poziomy Fibonacciego
+                                    fib_levels = cls.calculate_fibonacci_levels(
+                                        start_price=max_price if is_uptrend else min_price,
+                                        end_price=min_price if is_uptrend else max_price,
+                                        is_uptrend=is_uptrend
+                                    )
+
+                                    # Dodaj poziomy do pierwszej świecy wzorca
+                                    for level_name, level_price in fib_levels.retracement.items():
+                                        klines[first_kline_idx][f'fib_ret_{level_name}_{pattern_name}'] = float(level_price)
+
+                                    for level_name, level_price in fib_levels.extension.items():
+                                        klines[first_kline_idx][f'fib_ext_{level_name}_{pattern_name}'] = float(level_price)
+
+                                    for target_name, target_price in fib_levels.targets.items():
+                                        klines[first_kline_idx][f'fib_target_{target_name}_{pattern_name}'] = float(target_price)
+
+                                patterns_count += 1
+
+                            except Exception as e:
+                                logger.warning(f"Błąd podczas przetwarzania wzorca {pattern_idx}: {e}")
+                                continue
+
             logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
             return patterns_count
-            
+
         except Exception as e:
             logger.error(f"Błąd podczas wykrywania wzorców harmonicznych: {e}")
+            logger.error(traceback.format_exc())
             return 0
 
     @classmethod
@@ -291,6 +331,7 @@ class TechnicalAnalysis:
             
             # Wykonaj wyszukiwanie wzorców w trakcie formowania
             harmonic_search = HarmonicSearch(technicals)
+
             harmonic_search.forming()
             
             if find_only_xabcd:
