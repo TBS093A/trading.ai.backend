@@ -1043,10 +1043,8 @@ class TechnicalAnalysis:
         candles_count = len(df)
         if candles_count <= 200:
             tick_interval = 1  # Co piąta świeca
-        elif candles_count <= 500:
-            tick_interval = 5  # Co dziesiąta świeca
-        else:
-            tick_interval = 10  # Co dwudziesta świeca
+        elif candles_count > 200:
+            tick_interval = candles_count / 100
             
         logger.info(f"Interwał osi X: co {tick_interval} świeca (dla {candles_count} świec)")
         
@@ -1092,6 +1090,29 @@ class TechnicalAnalysis:
             show_nontrading=False,  # Ukryj okresy bez tradingu
             scale_padding=dict(left=0.3, right=1.0, top=0.8, bottom=0.8)  # Więcej miejsca dla tick-ów
         )
+
+        # Dostosuj formatowanie osi X po utworzeniu wykresu
+        if hasattr(axes, '__len__') and len(axes) > 0:
+            main_ax = axes[0]
+        elif hasattr(axes, 'plot'):
+            main_ax = axes
+        else:
+            main_ax = axes
+            
+        # Ustaw interwał tick-ów na osi X
+        try:
+            import matplotlib.ticker as ticker
+            # Ustawij locator dla osi X z obliczonym interwałem
+            main_ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_interval))
+            main_ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+            
+            # Poprawa formatowania osi Y dla skali logarytmicznej
+            main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
+            main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+            
+            logger.info(f"Ustawiono tick interwał {tick_interval} dla osi X i formatowanie dla skali logarytmicznej")
+        except Exception as e:
+            logger.warning(f"Nie można ustawić formatowania osi: {e}")
         
         # Dostosuj formatowanie osi bezpośrednio po utworzeniu wykresu
         yticks = np.geomspace(df['low'].min(), df['high'].max(), num=10)
