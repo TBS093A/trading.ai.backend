@@ -1094,60 +1094,9 @@ class TechnicalAnalysis:
         )
         
         # Dostosuj formatowanie osi bezpośrednio po utworzeniu wykresu
-        if hasattr(axes, '__len__') and len(axes) > 0:
-            main_ax = axes[0]
-        elif hasattr(axes, 'plot'):
-            main_ax = axes
-        else:
-            main_ax = axes
-            
-        # Ustaw zaawansowane formatowanie osi używając wcześniej obliczonych parametrów
-        try:
-            # Ustawij locator dla osi X z obliczonym interwałem
-            main_ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_interval))
-            main_ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
-            
-            # Zastosuj zaawansowane formatowanie osi Y dla skali logarytmicznej
-            if price_range > 0:
-                # Ustawienia dla różnych zakresów cenowych z użyciem wcześniej obliczonych parametrów
-                if y_max / y_min > 100:  # Duży zakres cenowy
-                    locator = ticker.LogLocator(base=10, numticks=base_ticks)
-                    minor_locator = ticker.LogLocator(base=10, numticks=base_ticks*2, 
-                                                    subs=np.arange(2, 10))
-                elif y_max / y_min > 10:  # Średni zakres cenowy  
-                    locator = ticker.LogLocator(base=10, numticks=base_ticks)
-                    minor_locator = ticker.LogLocator(base=10, numticks=base_ticks*3,
-                                                    subs=[2, 3, 4, 5, 6, 7, 8, 9])
-                else:  # Mały zakres cenowy
-                    # Dla małych zakresów użyj więcej tick-ów
-                    locator = ticker.LogLocator(base=10, numticks=base_ticks+5)
-                    minor_locator = ticker.LogLocator(base=10, numticks=(base_ticks+5)*4,
-                                                    subs=np.arange(1.5, 10, 0.5))
-                
-                # Zastosuj locatory
-                main_ax.yaxis.set_major_locator(locator)
-                main_ax.yaxis.set_minor_locator(minor_locator)
-                
-                # Zastosuj formatowanie używając wcześniej obliczonego formatu
-                formatter = ticker.FormatStrFormatter(y_format)
-                main_ax.yaxis.set_major_formatter(formatter)
-                main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-                
-                # Wymuś ponowne rysowanie tick-ów
-                main_ax.figure.canvas.draw_idle()
-                
-                logger.info(f"Zastosowano {base_ticks} głównych tick-ów dla osi Y z formatem {y_format}")
-            else:
-                # Fallback dla przypadków problemowych
-                main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
-                logger.warning("Używam domyślnego formatowania osi Y - brak prawidłowego zakresu cen")
-            
-            logger.info(f"Ustawiono formatowanie: tick interwał {tick_interval} dla osi X i {base_ticks} tick-ów dla osi Y")
-        except Exception as e:
-            logger.warning(f"Nie można ustawić formatowania osi: {e}")
-            # Wyczyść traceback dla lepszego debugowania
-            import traceback
-            logger.debug(f"Traceback formatowania osi: {traceback.format_exc()}")
+        yticks = np.geomspace(df['low'].min(), df['high'].max(), num=10)
+        axes[0].set_yticks(yticks)
+        axes[0].get_yaxis().set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:,.0f}'))
         
         # Dodaj linie łączące punkty wzorców harmonicznych i trójkąty
         if show_patterns and patterns_data:
