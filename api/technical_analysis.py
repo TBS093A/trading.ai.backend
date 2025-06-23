@@ -965,7 +965,23 @@ class TechnicalAnalysis:
                             )
                             logger.debug(f"Dodano poziom {fib_type} Fibonacci {level_name} = {level_price:.2f} w kolorze {color}")
         
-        # Tworzenie wykresu
+        # Oblicz dynamiczną szerokość wykresu na podstawie ilości świec
+        candles_count = len(df)
+        base_width = 5  # Domyślna szerokość dla 50 świec
+        base_candles = 50  # Bazowa liczba świec
+        
+        # Skalowanie szerokości: na każde 50 świec dodaj 15 jednostek szerokości
+        width_multiplier = max(1, candles_count / base_candles)
+        dynamic_width = int(base_width * width_multiplier)
+        
+        # Ustal minimalną i maksymalną szerokość dla praktyczności
+        min_width = 10
+        max_width = 100
+        dynamic_width = max(min_width, min(dynamic_width, max_width))
+        
+        logger.info(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
+        
+        # Tworzenie wykresu z dynamiczną szerokością
         fig, axes = mpf.plot(
             df,
             type='candle',
@@ -974,7 +990,7 @@ class TechnicalAnalysis:
             volume='volume' in df.columns,
             addplot=add_plots,
             returnfig=True,
-            figsize=(15, 10)
+            figsize=(dynamic_width, 10)
         )
         
         # Dodaj linie łączące punkty wzorców harmonicznych i trójkąty
