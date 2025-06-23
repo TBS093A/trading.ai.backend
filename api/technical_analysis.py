@@ -81,6 +81,37 @@ class TechnicalAnalysis:
         }
     }
 
+    CHART_STYLES = {
+        "binance_dark": {
+            "base_mpl_style": "dark_background",
+            "marketcolors": {
+                "candle": {"up": "#3dc985", "down": "#ef4f60"},  
+                "edge": {"up": "#3dc985", "down": "#ef4f60"},  
+                "wick": {"up": "#3dc985", "down": "#ef4f60"},  
+                "ohlc": {"up": "green", "down": "red"},
+                "volume": {"up": "#247252", "down": "#82333f"},  
+                "vcedge": {"up": "green", "down": "red"},  
+                "vcdopcod": False,
+                "alpha": 1,
+            },
+            "mavcolors": ("#ad7739", "#a63ab2", "#62b8ba"),
+            "facecolor": "#1b1f24",
+            "gridcolor": "#2c2e31",
+            "gridstyle": "--",
+            "y_on_right": True,
+            "rc": {
+                "axes.grid": True,
+                "axes.grid.axis": "y",
+                "axes.edgecolor": "#474d56",
+                "axes.titlecolor": "red",
+                "figure.facecolor": "#161a1e",
+                "figure.titlesize": "x-large",
+                "figure.titleweight": "semibold",
+            },
+            "base_mpf_style": "binance-dark",
+        }
+    }
+
     @classmethod
     def _convert_klines_to_dataframe(cls, klines: List[Dict[str, Union[int, float, str]]]) -> pd.DataFrame:
         """
@@ -979,7 +1010,32 @@ class TechnicalAnalysis:
         max_width = 100
         dynamic_width = max(min_width, min(dynamic_width, max_width))
         
+        # Oblicz dynamiczną wysokość wykresu na podstawie zakresu cenowego
+        y_min_for_height = df[['low']].min().iloc[0]
+        y_max_for_height = df[['high']].max().iloc[0]
+        price_range_for_height = y_max_for_height - y_min_for_height
+        
+        # Bazowa wysokość dla określonego zakresu cenowego
+        base_height = 10  # Domyślna wysokość
+        
+        # Oblicz proporcję cenową i dostosuj wysokość
+        if price_range_for_height > 0:
+            # Używamy logarytmu cenowej proporcji dla lepszego skalowania
+            import numpy as np  # Import numpy dla obliczenia logarytmu
+            price_ratio = y_max_for_height / y_min_for_height if y_min_for_height > 0 else 1
+            # Skalowanie na podstawie logarytmu - większy zakres = wyższy wykres
+            height_multiplier = max(0.8, min(3.0, np.log10(price_ratio) + 1))
+            dynamic_height = int(base_height * height_multiplier)
+        else:
+            dynamic_height = base_height
+        
+        # Ustal minimalną i maksymalną wysokość dla praktyczności
+        min_height = 8
+        max_height = 30
+        dynamic_height = max(min_height, min(dynamic_height, max_height))
+        
         logger.info(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
+        logger.info(f"Dynamiczna wysokość wykresu: {dynamic_height} (dla zakresu {price_range_for_height:.6f}, ratio: {y_max_for_height/y_min_for_height if y_min_for_height > 0 else 1:.2f})")
         
         # Oblicz interwał dla osi X na podstawie ilości świec
         candles_count = len(df)
@@ -992,24 +1048,50 @@ class TechnicalAnalysis:
             
         logger.info(f"Interwał osi X: co {tick_interval} świeca (dla {candles_count} świec)")
         
-        # Tworzenie wykresu z dynamiczną szerokością, skalą logarytmiczną i lepszym formatowaniem osi X
+        # Oblicz parametry formatowania osi Y PRZED wywołaniem mpf.plot
+        import matplotlib.ticker as ticker
+        import numpy as np
+        
+        y_min = df[['low']].min().iloc[0]
+        y_max = df[['high']].max().iloc[0]
+        price_range = y_max - y_min
+        
+        # Oblicz liczbę tick-ów dla osi Y
+        min_ticks = 16
+        max_ticks = 48
+        base_ticks = max(min_ticks, min(max_ticks, int(10 * np.log10(y_max/y_min)))) if price_range > 0 else 10
+        
+        # Określ format liczb na podstawie zakresu wartości
+        if y_max < 0.01:
+            y_format = '%.6f'
+        elif y_max < 1:
+            y_format = '%.4f'
+        elif y_max < 1000:
+            y_format = '%.2f'
+        else:
+            y_format = '%.0f'
+        
+        logger.info(f"Parametry osi Y: {base_ticks} tick-ów, format {y_format}, zakres: {y_min:.6f} - {y_max:.6f}")
+        
+        # Tworzenie wykresu z dynamiczną szerokością i wysokością, skalą logarytmiczną i lepszym formatowaniem osi X
         fig, axes = mpf.plot(
             df,
             type='candle',
-            style=s,
+            style=cls.CHART_STYLES["binance_dark"],
             title=title,
             volume='volume' in df.columns,
             addplot=add_plots,
             returnfig=True,
-            figsize=(dynamic_width, 10),
+            figsize=(dynamic_width, dynamic_height),
             yscale='log',  # Skala logarytmiczna dla osi Y
-            datetime_format='%H:%M\n%d/%m',  # Format daty i czasu na osi X
+            datetime_format='%H:%M %d/%m/%Y',  # Format daty i czasu na osi X
             xrotation=45,  # Obrót etykiet osi X dla lepszej czytelności
             tight_layout=True,  # Lepsze rozłożenie elementów
-            show_nontrading=False  # Ukryj okresy bez tradingu
+            show_nontrading=False,  # Ukryj okresy bez tradingu
+            scale_padding=dict(left=0.3, right=1.0, top=0.8, bottom=0.8)  # Więcej miejsca dla tick-ów
         )
         
-        # Dostosuj formatowanie osi X po utworzeniu wykresu
+        # Dostosuj formatowanie osi bezpośrednio po utworzeniu wykresu
         if hasattr(axes, '__len__') and len(axes) > 0:
             main_ax = axes[0]
         elif hasattr(axes, 'plot'):
@@ -1017,20 +1099,53 @@ class TechnicalAnalysis:
         else:
             main_ax = axes
             
-        # Ustaw interwał tick-ów na osi X
+        # Ustaw zaawansowane formatowanie osi używając wcześniej obliczonych parametrów
         try:
-            import matplotlib.ticker as ticker
             # Ustawij locator dla osi X z obliczonym interwałem
             main_ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_interval))
             main_ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
             
-            # Poprawa formatowania osi Y dla skali logarytmicznej
-            main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
-            main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+            # Zastosuj zaawansowane formatowanie osi Y dla skali logarytmicznej
+            if price_range > 0:
+                # Ustawienia dla różnych zakresów cenowych z użyciem wcześniej obliczonych parametrów
+                if y_max / y_min > 100:  # Duży zakres cenowy
+                    locator = ticker.LogLocator(base=10, numticks=base_ticks)
+                    minor_locator = ticker.LogLocator(base=10, numticks=base_ticks*2, 
+                                                    subs=np.arange(2, 10))
+                elif y_max / y_min > 10:  # Średni zakres cenowy  
+                    locator = ticker.LogLocator(base=10, numticks=base_ticks)
+                    minor_locator = ticker.LogLocator(base=10, numticks=base_ticks*3,
+                                                    subs=[2, 3, 4, 5, 6, 7, 8, 9])
+                else:  # Mały zakres cenowy
+                    # Dla małych zakresów użyj więcej tick-ów
+                    locator = ticker.LogLocator(base=10, numticks=base_ticks+5)
+                    minor_locator = ticker.LogLocator(base=10, numticks=(base_ticks+5)*4,
+                                                    subs=np.arange(1.5, 10, 0.5))
+                
+                # Zastosuj locatory
+                main_ax.yaxis.set_major_locator(locator)
+                main_ax.yaxis.set_minor_locator(minor_locator)
+                
+                # Zastosuj formatowanie używając wcześniej obliczonego formatu
+                formatter = ticker.FormatStrFormatter(y_format)
+                main_ax.yaxis.set_major_formatter(formatter)
+                main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+                
+                # Wymuś ponowne rysowanie tick-ów
+                main_ax.figure.canvas.draw_idle()
+                
+                logger.info(f"Zastosowano {base_ticks} głównych tick-ów dla osi Y z formatem {y_format}")
+            else:
+                # Fallback dla przypadków problemowych
+                main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
+                logger.warning("Używam domyślnego formatowania osi Y - brak prawidłowego zakresu cen")
             
-            logger.info(f"Ustawiono tick interwał {tick_interval} dla osi X i formatowanie dla skali logarytmicznej")
+            logger.info(f"Ustawiono formatowanie: tick interwał {tick_interval} dla osi X i {base_ticks} tick-ów dla osi Y")
         except Exception as e:
             logger.warning(f"Nie można ustawić formatowania osi: {e}")
+            # Wyczyść traceback dla lepszego debugowania
+            import traceback
+            logger.debug(f"Traceback formatowania osi: {traceback.format_exc()}")
         
         # Dodaj linie łączące punkty wzorców harmonicznych i trójkąty
         if show_patterns and patterns_data:
@@ -1101,13 +1216,25 @@ class TechnicalAnalysis:
                         point_sequence = ['X', 'A', 'B', 'C', 'D']
                         for point_name in point_sequence:
                             if point_name in points:
+                                y_offset = 15
+                                if is_bullish:
+                                    if point_name in ['X', 'B', 'D']:
+                                        y_offset = y_offset * -1
+                                    elif point_name in ['A', 'C']:
+                                        y_offset = y_offset
+                                else:
+                                    if point_name in ['X', 'B', 'D']:
+                                        y_offset = y_offset
+                                    elif point_name in ['A', 'C']:
+                                        y_offset = y_offset * -1
                                 point = points[point_name]
                                 # Rysuj literę zamiast kropki
-                                main_ax.annotate(point_name, (point['index'], point['price']), 
-                                               ha='center', va='center', fontsize=12, weight='bold',
-                                               color='white', 
-                                               bbox=dict(boxstyle="circle,pad=0.3", 
-                                                       facecolor=line_color, alpha=0.8, edgecolor='black'))
+                                main_ax.annotate(point_name, (point['index'], point['price']),
+                                               xytext=(0, y_offset), textcoords='offset points',
+                                               ha='center', va='center', fontsize=9, weight='normal',
+                                               color=line_color, 
+                                               bbox=dict(boxstyle="circle", 
+                                                       facecolor='black', alpha=0.5, edgecolor=line_color))
                         
                         # Dodaj dużą etykietę wzorca przy punkcie D z proporcjami
                         if 'D' in points:
@@ -1135,10 +1262,10 @@ class TechnicalAnalysis:
                             
                             # Pozycjonowanie etykiety - pod punktem D dla bullish, nad dla bearish
                             if is_bullish:
-                                y_offset = -30  # Pod punktem - więcej miejsca dla proporcji
+                                y_offset = -35  # Pod punktem - więcej miejsca dla proporcji
                                 va = 'top'
                             else:
-                                y_offset = 30   # Nad punktem - więcej miejsca dla proporcji
+                                y_offset = 35   # Nad punktem - więcej miejsca dla proporcji
                                 va = 'bottom'
                             
                             main_ax.annotate(pattern_label, (d_point['index'], d_point['price']), 
@@ -1146,7 +1273,7 @@ class TechnicalAnalysis:
                                            ha='center', va=va, fontsize=12, weight='bold',
                                            color=line_color, alpha=0.9,
                                            bbox=dict(boxstyle="round,pad=0.5", 
-                                                   facecolor='white', alpha=0.9, edgecolor=line_color))
+                                                   facecolor='black', alpha=0.5, edgecolor=line_color))
                         
 
                         
