@@ -981,7 +981,18 @@ class TechnicalAnalysis:
         
         logger.info(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
         
-        # Tworzenie wykresu z dynamiczną szerokością
+        # Oblicz interwał dla osi X na podstawie ilości świec
+        candles_count = len(df)
+        if candles_count <= 200:
+            tick_interval = 1  # Co piąta świeca
+        elif candles_count <= 500:
+            tick_interval = 5  # Co dziesiąta świeca
+        else:
+            tick_interval = 10  # Co dwudziesta świeca
+            
+        logger.info(f"Interwał osi X: co {tick_interval} świeca (dla {candles_count} świec)")
+        
+        # Tworzenie wykresu z dynamiczną szerokością, skalą logarytmiczną i lepszym formatowaniem osi X
         fig, axes = mpf.plot(
             df,
             type='candle',
@@ -990,8 +1001,36 @@ class TechnicalAnalysis:
             volume='volume' in df.columns,
             addplot=add_plots,
             returnfig=True,
-            figsize=(dynamic_width, 10)
+            figsize=(dynamic_width, 10),
+            yscale='log',  # Skala logarytmiczna dla osi Y
+            datetime_format='%H:%M\n%d/%m',  # Format daty i czasu na osi X
+            xrotation=45,  # Obrót etykiet osi X dla lepszej czytelności
+            tight_layout=True,  # Lepsze rozłożenie elementów
+            show_nontrading=False  # Ukryj okresy bez tradingu
         )
+        
+        # Dostosuj formatowanie osi X po utworzeniu wykresu
+        if hasattr(axes, '__len__') and len(axes) > 0:
+            main_ax = axes[0]
+        elif hasattr(axes, 'plot'):
+            main_ax = axes
+        else:
+            main_ax = axes
+            
+        # Ustaw interwał tick-ów na osi X
+        try:
+            import matplotlib.ticker as ticker
+            # Ustawij locator dla osi X z obliczonym interwałem
+            main_ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_interval))
+            main_ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+            
+            # Poprawa formatowania osi Y dla skali logarytmicznej
+            main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
+            main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+            
+            logger.info(f"Ustawiono tick interwał {tick_interval} dla osi X i formatowanie dla skali logarytmicznej")
+        except Exception as e:
+            logger.warning(f"Nie można ustawić formatowania osi: {e}")
         
         # Dodaj linie łączące punkty wzorców harmonicznych i trójkąty
         if show_patterns and patterns_data:
