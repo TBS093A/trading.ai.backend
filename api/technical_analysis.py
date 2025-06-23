@@ -1070,46 +1070,46 @@ class TechnicalAnalysis:
                                                bbox=dict(boxstyle="circle,pad=0.3", 
                                                        facecolor=line_color, alpha=0.8, edgecolor='black'))
                         
-                        # Dodaj dużą etykietę wzorca przy punkcie D
+                        # Dodaj dużą etykietę wzorca przy punkcie D z proporcjami
                         if 'D' in points:
                             d_point = points['D']
                             direction_text = "BULLISH" if is_bullish else "BEARISH"
-                            pattern_label = f"{pattern_name}\n{direction_text}"
+                            
+                            # Zbierz wszystkie proporcje wzorca
+                            retraces_text = ""
+                            if pattern_retraces:
+                                retraces_lines = []
+                                # Kolejność proporcji zgodna z życzeniem użytkownika
+                                for retrace_name in ['XABCD', 'XAB', 'ABC', 'BCD']:
+                                    if retrace_name in pattern_retraces:
+                                        retraces_lines.append(f"{retrace_name}: {pattern_retraces[retrace_name]:.3f}")
+                                
+                                # Dodaj inne proporcje które mogą być dostępne
+                                for retrace_name, retrace_value in pattern_retraces.items():
+                                    if retrace_name not in ['XABCD', 'XAB', 'ABC', 'BCD']:
+                                        retraces_lines.append(f"{retrace_name}: {retrace_value:.3f}")
+                                
+                                if retraces_lines:
+                                    retraces_text = "\n\n" + "\n".join(retraces_lines)
+                            
+                            pattern_label = f"{pattern_name}\n{direction_text}{retraces_text}"
                             
                             # Pozycjonowanie etykiety - pod punktem D dla bullish, nad dla bearish
                             if is_bullish:
-                                y_offset = -20  # Pod punktem
+                                y_offset = -30  # Pod punktem - więcej miejsca dla proporcji
                                 va = 'top'
                             else:
-                                y_offset = 20   # Nad punktem
+                                y_offset = 30   # Nad punktem - więcej miejsca dla proporcji
                                 va = 'bottom'
                             
                             main_ax.annotate(pattern_label, (d_point['index'], d_point['price']), 
                                            xytext=(0, y_offset), textcoords='offset points',
-                                           ha='center', va=va, fontsize=14, weight='bold',
+                                           ha='center', va=va, fontsize=12, weight='bold',
                                            color=line_color, alpha=0.9,
                                            bbox=dict(boxstyle="round,pad=0.5", 
-                                                   facecolor='white', alpha=0.8, edgecolor=line_color))
+                                                   facecolor='white', alpha=0.9, edgecolor=line_color))
                         
-                        # Funkcja pomocnicza do obliczania kąta linii i dodawania obróconych etykiet
-                        def add_rotated_label(p1, p2, text, color, offset_y=0):
-                            """Dodaje obrócony tekst na środku linii zgodnie z jej kątem nachylenia"""
-                            import math
-                            
-                            # Oblicz kąt nachylenia linii w stopniach
-                            dx = p2['index'] - p1['index']
-                            dy = p2['price'] - p1['price']
-                            angle = math.degrees(math.atan2(dy, dx))
-                            
-                            # Środek linii
-                            mid_x = (p1['index'] + p2['index']) / 2
-                            mid_y = (p1['price'] + p2['price']) / 2 + offset_y
-                            
-                            # Dodaj obrócony tekst
-                            main_ax.annotate(text, (mid_x, mid_y), 
-                                           ha='center', va='center', fontsize=9, weight='bold',
-                                           color=color, alpha=0.9, rotation=angle,
-                                           bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8, edgecolor=color))
+
                         
                         # Rysuj główne linie wzorca harmonicznego (X-A-B-C-D) z pattern_retraces
                         available_points = [p for p in point_sequence if p in points]
@@ -1123,10 +1123,6 @@ class TechnicalAnalysis:
                             # Rysuj linię
                             main_ax.plot([p1['index'], p2['index']], [p1['price'], p2['price']], 
                                        color=line_color, alpha=alpha, linewidth=2, linestyle='-')
-                            
-                            # Dodaj retrace XAB na głównej linii A-B (zmiana z AB_XA_ratio na XAB)
-                            if p1_name == 'A' and p2_name == 'B' and 'XAB' in pattern_retraces:
-                                add_rotated_label(p1, p2, f"XAB: {pattern_retraces['XAB']:.3f}", line_color)
                         
                         # Rysuj dodatkowe linie wzorca harmonicznego
                         # Linia X-D (completion line)
@@ -1135,32 +1131,20 @@ class TechnicalAnalysis:
                             p_d = points['D']
                             main_ax.plot([p_x['index'], p_d['index']], [p_x['price'], p_d['price']], 
                                        color=line_color, alpha=alpha*0.7, linewidth=1, linestyle='--')
-                            
-                            # Dodaj retrace XABCD jako obrócony tekst na linii X-D (zmiana z XD_XA_ratio na XABCD)
-                            if 'XABCD' in pattern_retraces:
-                                add_rotated_label(p_x, p_d, f"XABCD: {pattern_retraces['XABCD']:.3f}", line_color, offset_y=0)
                         
-                        # Linia A-C (impulse line) - dodaj retrace ABC
+                        # Linia A-C (impulse line)
                         if 'A' in points and 'C' in points:
                             p_a = points['A']
                             p_c = points['C']
                             main_ax.plot([p_a['index'], p_c['index']], [p_a['price'], p_c['price']], 
                                        color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
-                            
-                            # Dodaj retrace ABC na linii A-C (zmiana z BC_AB_ratio na ABC)
-                            if 'ABC' in pattern_retraces:
-                                add_rotated_label(p_a, p_c, f"ABC: {pattern_retraces['ABC']:.3f}", line_color, offset_y=5)
                         
-                        # Linia B-D (retrace line) - dodaj retrace BCD
+                        # Linia B-D (retrace line)
                         if 'B' in points and 'D' in points:
                             p_b = points['B']
                             p_d = points['D']
                             main_ax.plot([p_b['index'], p_d['index']], [p_b['price'], p_d['price']], 
                                        color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
-                            
-                            # Dodaj retrace BCD na linii B-D (zmiana z CD_BC_ratio na BCD)
-                            if 'BCD' in pattern_retraces:
-                                add_rotated_label(p_b, p_d, f"BCD: {pattern_retraces['BCD']:.3f}", line_color, offset_y=5)
                         
                         # Rysuj trójkąty z przezroczystym tłem
                         # Trójkąt X-A-B
