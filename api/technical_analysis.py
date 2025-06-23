@@ -311,8 +311,11 @@ class TechnicalAnalysis:
                                     pattern_points[point_name] = float(y_point)
 
                                     # Dodaj informacje o punkcie do świecy w nowej strukturze + kompatybilnej ze starą
-                                    klines[kline_idx]['patterns'] = {
-                                        f'{patterns_count}': {
+                                    if 'patterns' not in klines[kline_idx]:
+                                        klines[kline_idx]['patterns'] = {}
+
+                                    if f'{patterns_count}' not in klines[kline_idx]['patterns']:
+                                        klines[kline_idx]['patterns'][f'{patterns_count}'] = {
                                             f'pattern_id': patterns_count,
                                             f'pattern_point_name': point_name,
                                             f'pattern_point_price': float(y_point),
@@ -328,7 +331,6 @@ class TechnicalAnalysis:
                                             f'pattern_peak_spacing': peak_spacing,
                                             f'pattern_retraces': pattern.retraces,
                                         }
-                                    }
                                     
                                 # Oblicz i dodaj poziomy Fibonacciego do pierwszej świecy wzorca
                                 fibonacci_levels = {}
@@ -1197,6 +1199,22 @@ class TechnicalAnalysis:
                     
                     logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
                     
+                    # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
+                    all_points_by_candle = {}
+                    for pattern_id, pattern_group in pattern_groups.items():
+                        for point_name, point_data in pattern_group['points'].items():
+                            candle_idx = point_data['index']
+                            if candle_idx not in all_points_by_candle:
+                                all_points_by_candle[candle_idx] = []
+                            all_points_by_candle[candle_idx].append((pattern_id, point_name, point_data))
+                    
+                    # Loguj informacje o punktach na świecach dla debugowania
+                    logger.info(f"Mapa punktów na świecach:")
+                    for candle_idx, points_list in all_points_by_candle.items():
+                        if len(points_list) > 1:  # Tylko świece z wieloma punktami
+                            point_descriptions = [f"({pid}:{name})" for pid, name, _ in points_list]
+                            logger.info(f"Świeca {candle_idx}: {len(points_list)} punktów: {', '.join(point_descriptions)}")
+                    
                     # Rysuj linie i trójkąty dla każdego wzorca
                     for pattern_id, pattern_group in pattern_groups.items():
                         points = pattern_group['points']
@@ -1212,25 +1230,70 @@ class TechnicalAnalysis:
                         
                         logger.debug(f"Rysowanie wzorca {pattern_name} (ID: {pattern_id}) z punktami: {list(points.keys())}")
                         
-                        # Rysuj oznaczenia literowe punktów (X, A, B, C, D)
+                        # Rysuj oznaczenia literowe punktów (X, A, B, C, D) z inteligentnym rozmieszczeniem
                         point_sequence = ['X', 'A', 'B', 'C', 'D']
                         for point_name in point_sequence:
                             if point_name in points:
-                                y_offset = 15
+                                point = points[point_name]
+                                candle_idx = point['index']
+                                
+                                # Podstawowy y_offset na podstawie typu wzorca i punktu
+                                base_y_offset = 15
                                 if is_bullish:
                                     if point_name in ['X', 'B', 'D']:
-                                        y_offset = y_offset * -1
+                                        base_y_offset = base_y_offset * -1
                                     elif point_name in ['A', 'C']:
-                                        y_offset = y_offset
+                                        base_y_offset = base_y_offset
                                 else:
                                     if point_name in ['X', 'B', 'D']:
-                                        y_offset = y_offset
+                                        base_y_offset = base_y_offset
                                     elif point_name in ['A', 'C']:
-                                        y_offset = y_offset * -1
-                                point = points[point_name]
-                                # Rysuj literę zamiast kropki
+                                        base_y_offset = base_y_offset * -1
+                                
+                                # Oblicz x_offset i dodatkowy y_offset na podstawie WSZYSTKICH punktów na świecy
+                                points_on_candle = all_points_by_candle.get(candle_idx, [])
+                                num_points = len(points_on_candle)
+                                
+                                # Znajdź pozycję tego punktu w liście wszystkich punktów na świecy
+                                point_position = next((i for i, (pid, name, _) in enumerate(points_on_candle) 
+                                                     if pid == pattern_id and name == point_name), 0)
+                                
+                                # Oblicz offsety na podstawie liczby punktów
+                                x_offset = 0
+                                additional_y_offset = 0
+                                
+                                if num_points == 1:
+                                    # Jeden punkt: bez przesunięć
+                                    x_offset = 0
+                                    additional_y_offset = 0
+                                elif num_points == 2:
+                                    # Dwa punkty: pierwszy +7, drugi -7
+                                    x_offset = 7 if point_position == 0 else -7
+                                elif num_points == 3:
+                                    # Trzy punkty: pierwszy +7, drugi -7, trzeci nowy wiersz
+                                    if point_position == 0:
+                                        x_offset = 7
+                                    elif point_position == 1:
+                                        x_offset = -7
+                                    else:  # point_position == 2
+                                        x_offset = 0
+                                        additional_y_offset = 10 if base_y_offset > 0 else -10  # Nowy wiersz
+                                elif num_points >= 4:
+                                    # Więcej punktów: rozłóż równomiernie
+                                    if point_position < 2:
+                                        x_offset = 7 if point_position == 0 else -7
+                                    else:
+                                        x_offset = 7 if point_position % 2 == 0 else -7
+                                        row = (point_position - 2) // 2 + 1
+                                        additional_y_offset = row * (10 if base_y_offset > 0 else -10)
+                                
+                                final_y_offset = base_y_offset + additional_y_offset
+                                
+                                logger.debug(f"Punkt {point_name} wzorca {pattern_id}: świeca {candle_idx}, pozycja {point_position+1}/{num_points}, x_offset={x_offset}, y_offset={final_y_offset}")
+                                
+                                # Rysuj literę zamiast kropki z unikalnymi kolorami dla wzorców
                                 main_ax.annotate(point_name, (point['index'], point['price']),
-                                               xytext=(0, y_offset), textcoords='offset points',
+                                               xytext=(x_offset, final_y_offset), textcoords='offset points',
                                                ha='center', va='center', fontsize=9, weight='normal',
                                                color=line_color, 
                                                bbox=dict(boxstyle="circle", 
@@ -1261,15 +1324,28 @@ class TechnicalAnalysis:
                             pattern_label = f"{pattern_name}\n{direction_text}{retraces_text}"
                             
                             # Pozycjonowanie etykiety - pod punktem D dla bullish, nad dla bearish
-                            if is_bullish:
-                                y_offset = -35  # Pod punktem - więcej miejsca dla proporcji
-                                va = 'top'
+                            base_label_y_offset = -35 if is_bullish else 35  # Pod punktem dla bullish, nad dla bearish
+                            va = 'top' if is_bullish else 'bottom'
+                            
+                            # Dodaj dodatkowe przesunięcie jeśli na świecy punktu D jest więcej wzorców/punktów
+                            d_candle_idx = d_point['index']
+                            points_on_d_candle = all_points_by_candle.get(d_candle_idx, [])
+                            num_points_on_d_candle = len(points_on_d_candle)
+                            
+                            if num_points_on_d_candle > 1:
+                                # Dodaj 10 jednostek y_offset za każdy dodatkowy punkt/wzorzec na świecy
+                                additional_label_offset = (num_points_on_d_candle - 1) * 7
+                                if is_bullish:
+                                    final_label_y_offset = base_label_y_offset - additional_label_offset  # Jeszcze niżej dla bullish
+                                else:
+                                    final_label_y_offset = base_label_y_offset + additional_label_offset  # Jeszcze wyżej dla bearish
+                                
+                                logger.debug(f"Etykieta wzorca {pattern_id} przy punkcie D: świeca {d_candle_idx} ma {num_points_on_d_candle} punktów, dodatkowe przesunięcie: {additional_label_offset}, końcowy y_offset: {final_label_y_offset}")
                             else:
-                                y_offset = 35   # Nad punktem - więcej miejsca dla proporcji
-                                va = 'bottom'
+                                final_label_y_offset = base_label_y_offset
                             
                             main_ax.annotate(pattern_label, (d_point['index'], d_point['price']), 
-                                           xytext=(0, y_offset), textcoords='offset points',
+                                           xytext=(0, final_label_y_offset), textcoords='offset points',
                                            ha='center', va=va, fontsize=12, weight='bold',
                                            color=line_color, alpha=0.9,
                                            bbox=dict(boxstyle="round,pad=0.5", 
@@ -1331,7 +1407,11 @@ class TechnicalAnalysis:
                                        edgecolor=line_color, linewidth=1)
                             
                         
-                        logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces")
+                        # Oblicz ile punktów tego wzorca ma przesunięcia
+                        displaced_points = sum(1 for point_name in points.keys() 
+                                             if len(all_points_by_candle.get(points[point_name]['index'], [])) > 1)
+                        
+                        logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
                 
                 else:
                     logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
