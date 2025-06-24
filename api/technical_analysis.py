@@ -847,18 +847,18 @@ class TechnicalAnalysis:
         
         # Przygotowanie dodatkowych wskaźników
         add_plots = []
-        panel = 1  # Licznik paneli dla wskaźników
+        panel = 2  # Licznik paneli dla wskaźników
         
         # Dynamiczne wykrywanie i dodawanie wskaźników
         if show_rsi and 'rsi' in df.columns:
             add_plots.append(
-                mpf.make_addplot(df['rsi'], panel=panel, color='blue', title='RSI')
+                mpf.make_addplot(df['rsi'], panel=panel, color='yellow', ylabel='RSI')
             )
             panel += 1
             
         if show_macd and all(col in df.columns for col in ['macd', 'signal']):
             add_plots.append(
-                mpf.make_addplot(df['macd'], panel=panel, color='blue', title='MACD')
+                mpf.make_addplot(df['macd'], panel=panel, color='blue', ylabel='MACD')
             )
             add_plots.append(
                 mpf.make_addplot(df['signal'], panel=panel, color='red')
@@ -871,7 +871,7 @@ class TechnicalAnalysis:
             
         if show_obv and 'obv' in df.columns:
             add_plots.append(
-                mpf.make_addplot(df['obv'], panel=panel, color='purple', title='OBV')
+                mpf.make_addplot(df['obv'], panel=panel, color='green', ylabel='OBV')
             )
             panel += 1
             
