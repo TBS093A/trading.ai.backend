@@ -979,41 +979,7 @@ class TechnicalAnalysis:
             if pattern_names:
                 title += f" | Wzorce: {', '.join(sorted(pattern_names))}"
         
-        # Dodaj poziomy Fibonacciego jako linie poziome
-        if show_fibonacci and fibonacci_data:
-            # Kolory dla różnych typów poziomów Fibonacci
-            fib_type_colors = {
-                'retracement': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
-                'extension': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],              # Extension - turkus do zieleni
-                'targets': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']                # Target - czerwono-pomarańczowe
-            }
-            
-            # Przetwórz wszystkie poziomy Fibonacciego
-            for fib_data in fibonacci_data:
-                fibonacci = fib_data['fibonacci']
-                
-                # Przetwórz każdy typ poziomów Fibonacciego
-                for fib_type, levels in fibonacci.items():
-                    colors = fib_type_colors.get(fib_type, ['gray'])
-                    linestyle = '--' if fib_type == 'retracement' else (':' if fib_type == 'extension' else '-')
-                    alpha = 0.6 if fib_type == 'retracement' else (0.5 if fib_type == 'extension' else 0.8)
-                    
-                    for i, (level_name, level_price) in enumerate(levels.items()):
-                        if level_price != 0 and not pd.isna(level_price):
-                            color = colors[i % len(colors)]
-                            # Wypełnij całą serię tym samym poziomem
-                            fib_series = pd.Series(level_price, index=df.index)
-                            add_plots.append(
-                                mpf.make_addplot(
-                                    fib_series,
-                                    type='line',
-                                    color=color,
-                                    alpha=alpha,
-                                    linestyle=linestyle,
-                                    width=1.5 if fib_type == 'targets' else 1
-                                )
-                            )
-                            logger.debug(f"Dodano poziom {fib_type} Fibonacci {level_name} = {level_price:.2f} w kolorze {color}")
+        # Poziomy Fibonacciego będą rysowane jako linie w sekcji wzorców harmonicznych
         
         # Oblicz dynamiczną szerokość wykresu na podstawie ilości świec
         candles_count = len(df)
@@ -1265,6 +1231,7 @@ class TechnicalAnalysis:
                     # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
                     base_font_size_labels = 12 # wielkosc bazowa dla etykiet
                     base_font_size_axes = 14  # Oddzielna wielkość bazowa dla wrtosci na osiach 
+                    base_font_size_fibo_labels = 6  # Wielkość bazowa dla etykiet Fibonacci
                     width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
                     height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
                     padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
@@ -1272,8 +1239,9 @@ class TechnicalAnalysis:
                     
                     dynamic_font_size_labels = int(base_font_size_labels * scaling_ratio)  # Dla etykiet
                     dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
+                    dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
                     
-                    logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+                    logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
                     
                     # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
                     all_points_by_candle = {}
@@ -1523,6 +1491,13 @@ class TechnicalAnalysis:
                                              if len(all_points_by_candle.get(points[point_name]['index'], [])) > 1)
                         
                         logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
+                    
+                    # Rysuj poziomy Fibonacciego jako linie z etykietami jeśli włączone
+                    if show_fibonacci and fibonacci_data:
+                        cls._draw_fibonacci_lines_with_labels(
+                            main_ax, fibonacci_data, pattern_groups, klines, 
+                            dynamic_font_size_fibo_labels, df
+                        )
                     
                     # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
                     if pattern_labels_for_padding:
@@ -1804,4 +1779,155 @@ class TechnicalAnalysis:
             
         except Exception as e:
             logger.error(f"Błąd podczas stosowania skalowanej czcionki do osi: {e}")
+            logger.error(traceback.format_exc())
+    
+    @classmethod
+    def _draw_fibonacci_lines_with_labels(
+        cls,
+        main_ax,
+        fibonacci_data: List[Dict],
+        pattern_groups: Dict,
+        klines: List[Dict],
+        dynamic_font_size_fibo_labels: int,
+        df: pd.DataFrame
+    ):
+        """
+        Rysuje poziomy Fibonacciego jako linie z etykietami.
+        
+        Args:
+            main_ax: Główna oś wykresu
+            fibonacci_data: Lista danych poziomów Fibonacci
+            pattern_groups: Grupy wzorców harmonicznych
+            klines: Lista świeczek
+            dynamic_font_size_fibo_labels: Wielkość czcionki dla etykiet Fibonacci
+            df: DataFrame z danymi cenowymi
+        """
+        try:
+            # Kolory dla różnych typów poziomów Fibonacci
+            fib_type_colors = {
+                'retracement': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
+                'extension': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],              # Extension - turkus do zieleni
+                'targets': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']                # Target - czerwono-pomarańczowe
+            }
+            
+            # Pobierz granice wykresu
+            x_min, x_max = main_ax.get_xlim()
+            chart_end_x = len(df) - 1  # Ostatnia świeca
+            
+            logger.info(f"Rysowanie {len(fibonacci_data)} poziomów Fibonacci jako linie z etykietami")
+            
+            # Iteruj od tyłu po klines aby współmiernie oznaczyć linie
+            processed_patterns = set()  # Żeby uniknąć duplikowania wzorców
+            
+            for kline_idx in range(len(klines) - 1, -1, -1):  # Od końca do początku
+                kline = klines[kline_idx]
+                
+                # Sprawdź czy ta świeca zawiera wzorce z poziomami Fibonacci
+                if 'patterns' not in kline:
+                    continue
+                
+                for pattern_id, pattern_info in kline['patterns'].items():
+                    # Sprawdź czy już przetwarzaliśmy ten wzorzec
+                    if pattern_id in processed_patterns:
+                        continue
+                    
+                    # Sprawdź czy ten wzorzec ma poziomy Fibonacci
+                    if 'fibonacci' not in pattern_info:
+                        continue
+                    
+                    fibonacci = pattern_info['fibonacci']
+                    processed_patterns.add(pattern_id)
+                    
+                    # Znajdź punkty X i D tego wzorca
+                    pattern_group = pattern_groups.get(pattern_id, {})
+                    points = pattern_group.get('points', {})
+                    
+                    x_point = points.get('X')
+                    d_point = points.get('D')
+                    
+                    logger.info(f"Rysowanie poziomów Fibonacci dla wzorca {pattern_id}")
+                    
+                    # Przetwórz każdy typ poziomów Fibonacciego
+                    for fib_type, levels in fibonacci.items():
+                        colors = fib_type_colors.get(fib_type, ['gray'])
+                        linestyle = '--' if fib_type == 'retracement' else (':' if fib_type == 'extension' else '-')
+                        alpha = 0.6 if fib_type == 'retracement' else (0.5 if fib_type == 'extension' else 0.8)
+                        linewidth = 1.5 if fib_type == 'targets' else 1
+                        
+                        # Określ punkt startowy linii
+                        start_point = None
+                        if fib_type in ['retracement', 'extension']:
+                            start_point = x_point  # Linie retracement i extension od punktu X
+                        elif fib_type == 'targets':
+                            start_point = d_point  # Linie targets od punktu D
+                        
+                        if start_point is None:
+                            logger.warning(f"Brak punktu startowego dla {fib_type} wzorca {pattern_id}")
+                            continue
+                        
+                        start_x = start_point['index']
+                        
+                        # Rysuj każdy poziom Fibonacci
+                        for i, (level_name, level_price) in enumerate(levels.items()):
+                            if level_price == 0 or pd.isna(level_price):
+                                continue
+                            
+                            color = colors[i % len(colors)]
+                            
+                            # Rysuj linię od punktu startowego do końca wykresu
+                            main_ax.plot(
+                                [start_x, chart_end_x], 
+                                [level_price, level_price],
+                                color=color,
+                                alpha=alpha,
+                                linestyle=linestyle,
+                                linewidth=linewidth,
+                                zorder=5  # Nad świecami, ale pod wzorcami
+                            )
+                            
+                            # Oblicz procent poziomu Fibonacci
+                            if level_name.startswith('T'):
+                                # Targety (T1, T2, itp.)
+                                fib_percent = level_name
+                            else:
+                                try:
+                                    # Poziomy liczbowe (0.236, 1.618, itp.)
+                                    fib_percent = f"{float(level_name) * 100:.1f}%"
+                                except ValueError:
+                                    # Fallback jeśli nie da się przekonwertować
+                                    fib_percent = level_name
+                            
+                            # Tekst etykiety
+                            label_text = f"ID: {pattern_id} | {fib_percent} | {level_price:.6f}"
+                            
+                            # Pozycja etykiety - lewa górna krawędź linii
+                            label_x = start_x + 2  # Przesunięcie od początku linii
+                            label_y = level_price
+                            
+                            # Dodaj etykietę z transparentnym tłem
+                            main_ax.annotate(
+                                label_text,
+                                (label_x, label_y),
+                                xytext=(0, 3),  # Małe przesunięcie w górę
+                                textcoords='offset points',
+                                ha='left',
+                                va='bottom',
+                                fontsize=dynamic_font_size_fibo_labels,
+                                color=color,
+                                alpha=0.9,
+                                bbox=dict(
+                                    boxstyle="round,pad=0.2",
+                                    facecolor='black',
+                                    alpha=0.1,  # Maksymalnie transparentne tło
+                                    edgecolor='none'  # Bez borderów
+                                ),
+                                zorder=6  # Nad liniami Fibonacci
+                            )
+                            
+                            logger.debug(f"Narysowano linię {fib_type} Fibonacci {level_name} = {level_price:.6f} dla wzorca {pattern_id}")
+            
+            logger.info(f"Pomyślnie narysowano linie Fibonacci dla {len(processed_patterns)} wzorców")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania linii Fibonacci: {e}")
             logger.error(traceback.format_exc())
