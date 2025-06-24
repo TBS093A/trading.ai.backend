@@ -552,29 +552,45 @@ class TechnicalAnalysis:
         """
         price_range = abs(end_price - start_price)
         
-        # Poziomy retracementu
+        # Poziomy retracementu: 0%, 18.6%, 23.6%, 38.2%, 50%, 61.8%, 68.5%, 78.6%, 88.6%, 100%
         retracement = {
-            "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),
-            "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),
-            "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),
-            "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),
-            "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786)
+            "0.0": end_price + (price_range * 0.0 if is_uptrend else -price_range * 0.0),        # 0%
+            "0.186": end_price + (price_range * 0.186 if is_uptrend else -price_range * 0.186),  # 18.6%
+            "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
+            "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
+            "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),        # 50%
+            "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
+            "0.685": end_price + (price_range * 0.685 if is_uptrend else -price_range * 0.685),  # 68.5%
+            "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
+            "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
+            "1.0": end_price + (price_range * 1.0 if is_uptrend else -price_range * 1.0)         # 100%
         }
         
-        # Poziomy extension
+        # Poziomy extension: 113%, 127.2%, 146%, 161.8%, 223.6%, 261.8%
         extension = {
-            "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),
-            "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),
-            "2.0": end_price + (price_range * 2.0 if is_uptrend else -price_range * 2.0),
-            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)
+            "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
+            "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
+            "1.46": end_price + (price_range * 1.46 if is_uptrend else -price_range * 1.46),     # 146%
+            "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
+            "2.236": end_price + (price_range * 2.236 if is_uptrend else -price_range * 2.236),  # 223.6%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)   # 261.8%
         }
         
-        # Targety cenowe
+        # Targety cenowe: 18.6%, 23.6%, 38.2%, 61.8%, 68.5%, 78.6%, 88.6%, 113%, 127.2%, 146%, 161.8%, 223.6%, 261.8%
         targets = {
-            "T1": extension["1.272"],
-            "T2": extension["1.618"],
-            "T3": extension["2.0"],
-            "T4": extension["2.618"]
+            "0.186": end_price + (price_range * 0.186 if is_uptrend else -price_range * 0.186),  # 18.6%
+            "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
+            "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
+            "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
+            "0.685": end_price + (price_range * 0.685 if is_uptrend else -price_range * 0.685),  # 68.5%
+            "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
+            "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
+            "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
+            "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
+            "1.46": end_price + (price_range * 1.46 if is_uptrend else -price_range * 1.46),     # 146%
+            "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
+            "2.236": end_price + (price_range * 2.236 if is_uptrend else -price_range * 2.236),  # 223.6%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)   # 261.8%
         }
         
         return FibonacciLevels(retracement, extension, targets)
@@ -1803,12 +1819,23 @@ class TechnicalAnalysis:
             df: DataFrame z danymi cenowymi
         """
         try:
-            # Kolory dla różnych typów poziomów Fibonacci
-            fib_type_colors = {
-                'retracement': ['#FFD700', '#FF8C00', '#FF6347', '#FF1493', '#9932CC'],  # Retracement - złoto do fioletu
-                'extension': ['#00CED1', '#00FF7F', '#32CD32', '#228B22'],              # Extension - turkus do zieleni
-                'targets': ['#FF4500', '#FF6347', '#FF7F50', '#FFA07A']                # Target - czerwono-pomarańczowe
-            }
+            # Funkcja do określania koloru na podstawie poziomu Fibonacci
+            def get_fibonacci_color(fib_type, level_name):
+                # Zielone linie dla retracement: 18.6%, 23.6%, 38.2%, 61.8%, 68.5%, 78.6%, 88.6%
+                green_retracement = ['0.186', '0.236', '0.382', '0.618', '0.685', '0.786', '0.886']
+                # Zielone linie dla extension: 113%, 127.2%, 146%, 161.8%, 223.6%, 261.8%
+                green_extension = ['1.13', '1.272', '1.46', '1.618', '2.236', '2.618']
+                # Szare linie dla 0% i 100%
+                gray_levels = ['0.0', '1.0']
+                
+                if level_name in gray_levels:
+                    return '#808080'  # Szary
+                elif (fib_type == 'retracement' and level_name in green_retracement) or \
+                     (fib_type == 'extension' and level_name in green_extension) or \
+                     (fib_type == 'targets' and (level_name in green_retracement or level_name in green_extension)):
+                    return '#00FF00'  # Zielony
+                else:
+                    return '#FFFFFF'  # Biały dla pozostałych
             
             # Pobierz granice wykresu
             x_min, x_max = main_ax.get_xlim()
@@ -1847,11 +1874,10 @@ class TechnicalAnalysis:
                     
                     logger.info(f"Rysowanie poziomów Fibonacci dla wzorca {pattern_id}")
                     
-                    # Przetwórz każdy typ poziomów Fibonacciego
+                                         # Przetwórz każdy typ poziomów Fibonacciego
                     for fib_type, levels in fibonacci.items():
-                        colors = fib_type_colors.get(fib_type, ['gray'])
                         linestyle = '--' if fib_type == 'retracement' else (':' if fib_type == 'extension' else '-')
-                        alpha = 0.6 if fib_type == 'retracement' else (0.5 if fib_type == 'extension' else 0.8)
+                        alpha = 0.8  # Jednolita przezroczystość
                         linewidth = 1.5 if fib_type == 'targets' else 1
                         
                         # Określ punkt startowy linii
@@ -1868,11 +1894,12 @@ class TechnicalAnalysis:
                         start_x = start_point['index']
                         
                         # Rysuj każdy poziom Fibonacci
-                        for i, (level_name, level_price) in enumerate(levels.items()):
+                        for level_name, level_price in levels.items():
                             if level_price == 0 or pd.isna(level_price):
                                 continue
                             
-                            color = colors[i % len(colors)]
+                            # Określ kolor na podstawie poziomu i typu
+                            color = get_fibonacci_color(fib_type, level_name)
                             
                             # Rysuj linię od punktu startowego do końca wykresu
                             main_ax.plot(
@@ -1886,16 +1913,13 @@ class TechnicalAnalysis:
                             )
                             
                             # Oblicz procent poziomu Fibonacci
-                            if level_name.startswith('T'):
-                                # Targety (T1, T2, itp.)
+                            try:
+                                # Poziomy liczbowe (0.236, 1.618, itp.)
+                                fib_value = float(level_name)
+                                fib_percent = f"{fib_value * 100:.1f}%"
+                            except ValueError:
+                                # Fallback jeśli nie da się przekonwertować
                                 fib_percent = level_name
-                            else:
-                                try:
-                                    # Poziomy liczbowe (0.236, 1.618, itp.)
-                                    fib_percent = f"{float(level_name) * 100:.1f}%"
-                                except ValueError:
-                                    # Fallback jeśli nie da się przekonwertować
-                                    fib_percent = level_name
                             
                             # Tekst etykiety
                             label_text = f"ID: {pattern_id} | {fib_percent} | {level_price:.6f}"
