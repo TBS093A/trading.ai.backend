@@ -1018,7 +1018,7 @@ class TechnicalAnalysis:
         price_range_for_height = y_max_for_height - y_min_for_height
         
         # Bazowa wysokość dla określonego zakresu cenowego
-        base_height = 10  # Domyślna wysokość
+        base_height = 20  # Domyślna wysokość
         
         # Oblicz proporcję cenową i dostosuj wysokość
         if price_range_for_height > 0:
@@ -1032,8 +1032,14 @@ class TechnicalAnalysis:
             dynamic_height = base_height
         
         # Ustal minimalną i maksymalną wysokość dla praktyczności
-        min_height = 8
-        max_height = 30
+        min_height = 20
+        if show_rsi and 'rsi' in df.columns:
+            min_height += 10
+        if show_macd and 'macd' in df.columns:
+            min_height += 10
+        if show_obv and 'obv' in df.columns:
+            min_height += 10
+        max_height = 100
         dynamic_height = max(min_height, min(dynamic_height, max_height))
         
         logger.info(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
@@ -1073,6 +1079,28 @@ class TechnicalAnalysis:
         
         logger.info(f"Parametry osi Y: {base_ticks} tick-ów, format {y_format}, zakres: {y_min:.6f} - {y_max:.6f}")
         
+        # Oblicz dodatkowy padding dla etykiet wzorców harmonicznych
+        # Jednakowy padding górny i dolny w pikselach
+        fig_height_inches = dynamic_height
+        dpi = 300
+        fig_height_pixels = fig_height_inches * dpi
+        
+        # Konwersja 5000px na proporcję wysokości wykresu
+        padding_pixels = 10000
+        if show_rsi and 'rsi' in df.columns:
+            padding_pixels += 5000
+        if show_macd and 'macd' in df.columns:
+            padding_pixels += 5000
+        if show_obv and 'obv' in df.columns:
+            padding_pixels += 5000
+        padding_ratio = padding_pixels / fig_height_pixels
+        
+        # Oblicz padding w jednostkach cenowych dla skali logarytmicznej
+        # Każdy padding (górny i dolny) to padding_ratio * współczynnik
+        single_padding_factor = padding_ratio * 0.15  # Współczynnik dla skali log
+        
+        logger.info(f"Obliczony padding: {padding_pixels}px = {padding_ratio:.4f} ratio = {single_padding_factor:.4f} factor na stronę")
+        
         # Tworzenie wykresu z dynamiczną szerokością i wysokością, skalą logarytmiczną i lepszym formatowaniem osi X
         fig, axes = mpf.plot(
             df,
@@ -1088,8 +1116,47 @@ class TechnicalAnalysis:
             xrotation=45,  # Obrót etykiet osi X dla lepszej czytelności
             tight_layout=True,  # Lepsze rozłożenie elementów
             show_nontrading=False,  # Ukryj okresy bez tradingu
-            scale_padding=dict(left=0.3, right=1.0, top=0.8, bottom=0.8)  # Więcej miejsca dla tick-ów
+            scale_padding=dict(left=0.3, right=1.0, top=1.2, bottom=1.2)  # Zwiększony padding dla etykiet
         )
+
+        # Dodaj dodatkowy padding dla etykiet wzorców harmonicznych (jednakowy górny i dolny)
+        try:
+            # Pobierz główną oś cenową
+            main_ax = axes[0] if hasattr(axes, '__len__') and len(axes) > 0 else axes
+            
+            # Pobierz aktualne granice osi Y
+            y_min_current, y_max_current = main_ax.get_ylim()
+            
+            # Oblicz zakres cenowy w skali logarytmicznej
+            log_y_min = np.log(y_min_current) if y_min_current > 0 else np.log(0.0001)
+            log_y_max = np.log(y_max_current) if y_max_current > 0 else np.log(0.0001)
+            log_range = log_y_max - log_y_min
+            
+            # Oblicz padding w skali logarytmicznej (jednakowy górny i dolny)
+            log_padding = log_range * single_padding_factor
+            
+            # Zastosuj padding symetrycznie w skali logarytmicznej
+            log_y_min_padded = log_y_min - log_padding
+            log_y_max_padded = log_y_max + log_padding
+            
+            # Konwertuj z powrotem do skali liniowej
+            y_min_padded = np.exp(log_y_min_padded)
+            y_max_padded = np.exp(log_y_max_padded)
+            
+            # Ustaw nowe granice osi Y
+            main_ax.set_ylim(y_min_padded, y_max_padded)
+            
+            # Oblicz faktyczne paddingiem w jednostkach cenowych dla logowania
+            bottom_padding = y_min_current - y_min_padded
+            top_padding = y_max_padded - y_max_current
+            
+            logger.info(f"Ustawiono równy padding osi Y:")
+            logger.info(f"  Przed: {y_min_current:.6f} - {y_max_current:.6f}")
+            logger.info(f"  Po:    {y_min_padded:.6f} - {y_max_padded:.6f}")
+            logger.info(f"  Padding dolny: {abs(bottom_padding):.6f}, górny: {top_padding:.6f}")
+            
+        except Exception as e:
+            logger.warning(f"Nie można ustawić paddingu osi Y: {e}")
 
         # Dostosuj formatowanie osi X po utworzeniu wykresu
         if hasattr(axes, '__len__') and len(axes) > 0:
