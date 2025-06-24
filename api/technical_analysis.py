@@ -1263,13 +1263,17 @@ class TechnicalAnalysis:
                     pattern_labels_for_padding = []
                     
                     # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
-                    base_font_size = 12
+                    base_font_size_labels = 12 # wielkosc bazowa dla etykiet
+                    base_font_size_axes = 14  # Oddzielna wielkość bazowa dla wrtosci na osiach 
                     width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
                     height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
                     padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
-                    dynamic_font_size = int(base_font_size * (width_factor + height_factor + padding_factor) / 3)
+                    scaling_ratio = (width_factor + height_factor + padding_factor) / 3  # Wspólny współczynnik skalowania
                     
-                    logger.info(f"Dynamiczna wielkość czcionki: {dynamic_font_size} (szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+                    dynamic_font_size_labels = int(base_font_size_labels * scaling_ratio)  # Dla etykiet
+                    dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
+                    
+                    logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
                     
                     # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
                     all_points_by_candle = {}
@@ -1422,8 +1426,8 @@ class TechnicalAnalysis:
                             total_d_patterns = len(d_patterns_on_candle) + 1  # +1 dla bieżącego wzorca
                             
                             # Podstawowy margines + dodatkowy na podstawie wielkości czcionki i ilości wzorców
-                            base_margin = 30 + (dynamic_font_size * 0.5)  # Margines rośnie z czcionką
-                            pattern_spacing = dynamic_font_size + 8  # Odstęp między wzorcami
+                            base_margin = 30 + (dynamic_font_size_labels * 0.5)  # Margines rośnie z czcionką
+                            pattern_spacing = dynamic_font_size_labels + 8  # Odstęp między wzorcami
                             
                             # Oblicz całkowity margines dla wszystkich wzorców na tej świecy
                             total_margin_for_candle = base_margin + (total_d_patterns * pattern_spacing)
@@ -1433,7 +1437,7 @@ class TechnicalAnalysis:
                             
                             # Dodaj dodatkowy margines jeśli jest więcej niż 3 wzorce na świecy
                             if total_d_patterns > 3:
-                                extra_margin = (total_d_patterns - 3) * (dynamic_font_size * 0.3)
+                                extra_margin = (total_d_patterns - 3) * (dynamic_font_size_labels * 0.3)
                                 final_id_y_offset -= extra_margin
                             
                             main_ax.annotate(
@@ -1443,7 +1447,7 @@ class TechnicalAnalysis:
                                 textcoords='offset points',
                                 ha='center',
                                 va='top',
-                                fontsize=dynamic_font_size,  # Używaj dynamicznej wielkości czcionki
+                                fontsize=dynamic_font_size_labels,  # Używaj dynamicznej wielkości czcionki
                                 weight='bold',  # Taki sam styl jak w paddingu
                                 color=line_color,  # Kolor wzorca zamiast białego
                                 alpha=0.9,  # Taka sama przezroczystość jak w paddingu
@@ -1456,7 +1460,7 @@ class TechnicalAnalysis:
                                 zorder=12
                             )
                             
-                            logger.debug(f"Dodano etykietę ID {pattern_id} pod punktem D na pozycji {current_pattern_position}/{total_d_patterns} z y_offset={final_id_y_offset}, total_margin={total_margin_for_candle:.1f}, font_size={dynamic_font_size}")
+                            logger.debug(f"Dodano etykietę ID {pattern_id} pod punktem D na pozycji {current_pattern_position}/{total_d_patterns} z y_offset={final_id_y_offset}, total_margin={total_margin_for_candle:.1f}, font_size={dynamic_font_size_labels}")
                         
 
                         
@@ -1520,12 +1524,15 @@ class TechnicalAnalysis:
                         
                         logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
                     
-                    # Rysuj etykiety wzorców w paddingu po zakończeniu wszystkich wzorców
+                    # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
                     if pattern_labels_for_padding:
                         cls._draw_pattern_labels_in_padding(
                             main_ax, pattern_labels_for_padding, df, 
-                            dynamic_width, dynamic_height, dynamic_font_size
+                            dynamic_width, dynamic_height, dynamic_font_size_labels
                         )
+                    
+                    # Zastosuj skalowaną czcionkę do osi X i Y
+                    cls._apply_scaled_font_to_axes(main_ax, axes, dynamic_font_size_axes)
                 
                 else:
                     logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
@@ -1574,7 +1581,7 @@ class TechnicalAnalysis:
         df: pd.DataFrame,
         chart_width: int,
         chart_height: int,
-        dynamic_font_size: int
+        dynamic_font_size_labels: int
     ):
         """
         Rysuje etykiety wzorców harmonicznych w strefie paddingu.
@@ -1585,14 +1592,14 @@ class TechnicalAnalysis:
             df: DataFrame z danymi cenowymi
             chart_width: Szerokość wykresu
             chart_height: Wysokość wykresu
-            dynamic_font_size: Dynamiczna wielkość czcionki
+            dynamic_font_size_labels: Dynamiczna wielkość czcionki
         """
         try:
             # Pobierz granice osi
             y_min, y_max = main_ax.get_ylim()
             x_min, x_max = main_ax.get_xlim()
             
-            logger.info(f"Używanie dynamicznej wielkości czcionki w paddingu: {dynamic_font_size}")
+            logger.info(f"Używanie dynamicznej wielkości czcionki w paddingu: {dynamic_font_size_labels}")
             
             # Oblicz pozycje stref paddingu w skali logarytmicznej
             import numpy as np
@@ -1640,14 +1647,14 @@ class TechnicalAnalysis:
             if top_labels:
                 cls._draw_labels_in_zone(
                     main_ax, top_labels, top_padding_center, 
-                    x_min, x_max, dynamic_font_size, 'top'
+                    x_min, x_max, dynamic_font_size_labels, 'top'
                 )
             
             # Rysuj etykiety w dolnej strefie paddingu
             if bottom_labels:
                 cls._draw_labels_in_zone(
                     main_ax, bottom_labels, bottom_padding_center, 
-                    x_min, x_max, dynamic_font_size, 'bottom'
+                    x_min, x_max, dynamic_font_size_labels, 'bottom'
                 )
                 
         except Exception as e:
@@ -1721,3 +1728,80 @@ class TechnicalAnalysis:
         except Exception as e:
             logger.error(f"Błąd podczas rysowania etykiet w strefie {zone_type}: {e}")
             logger.error(traceback.format_exc()) 
+    
+    @classmethod
+    def _apply_scaled_font_to_axes(
+        cls,
+        main_ax,
+        axes,
+        dynamic_font_size_axes: int
+    ):
+        """
+        Stosuje skalowaną czcionkę do osi X i Y oraz ylabel.
+        
+        Args:
+            main_ax: Główna oś wykresu
+            axes: Wszystkie osie wykresu
+            dynamic_font_size_axes: Dynamiczna wielkość czcionki dla osi
+        """
+        try:
+            logger.info(f"Stosowanie skalowanej czcionki {dynamic_font_size_axes}px do osi X i Y")
+            
+            # Zastosuj czcionkę do głównej osi (main_ax)
+            if main_ax:
+                # Skala osi X
+                main_ax.tick_params(axis='x', labelsize=dynamic_font_size_axes)
+                main_ax.tick_params(axis='y', labelsize=dynamic_font_size_axes)
+                
+                # ylabel dla głównej osi
+                if hasattr(main_ax, 'set_ylabel'):
+                    current_ylabel = main_ax.get_ylabel()
+                    if current_ylabel:
+                        main_ax.set_ylabel(current_ylabel, fontsize=dynamic_font_size_axes)
+                
+                # xlabel dla głównej osi
+                if hasattr(main_ax, 'set_xlabel'):
+                    current_xlabel = main_ax.get_xlabel()
+                    if current_xlabel:
+                        main_ax.set_xlabel(current_xlabel, fontsize=dynamic_font_size_axes)
+            
+            # Zastosuj czcionkę do wszystkich osi (w przypadku paneli)
+            if hasattr(axes, '__len__'):
+                for ax in axes:
+                    if hasattr(ax, 'tick_params'):
+                        ax.tick_params(axis='x', labelsize=dynamic_font_size_axes)
+                        ax.tick_params(axis='y', labelsize=dynamic_font_size_axes)
+                        
+                        # ylabel dla każdej osi
+                        if hasattr(ax, 'set_ylabel'):
+                            current_ylabel = ax.get_ylabel()
+                            if current_ylabel:
+                                ax.set_ylabel(current_ylabel, fontsize=dynamic_font_size_axes)
+                        
+                        # xlabel dla każdej osi
+                        if hasattr(ax, 'set_xlabel'):
+                            current_xlabel = ax.get_xlabel()
+                            if current_xlabel:
+                                ax.set_xlabel(current_xlabel, fontsize=dynamic_font_size_axes)
+            elif hasattr(axes, 'tick_params'):
+                # axes jest pojedynczą osią
+                axes.tick_params(axis='x', labelsize=dynamic_font_size_axes)
+                axes.tick_params(axis='y', labelsize=dynamic_font_size_axes)
+                
+                # ylabel dla pojedynczej osi
+                if hasattr(axes, 'set_ylabel'):
+                    current_ylabel = axes.get_ylabel()
+                    if current_ylabel:
+                        axes.set_ylabel(current_ylabel, fontsize=dynamic_font_size_axes)
+                
+                # xlabel dla pojedynczej osi
+                if hasattr(axes, 'set_xlabel'):
+                    current_xlabel = axes.get_xlabel()
+                    if current_xlabel:
+                        axes.set_xlabel(current_xlabel, fontsize=dynamic_font_size_axes)
+            
+            logger.info(f"Pomyślnie zastosowano czcionkę {dynamic_font_size_axes}px do osi")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas stosowania skalowanej czcionki do osi: {e}")
+            logger.error(traceback.format_exc())
