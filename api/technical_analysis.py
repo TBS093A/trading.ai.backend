@@ -1259,6 +1259,18 @@ class TechnicalAnalysis:
                     
                     logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
                     
+                    # Inicjalizuj listę etykiet do rysowania w paddingu
+                    pattern_labels_for_padding = []
+                    
+                    # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
+                    base_font_size = 12
+                    width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
+                    height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
+                    padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
+                    dynamic_font_size = int(base_font_size * (width_factor + height_factor + padding_factor) / 3)
+                    
+                    logger.info(f"Dynamiczna wielkość czcionki: {dynamic_font_size} (szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+                    
                     # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
                     all_points_by_candle = {}
                     for pattern_id, pattern_group in pattern_groups.items():
@@ -1359,7 +1371,7 @@ class TechnicalAnalysis:
                                                bbox=dict(boxstyle="circle", 
                                                        facecolor='black', alpha=0.5, edgecolor=line_color))
                         
-                        # Dodaj dużą etykietę wzorca przy punkcie D z proporcjami
+                        # Zbierz dane wzorca dla etykiety w paddingu (przenieś poza pętlę wzorców)
                         if 'D' in points:
                             d_point = points['D']
                             direction_text = "BULLISH" if is_bullish else "BEARISH"
@@ -1379,37 +1391,72 @@ class TechnicalAnalysis:
                                         retraces_lines.append(f"{retrace_name}: {retrace_value:.3f}")
                                 
                                 if retraces_lines:
-                                    retraces_text = "\n\n" + "\n".join(retraces_lines)
+                                    retraces_text = "\n" + "\n".join(retraces_lines)
                             
-                            pattern_label = f"{pattern_name}\n{direction_text}{retraces_text}"
+                            pattern_label = f"ID: {pattern_id} | {pattern_name}\n{direction_text}{retraces_text}"
                             
-                            # Pozycjonowanie etykiety - pod punktem D dla bullish, nad dla bearish
-                            base_label_y_offset = -35 if is_bullish else 35  # Pod punktem dla bullish, nad dla bearish
-                            va = 'top' if is_bullish else 'bottom'
+                            # Zapisz dane etykiety do późniejszego rysowania w paddingu
+                            pattern_labels_for_padding.append({
+                                'pattern_id': pattern_id,
+                                'pattern_name': pattern_name,
+                                'pattern_label': pattern_label,
+                                'd_point': d_point,
+                                'line_color': line_color,
+                                'is_bullish': is_bullish
+                            })
                             
-                            # Dodaj dodatkowe przesunięcie jeśli na świecy punktu D jest więcej wzorców/punktów
+                            # Dodaj etykietę ID pod punktem D z inteligentnym pozycjonowaniem i stylem jak w paddingu
+                            id_label = f"ID: {pattern_id}"
+                            
+                            # Sprawdź ile wzorców kończy się na tej świecy (punkt D)
                             d_candle_idx = d_point['index']
-                            points_on_d_candle = all_points_by_candle.get(d_candle_idx, [])
-                            num_points_on_d_candle = len(points_on_d_candle)
+                            d_patterns_on_candle = [
+                                p for p in pattern_labels_for_padding 
+                                if p['d_point']['index'] == d_candle_idx
+                            ]
                             
-                            if num_points_on_d_candle > 1:
-                                # Dodaj 10 jednostek y_offset za każdy dodatkowy punkt/wzorzec na świecy
-                                additional_label_offset = (num_points_on_d_candle - 1) * 7
-                                if is_bullish:
-                                    final_label_y_offset = base_label_y_offset - additional_label_offset  # Jeszcze niżej dla bullish
-                                else:
-                                    final_label_y_offset = base_label_y_offset + additional_label_offset  # Jeszcze wyżej dla bearish
-                                
-                                logger.debug(f"Etykieta wzorca {pattern_id} przy punkcie D: świeca {d_candle_idx} ma {num_points_on_d_candle} punktów, dodatkowe przesunięcie: {additional_label_offset}, końcowy y_offset: {final_label_y_offset}")
-                            else:
-                                final_label_y_offset = base_label_y_offset
+                            # Znajdź pozycję tego wzorca w liście wzorców kończących się na tej świecy
+                            current_pattern_position = len(d_patterns_on_candle)  # Pozycja tego wzorca (1-based)
                             
-                            main_ax.annotate(pattern_label, (d_point['index'], d_point['price']), 
-                                           xytext=(0, final_label_y_offset), textcoords='offset points',
-                                           ha='center', va=va, fontsize=12, weight='bold',
-                                           color=line_color, alpha=0.9,
-                                           bbox=dict(boxstyle="round,pad=0.5", 
-                                                   facecolor='black', alpha=0.5, edgecolor=line_color))
+                            # Oblicz inteligentny margines górny na podstawie ilości wzorców i wierszy
+                            total_d_patterns = len(d_patterns_on_candle) + 1  # +1 dla bieżącego wzorca
+                            
+                            # Podstawowy margines + dodatkowy na podstawie wielkości czcionki i ilości wzorców
+                            base_margin = 30 + (dynamic_font_size * 0.5)  # Margines rośnie z czcionką
+                            pattern_spacing = dynamic_font_size + 8  # Odstęp między wzorcami
+                            
+                            # Oblicz całkowity margines dla wszystkich wzorców na tej świecy
+                            total_margin_for_candle = base_margin + (total_d_patterns * pattern_spacing)
+                            
+                            # Oblicz przesunięcie dla tego konkretnego wzorca
+                            final_id_y_offset = -base_margin - (current_pattern_position - 1) * pattern_spacing
+                            
+                            # Dodaj dodatkowy margines jeśli jest więcej niż 3 wzorce na świecy
+                            if total_d_patterns > 3:
+                                extra_margin = (total_d_patterns - 3) * (dynamic_font_size * 0.3)
+                                final_id_y_offset -= extra_margin
+                            
+                            main_ax.annotate(
+                                id_label,
+                                (d_point['index'], d_point['price']),
+                                xytext=(0, final_id_y_offset),
+                                textcoords='offset points',
+                                ha='center',
+                                va='top',
+                                fontsize=dynamic_font_size,  # Używaj dynamicznej wielkości czcionki
+                                weight='bold',  # Taki sam styl jak w paddingu
+                                color=line_color,  # Kolor wzorca zamiast białego
+                                alpha=0.9,  # Taka sama przezroczystość jak w paddingu
+                                bbox=dict(
+                                    boxstyle="round,pad=0.5",  # Taki sam padding jak w paddingu
+                                    facecolor='black',
+                                    alpha=0.7,  # Taka sama przezroczystość jak w paddingu
+                                    edgecolor=line_color  # Ramka w kolorze wzorca
+                                ),
+                                zorder=12
+                            )
+                            
+                            logger.debug(f"Dodano etykietę ID {pattern_id} pod punktem D na pozycji {current_pattern_position}/{total_d_patterns} z y_offset={final_id_y_offset}, total_margin={total_margin_for_candle:.1f}, font_size={dynamic_font_size}")
                         
 
                         
@@ -1472,6 +1519,13 @@ class TechnicalAnalysis:
                                              if len(all_points_by_candle.get(points[point_name]['index'], [])) > 1)
                         
                         logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
+                    
+                    # Rysuj etykiety wzorców w paddingu po zakończeniu wszystkich wzorców
+                    if pattern_labels_for_padding:
+                        cls._draw_pattern_labels_in_padding(
+                            main_ax, pattern_labels_for_padding, df, 
+                            dynamic_width, dynamic_height, dynamic_font_size
+                        )
                 
                 else:
                     logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
@@ -1510,4 +1564,160 @@ class TechnicalAnalysis:
         chart_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
         
         logger.info(f"Wykres skonwertowany do base64 ({len(chart_base64)} znaków)")
-        return chart_base64 
+        return chart_base64
+    
+    @classmethod
+    def _draw_pattern_labels_in_padding(
+        cls,
+        main_ax,
+        pattern_labels_for_padding: List[Dict],
+        df: pd.DataFrame,
+        chart_width: int,
+        chart_height: int,
+        dynamic_font_size: int
+    ):
+        """
+        Rysuje etykiety wzorców harmonicznych w strefie paddingu.
+        
+        Args:
+            main_ax: Główna oś wykresu
+            pattern_labels_for_padding: Lista danych etykiet wzorców
+            df: DataFrame z danymi cenowymi
+            chart_width: Szerokość wykresu
+            chart_height: Wysokość wykresu
+            dynamic_font_size: Dynamiczna wielkość czcionki
+        """
+        try:
+            # Pobierz granice osi
+            y_min, y_max = main_ax.get_ylim()
+            x_min, x_max = main_ax.get_xlim()
+            
+            logger.info(f"Używanie dynamicznej wielkości czcionki w paddingu: {dynamic_font_size}")
+            
+            # Oblicz pozycje stref paddingu w skali logarytmicznej
+            import numpy as np
+            log_y_min = np.log(y_min) if y_min > 0 else np.log(0.0001)
+            log_y_max = np.log(y_max) if y_max > 0 else np.log(0.0001)
+            log_range = log_y_max - log_y_min
+            
+            # Strefy paddingu (w skali logarytmicznej)
+            padding_height_log = log_range * 0.15  # 15% zakresu jako strefa paddingu
+            
+            # Górna strefa paddingu
+            top_padding_center_log = log_y_max - (padding_height_log / 2)
+            top_padding_center = np.exp(top_padding_center_log)
+            
+            # Dolna strefa paddingu
+            bottom_padding_center_log = log_y_min + (padding_height_log / 2)
+            bottom_padding_center = np.exp(bottom_padding_center_log)
+            
+            logger.info(f"Strefy paddingu: górna={top_padding_center:.6f}, dolna={bottom_padding_center:.6f}")
+            
+            # Podziel etykiety na górne i dolne na podstawie pozycji punktu D
+            top_labels = []
+            bottom_labels = []
+            
+            for label_data in pattern_labels_for_padding:
+                d_point = label_data['d_point']
+                d_price = d_point['price']
+                
+                # Oblicz odległości do stref paddingu w skali logarytmicznej
+                if d_price > 0:
+                    log_d_price = np.log(d_price)
+                    dist_to_top = abs(log_d_price - top_padding_center_log)
+                    dist_to_bottom = abs(log_d_price - bottom_padding_center_log)
+                    
+                    if dist_to_top <= dist_to_bottom:
+                        top_labels.append(label_data)
+                    else:
+                        bottom_labels.append(label_data)
+                else:
+                    bottom_labels.append(label_data)  # Fallback dla nieprawidłowych cen
+            
+            logger.info(f"Rozmieszczenie etykiet: {len(top_labels)} górnych, {len(bottom_labels)} dolnych")
+            
+            # Rysuj etykiety w górnej strefie paddingu
+            if top_labels:
+                cls._draw_labels_in_zone(
+                    main_ax, top_labels, top_padding_center, 
+                    x_min, x_max, dynamic_font_size, 'top'
+                )
+            
+            # Rysuj etykiety w dolnej strefie paddingu
+            if bottom_labels:
+                cls._draw_labels_in_zone(
+                    main_ax, bottom_labels, bottom_padding_center, 
+                    x_min, x_max, dynamic_font_size, 'bottom'
+                )
+                
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania etykiet w paddingu: {e}")
+            logger.error(traceback.format_exc())
+    
+    @classmethod
+    def _draw_labels_in_zone(
+        cls,
+        main_ax,
+        labels: List[Dict],
+        zone_y: float,
+        x_min: float,
+        x_max: float,
+        font_size: int,
+        zone_type: str
+    ):
+        """
+        Rysuje etykiety w określonej strefie paddingu z równomiernym rozmieszczeniem.
+        
+        Args:
+            main_ax: Główna oś wykresu
+            labels: Lista etykiet do narysowania
+            zone_y: Pozycja Y strefy paddingu
+            x_min, x_max: Granice osi X
+            font_size: Wielkość czcionki
+            zone_type: 'top' lub 'bottom'
+        """
+        if not labels:
+            return
+        
+        try:
+            # Oblicz pozycje X dla etykiet (równomiernie rozłożone)
+            available_width = x_max - x_min
+            if len(labels) == 1:
+                x_positions = [(x_min + x_max) / 2]  # Środek dla jednej etykiety
+            else:
+                # Równomierne rozłożenie z marginesami
+                margin = available_width * 0.05  # 5% margines z każdej strony
+                usable_width = available_width - 2 * margin
+                step = usable_width / (len(labels) - 1) if len(labels) > 1 else 0
+                x_positions = [x_min + margin + i * step for i in range(len(labels))]
+            
+            # Rysuj każdą etykietę bez linii łączących
+            for i, (label_data, x_pos) in enumerate(zip(labels, x_positions)):
+                pattern_label = label_data['pattern_label']
+                line_color = label_data['line_color']
+                
+                # Rysuj etykietę
+                va = 'center'
+                main_ax.annotate(
+                    pattern_label,
+                    (x_pos, zone_y),
+                    ha='center', 
+                    va=va,
+                    fontsize=font_size, 
+                    weight='bold',
+                    color=line_color, 
+                    alpha=0.9,
+                    bbox=dict(
+                        boxstyle="round,pad=0.5", 
+                        facecolor='black', 
+                        alpha=0.7, 
+                        edgecolor=line_color
+                    ),
+                    zorder=11
+                )
+                
+                logger.debug(f"Narysowano etykietę wzorca w strefie {zone_type}: x={x_pos:.2f}, y={zone_y:.6f}")
+                
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania etykiet w strefie {zone_type}: {e}")
+            logger.error(traceback.format_exc()) 
