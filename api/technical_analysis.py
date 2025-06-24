@@ -1109,6 +1109,11 @@ class TechnicalAnalysis:
             # Poprawa formatowania osi Y dla skali logarytmicznej
             main_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.4f'))
             main_ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+
+            # Obrócenie Labeli pod bardziej czytelną formę
+            for ax in axes:
+                for label in ax.get_xticklabels():
+                    label.set_rotation(90)
             
             logger.info(f"Ustawiono tick interwał {tick_interval} dla osi X i formatowanie dla skali logarytmicznej")
         except Exception as e:
