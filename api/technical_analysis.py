@@ -848,12 +848,14 @@ class TechnicalAnalysis:
         # Przygotowanie dodatkowych wskaźników
         add_plots = []
         panel = 2  # Licznik paneli dla wskaźników
+        active_panels = []  # Lista aktywnych paneli do obliczenia panel_ratios
         
         # Dynamiczne wykrywanie i dodawanie wskaźników
         if show_rsi and 'rsi' in df.columns:
             add_plots.append(
                 mpf.make_addplot(df['rsi'], panel=panel, color='yellow', ylabel='RSI')
             )
+            active_panels.append('rsi')
             panel += 1
             
         if show_macd and all(col in df.columns for col in ['macd', 'signal']):
@@ -865,15 +867,30 @@ class TechnicalAnalysis:
             )
             if 'histogram' in df.columns:
                 add_plots.append(
-                    mpf.make_addplot(df['histogram'], panel=panel, type='bar', color='gray', alpha=0.5)
+                    mpf.make_addplot(df['histogram'], panel=panel, type='bar', color='gray', alpha=0.8)
                 )
+            active_panels.append('macd')
             panel += 1
             
         if show_obv and 'obv' in df.columns:
             add_plots.append(
                 mpf.make_addplot(df['obv'], panel=panel, color='green', ylabel='OBV')
             )
+            active_panels.append('obv')
             panel += 1
+        
+        # Oblicz panel_ratios - główny panel (ceny) dostaje najwięcej miejsca
+        panel_ratios = [6]  # Panel 0: główny panel z cenami - duży
+        
+        # Panel 1: volume (jeśli włączony) - mały
+        if 'volume' in df.columns:
+            panel_ratios.append(1)
+        
+        # Panele 2+: wskaźniki techniczne - bardzo małe
+        for _ in active_panels:
+            panel_ratios.append(1)  # Każdy wskaźnik dostaje małą wysokość
+        
+        logger.info(f"Panel ratios: {panel_ratios} dla paneli: główny + volume + {active_panels}")
             
         # Przygotowanie danych wzorców harmonicznych z nowej zagnieżdżonej struktury
         # Przeszukaj klines aby znaleźć wzorce w nowej strukturze
@@ -1116,7 +1133,8 @@ class TechnicalAnalysis:
             xrotation=45,  # Obrót etykiet osi X dla lepszej czytelności
             tight_layout=True,  # Lepsze rozłożenie elementów
             show_nontrading=False,  # Ukryj okresy bez tradingu
-            scale_padding=dict(left=0.3, right=1.0, top=1.2, bottom=1.2)  # Zwiększony padding dla etykiet
+            scale_padding=dict(left=0.3, right=1.0, top=1.2, bottom=1.2),  # Zwiększony padding dla etykiet
+            panel_ratios=panel_ratios  # Kontrola wysokości paneli
         )
 
         # Dodaj dodatkowy padding dla etykiet wzorców harmonicznych (jednakowy górny i dolny)
