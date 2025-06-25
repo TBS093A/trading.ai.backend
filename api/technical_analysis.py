@@ -356,10 +356,22 @@ class TechnicalAnalysis:
                                     # Oblicz poziomy Fibonacciego dla wszystkich kombinacji punktów XABCD
                                     all_points_fibonacci = cls.calculate_all_points_fibonacci(pattern_points)
                                     
-                                    # Loguj przykłady obliczonych kombinacji
+                                    # Oblicz targety (PRZ, TP, SL) na podstawie all_fibos
+                                    all_targets = cls.calculate_all_targets(
+                                        pattern_type=str(pattern.name),
+                                        pattern_points=pattern_points,
+                                        all_fibos=all_points_fibonacci,
+                                        is_bullish=bool(pattern.bullish)
+                                    )
+                                    
+                                    # Loguj przykłady obliczonych kombinacji i targetów
                                     if all_points_fibonacci:
                                         example_combinations = list(all_points_fibonacci.keys())[:5]  # Pierwsze 5 kombinacji
                                         logger.info(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
+                                    
+                                    if all_targets:
+                                        targets_info = [f"{k}({v['type']})" for k, v in all_targets.items()]
+                                        logger.info(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
 
                                     # Upewnij się że istnieje struktura patterns
                                     if 'patterns' not in klines[first_kline_idx]:
@@ -372,7 +384,8 @@ class TechnicalAnalysis:
                                         'retracement': fib_levels.retracement,
                                         'extension': fib_levels.extension, 
                                         'targets': fib_levels.targets,
-                                        'all_fibos': all_points_fibonacci  # Nowe pole z wszystkimi kombinacjami
+                                        'all_fibos': all_points_fibonacci,  # Nowe pole z wszystkimi kombinacjami
+                                        'all_targets': all_targets  # Nowe pole z PRZ, TP, SL
                                     }
 
                                 # Teraz dodaj fibonacci do każdego punktu tego wzorca (pattern_retraces już są dodane w linii 301)
@@ -391,7 +404,8 @@ class TechnicalAnalysis:
                                 
                                 total_fib_levels = len(fibonacci_levels.get('retracement', {})) + len(fibonacci_levels.get('extension', {})) + len(fibonacci_levels.get('targets', {}))
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
-                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci i {total_all_fibos} kombinacjami punktów XABCD")
+                                total_all_targets = len(fibonacci_levels.get('all_targets', {}))
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
                                 logger.info(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
 
                                 patterns_count += 1
@@ -568,45 +582,48 @@ class TechnicalAnalysis:
         """
         price_range = abs(end_price - start_price)
         
-        # Poziomy retracementu: 0%, 18.6%, 23.6%, 38.2%, 50%, 61.8%, 68.5%, 78.6%, 88.6%, 100%
+        # Poziomy retracementu (wewnętrzne zniesienia): 0%, 23.6%, 38.2%, 50%, 61.8%, 78.6%, 88.6%, 100%
         retracement = {
             "0.0": end_price + (price_range * 0.0 if is_uptrend else -price_range * 0.0),        # 0%
-            "0.186": end_price + (price_range * 0.186 if is_uptrend else -price_range * 0.186),  # 18.6%
             "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
             "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
             "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),        # 50%
             "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
-            "0.685": end_price + (price_range * 0.685 if is_uptrend else -price_range * 0.685),  # 68.5%
             "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
             "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
             "1.0": end_price + (price_range * 1.0 if is_uptrend else -price_range * 1.0)         # 100%
         }
         
-        # Poziomy extension: 113%, 127.2%, 146%, 161.8%, 223.6%, 261.8%
+        # Poziomy extension (zewnętrzne rozszerzenia): 113%, 127.2%, 141.4%, 161.8%, 200%, 224%, 261.8%, 314%, 361.8%
         extension = {
             "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
             "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
-            "1.46": end_price + (price_range * 1.46 if is_uptrend else -price_range * 1.46),     # 146%
+            "1.414": end_price + (price_range * 1.414 if is_uptrend else -price_range * 1.414),  # 141.4%
             "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
-            "2.236": end_price + (price_range * 2.236 if is_uptrend else -price_range * 2.236),  # 223.6%
-            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)   # 261.8%
+            "2.0": end_price + (price_range * 2.0 if is_uptrend else -price_range * 2.0),        # 200%
+            "2.24": end_price + (price_range * 2.24 if is_uptrend else -price_range * 2.24),     # 224%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618),  # 261.8%
+            "3.14": end_price + (price_range * 3.14 if is_uptrend else -price_range * 3.14),     # 314%
+            "3.618": end_price + (price_range * 3.618 if is_uptrend else -price_range * 3.618)   # 361.8%
         }
         
-        # Targety cenowe: 18.6%, 23.6%, 38.2%, 61.8%, 68.5%, 78.6%, 88.6%, 113%, 127.2%, 146%, 161.8%, 223.6%, 261.8%
+        # Targety cenowe (kombinacja wewnętrznych i zewnętrznych): 23.6%, 38.2%, 50%, 61.8%, 78.6%, 88.6%, 113%, 127.2%, 141.4%, 161.8%, 200%, 224%, 261.8%, 314%, 361.8%
         targets = {
-            "0.186": end_price + (price_range * 0.186 if is_uptrend else -price_range * 0.186),  # 18.6%
             "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
             "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
+            "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),        # 50%
             "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
-            "0.685": end_price + (price_range * 0.685 if is_uptrend else -price_range * 0.685),  # 68.5%
             "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
             "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
             "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
             "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
-            "1.46": end_price + (price_range * 1.46 if is_uptrend else -price_range * 1.46),     # 146%
+            "1.414": end_price + (price_range * 1.414 if is_uptrend else -price_range * 1.414),  # 141.4%
             "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
-            "2.236": end_price + (price_range * 2.236 if is_uptrend else -price_range * 2.236),  # 223.6%
-            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)   # 261.8%
+            "2.0": end_price + (price_range * 2.0 if is_uptrend else -price_range * 2.0),        # 200%
+            "2.24": end_price + (price_range * 2.24 if is_uptrend else -price_range * 2.24),     # 224%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618),  # 261.8%
+            "3.14": end_price + (price_range * 3.14 if is_uptrend else -price_range * 3.14),     # 314%
+            "3.618": end_price + (price_range * 3.618 if is_uptrend else -price_range * 3.618)   # 361.8%
         }
         
         # Puste pole all_fibos - będzie wypełnione przez calculate_all_points_fibonacci
@@ -661,9 +678,8 @@ class TechnicalAnalysis:
                     # Oblicz poziomy retracementu (od end_price w kierunku start_price)
                     retracement = {}
                     for level_name, level_ratio in [
-                        ("0.0", 0.0), ("0.186", 0.186), ("0.236", 0.236), ("0.382", 0.382), 
-                        ("0.5", 0.5), ("0.618", 0.618), ("0.685", 0.685), ("0.786", 0.786), 
-                        ("0.886", 0.886), ("1.0", 1.0)
+                        ("0.0", 0.0), ("0.236", 0.236), ("0.382", 0.382), ("0.5", 0.5), 
+                        ("0.618", 0.618), ("0.786", 0.786), ("0.886", 0.886), ("1.0", 1.0)
                     ]:
                         if is_uptrend:
                             # Dla trendu wzrostowego: retracement w dół od end_price
@@ -675,8 +691,8 @@ class TechnicalAnalysis:
                     # Oblicz poziomy extension (przedłużenie ruchu poza end_price)
                     extension = {}
                     for level_name, level_ratio in [
-                        ("1.13", 1.13), ("1.272", 1.272), ("1.46", 1.46), ("1.618", 1.618), 
-                        ("2.236", 2.236), ("2.618", 2.618)
+                        ("1.13", 1.13), ("1.272", 1.272), ("1.414", 1.414), ("1.618", 1.618), 
+                        ("2.0", 2.0), ("2.24", 2.24), ("2.618", 2.618), ("3.14", 3.14), ("3.618", 3.618)
                     ]:
                         if is_uptrend:
                             # Dla trendu wzrostowego: extension w górę od end_price
@@ -688,10 +704,10 @@ class TechnicalAnalysis:
                     # Oblicz targety (kombinacja retracement i extension)
                     targets = {}
                     for level_name, level_ratio in [
-                        ("0.186", 0.186), ("0.236", 0.236), ("0.382", 0.382), ("0.618", 0.618), 
-                        ("0.685", 0.685), ("0.786", 0.786), ("0.886", 0.886), ("1.13", 1.13), 
-                        ("1.272", 1.272), ("1.46", 1.46), ("1.618", 1.618), ("2.236", 2.236), 
-                        ("2.618", 2.618)
+                        ("0.236", 0.236), ("0.382", 0.382), ("0.5", 0.5), ("0.618", 0.618), 
+                        ("0.786", 0.786), ("0.886", 0.886), ("1.13", 1.13), ("1.272", 1.272), 
+                        ("1.414", 1.414), ("1.618", 1.618), ("2.0", 2.0), ("2.24", 2.24), 
+                        ("2.618", 2.618), ("3.14", 3.14), ("3.618", 3.618)
                     ]:
                         if level_ratio <= 1.0:
                             # Poziomy poniżej 100% - jako retracement
@@ -718,6 +734,346 @@ class TechnicalAnalysis:
                     }
         
         return all_fibos
+
+    @classmethod
+    def calculate_all_targets(
+        cls,
+        pattern_type: str,
+        pattern_points: Dict[str, Dict[str, Union[int, float]]],
+        all_fibos: Dict[str, Dict[str, Dict[str, float]]],
+        is_bullish: bool
+    ) -> Dict[str, Dict[str, Union[float, List[float], str]]]:
+        """
+        Oblicza PRZ (Potential Reversal Zone), TP (Take Profit) oraz SL (Stop Loss) 
+        dla wzorców harmonicznych na podstawie all_fibos.
+        
+        Args:
+            pattern_type: Typ wzorca (np. "Gartley", "Butterfly", "Bat")
+            pattern_points: Słownik punktów wzorca
+            all_fibos: Obliczone poziomy Fibonacci dla wszystkich kombinacji
+            is_bullish: Czy wzorzec jest bullish
+            
+        Returns:
+            Słownik zawierający obliczone targety:
+            {
+                'PRZ': {'type': 'zone', 'min_price': float, 'max_price': float, 'description': str},
+                'TP1': {'type': 'line', 'price': float, 'description': str},
+                'TP2': {'type': 'line', 'price': float, 'description': str},
+                'SL': {'type': 'line', 'price': float, 'description': str}
+            }
+        """
+        targets = {}
+        
+        # Pobierz punkty wzorca
+        x_price = pattern_points.get('X', {}).get('price', 0) if 'X' in pattern_points else 0
+        a_price = pattern_points.get('A', {}).get('price', 0) if 'A' in pattern_points else 0
+        b_price = pattern_points.get('B', {}).get('price', 0) if 'B' in pattern_points else 0
+        c_price = pattern_points.get('C', {}).get('price', 0) if 'C' in pattern_points else 0
+        d_price = pattern_points.get('D', {}).get('price', 0) if 'D' in pattern_points else 0
+        
+        # Normalizuj nazwę wzorca
+        pattern_name = pattern_type.lower().replace('_', '').replace('-', '').replace(' ', '')
+        
+        try:
+            if pattern_name == 'cypher':
+                # Cypher: AB = 0.382–0.618 XA; BC = 1.272–1.414 AB; CD = 0.786 XC
+                # PRZ = kumulacja 0.786 XC + projekcja BC; TP-1 38.2 AD, TP-2 61.8 AD; SL > X
+                if 'XC' in all_fibos and 'BC' in all_fibos and 'AD' in all_fibos:
+                    xc_786 = all_fibos['XC']['retracement'].get('0.786', 0)
+                    bc_1272 = all_fibos['BC']['extension'].get('1.272', 0)  # Projekcja BC 127.2%
+                    bc_1414 = all_fibos['BC']['extension'].get('1.414', 0)  # Projekcja BC 141.4%
+                    
+                    # PRZ jako strefa między XC 0.786 a projekcjami BC (1.272-1.414)
+                    prz_levels = [xc_786, bc_1272, bc_1414]
+                    prz_levels = [p for p in prz_levels if p > 0]
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': f"PRZ: XC(78.6%) + BC(127.2-141.4%) - Potential Reversal Zone"
+                        }
+                    
+                    # TP1 i TP2 - szybkie wyjścia zgodnie z wytycznymi
+                    ad_382 = all_fibos['AD']['retracement'].get('0.382', 0)
+                    ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                    if ad_382:
+                        targets['TP1'] = {'type': 'line', 'price': ad_382, 'description': "TP1: AD(38.2%) - Take Profit 1"}
+                    if ad_618:
+                        targets['TP2'] = {'type': 'line', 'price': ad_618, 'description': "TP2: AD(61.8%) - Take Profit 2"}
+                    
+                    # SL konserwatywny kilka pipsów poza X
+                    targets['SL'] = {'type': 'line', 'price': x_price, 'description': "SL: X level - Stop Loss (konserwatywny)"}
+                        
+            elif pattern_name in ['shark', 'deepshark']:
+                # Shark: AB = 1.13–1.618 XA; BC ≈ 1.13 OX; CD ≈ 0.886 OX
+                # PRZ = konfluencja 0.886 OX + 1.13 AB; Szybki scalp: TP-1 50% BC; SL powyżej PRZ
+                if 'XA' in all_fibos and 'AB' in all_fibos and 'BC' in all_fibos:  # Używamy XA jako OX
+                    ox_886 = all_fibos['XA']['retracement'].get('0.886', 0)  # OX = XA przy 88.6%
+                    ab_113 = all_fibos['AB']['extension'].get('1.13', 0)
+                    ab_1618 = all_fibos['AB']['extension'].get('1.618', 0)
+                    
+                    # PRZ jako bardzo wąska strefa przy 0.886 OX + 1.13 AB
+                    prz_levels = [ox_886, ab_113]
+                    if pattern_name == 'deepshark' and ab_1618 > 0:
+                        prz_levels.append(ab_1618)  # Deep Shark sięga do 1.618 XA
+                        
+                    prz_levels = [p for p in prz_levels if p > 0]
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': f"PRZ: XA(88.6%) + AB(113-161.8%) - Very narrow PRZ"
+                        }
+                    
+                    # TP1 - 50% BC (szybki scalp)
+                    bc_50 = all_fibos['BC']['retracement'].get('0.5', 0)
+                    if bc_50:
+                        targets['TP1'] = {'type': 'line', 'price': bc_50, 'description': "TP1: BC(50%) - Szybki scalp"}
+                    
+                    # SL powyżej PRZ lub 1.272 OX dla Deep Shark
+                    if pattern_name == 'deepshark':
+                        ox_1272 = all_fibos['XA']['extension'].get('1.272', 0)
+                        targets['SL'] = {'type': 'line', 'price': ox_1272, 'description': "SL: XA(127.2%) - Deep Shark SL"}
+                    else:
+                        # SL powyżej PRZ dla regularnego Shark
+                        if prz_levels:
+                            prz_max = max(prz_levels)
+                            targets['SL'] = {'type': 'line', 'price': prz_max * 1.001, 'description': "SL: Above PRZ - Stop Loss"}
+                        
+            elif pattern_name == 'five0' or pattern_name == 'five-0':
+                # Five-0: Po zakończonym Sharku: leg C-D = 50% retracement B-C; w tle Reciprocal AB = CD
+                # PRZ = poziom 50% BC; TP-1 38.2 CD, zwykle rozpoczyna nowy trend; SL za D
+                if 'BC' in all_fibos and 'CD' in all_fibos:
+                    bc_50 = all_fibos['BC']['retracement'].get('0.5', 0)
+                    
+                    # PRZ na poziomie 50% BC (pojedynczy poziom)
+                    if bc_50 > 0:
+                        targets['PRZ'] = {
+                            'type': 'line',  # Pojedynczy poziom
+                            'price': bc_50,
+                            'description': f"PRZ: BC(50%) - Reversal po Shark"
+                        }
+                    
+                    # TP1 - 38.2% CD (zwykle rozpoczyna nowy trend)
+                    cd_382 = all_fibos['CD']['retracement'].get('0.382', 0)
+                    if cd_382:
+                        targets['TP1'] = {'type': 'line', 'price': cd_382, 'description': "TP1: CD(38.2%) - Początek nowego trendu"}
+                    
+                    # SL za D
+                    targets['SL'] = {'type': 'line', 'price': d_price, 'description': "SL: D level - Stop Loss"}
+                        
+            elif pattern_name in ['crab', 'deepcrab']:
+                # Crab: AB = 0.382–0.618 XA; BC = 0.382–0.886 AB; D = 1.618 XA lub 2.24–3.618 BC
+                # Deep Crab: B zwykle 0.886 XA → mocniejszy powrót BC
+                # PRZ = 1.618 XA (+ 224–361.8 BC); TP-1 38.2 AD, TP-2 61.8 AD; SL > 1.618 XA
+                if 'XA' in all_fibos and 'BC' in all_fibos and 'AD' in all_fibos:
+                    xa_1618 = all_fibos['XA']['extension'].get('1.618', 0)
+                    bc_224 = all_fibos['BC']['extension'].get('2.24', 0)   # 224%
+                    bc_3618 = all_fibos['BC']['extension'].get('3.618', 0) # 361.8%
+                    
+                    # PRZ jako strefa między 1.618 XA a projekcjami BC (224-361.8%)
+                    prz_levels = [xa_1618]
+                    if bc_224 > 0:
+                        prz_levels.append(bc_224)
+                    if bc_3618 > 0:
+                        prz_levels.append(bc_3618)
+                    
+                    prz_levels = [p for p in prz_levels if p > 0]
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': f"PRZ: XA(161.8%) + BC(224-361.8%) - Ekstremalna strefa"
+                        }
+                    
+                    # TP1 i TP2 dla swing-trading (cele tygodniowe)
+                    ad_382 = all_fibos['AD']['retracement'].get('0.382', 0)
+                    ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                    ad_1618 = all_fibos['AD']['extension'].get('1.618', 0)  # Odległy TP dla swing
+                    
+                    if ad_382:
+                        targets['TP1'] = {'type': 'line', 'price': ad_382, 'description': "TP1: AD(38.2%) - Szybkie wyjście"}
+                    if ad_618:
+                        targets['TP2'] = {'type': 'line', 'price': ad_618, 'description': "TP2: AD(61.8%) - Główny cel"}
+                    if ad_1618:
+                        targets['TP3'] = {'type': 'line', 'price': ad_1618, 'description': "TP3: AD(161.8%) - Swing-trading cel"}
+                    
+                    # SL powyżej 1.618 XA
+                    targets['SL'] = {'type': 'line', 'price': xa_1618, 'description': "SL: XA(161.8%) - Stop Loss"}
+                        
+            elif pattern_name in ['butterfly', 'deepbutterfly']:
+                # Butterfly: B = 0.786 XA; D = 1.272–1.618 XA; BC = 1.618 AB
+                # Deep Butterfly: B jeszcze głębiej (0.886 XA), a D potrafi dojść do 2.24–2.618 XA
+                # PRZ = 1.272/1.618 XA + równość AB=CD; TP-1 61.8 AD (często odwrót V-kształtny); SL > 1.618 XA
+                if 'XA' in all_fibos and 'AD' in all_fibos:
+                    xa_1272 = all_fibos['XA']['extension'].get('1.272', 0)
+                    xa_1618 = all_fibos['XA']['extension'].get('1.618', 0)
+                    
+                    if pattern_name == 'deepbutterfly':
+                        # Deep Butterfly: ekstremalna 2.0-2.618 XA (głównie jednokrotowy TP)
+                        xa_20 = all_fibos['XA']['extension'].get('2.0', 0)
+                        xa_224 = all_fibos['XA']['extension'].get('2.24', 0)
+                        xa_2618 = all_fibos['XA']['extension'].get('2.618', 0)
+                        prz_levels = [p for p in [xa_20, xa_224, xa_2618] if p > 0]
+                        sl_level = xa_2618 if xa_2618 > 0 else max(prz_levels) if prz_levels else 0
+                    else:
+                        # Regular Butterfly: 1.272-1.618 XA
+                        prz_levels = [p for p in [xa_1272, xa_1618] if p > 0]
+                        sl_level = xa_1618
+                    
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': f"PRZ: XA(127.2-261.8%) + AB=CD - {'Ekstremalna strefa' if pattern_name == 'deepbutterfly' else 'V-kształtny odwrót'}"
+                        }
+                    
+                    # TP1 - 61.8% AD (często odwrót V-kształtny)
+                    ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                    if ad_618:
+                        description = "TP1: AD(61.8%) - Powrót do ƒ-strefy" if pattern_name == 'deepbutterfly' else "TP1: AD(61.8%) - V-kształtny odwrót"
+                        targets['TP1'] = {'type': 'line', 'price': ad_618, 'description': description}
+                    
+                    # SL powyżej ekstremum
+                    if sl_level > 0:
+                        targets['SL'] = {'type': 'line', 'price': sl_level, 'description': f"SL: XA({sl_level:.1f}) - Stop Loss"}
+                        
+            elif pattern_name in ['bat', 'altbat']:
+                # Bat: B = 0.382–0.50 XA; BC = 0.382–0.886 AB; D = 0.886 XA
+                # Alt Bat: B = 0.382 XA; BC = 0.382/0.886 AB; D ≈ 1.13 XA oraz 2.0–3.618 BC
+                # PRZ = 0.886 XA + proj. 1.618+ BC; TP-1 38.2 AD, TP-2 61.8 AD; SL za X
+                if 'XA' in all_fibos and 'BC' in all_fibos and 'AD' in all_fibos:
+                    if pattern_name == 'altbat':
+                        # Alt Bat: PRZ = 1.13 XA + rozszerzona BC (2.0-3.618)
+                        xa_113 = all_fibos['XA']['extension'].get('1.13', 0)
+                        bc_20 = all_fibos['BC']['extension'].get('2.0', 0)
+                        bc_3618 = all_fibos['BC']['extension'].get('3.618', 0)
+                        prz_levels = [p for p in [xa_113, bc_20, bc_3618] if p > 0]
+                        sl_level = xa_113
+                        prz_desc = "PRZ: XA(113%) + BC(200-361.8%) - Alt Bat PRZ"
+                        sl_desc = "SL: XA(113%) - Alt Bat SL"
+                        is_scalp = True  # Alt Bat często krótkoterminowy scalp
+                    else:
+                        # Regular Bat: PRZ = 0.886 XA + proj. 1.618+ BC
+                        xa_886 = all_fibos['XA']['retracement'].get('0.886', 0)
+                        bc_1618 = all_fibos['BC']['extension'].get('1.618', 0)
+                        bc_224 = all_fibos['BC']['extension'].get('2.24', 0)
+                        bc_2618 = all_fibos['BC']['extension'].get('2.618', 0)
+                        prz_levels = [p for p in [xa_886, bc_1618, bc_224, bc_2618] if p > 0]
+                        sl_level = x_price
+                        prz_desc = "PRZ: XA(88.6%) + BC(161.8+%) - Bat PRZ"
+                        sl_desc = "SL: X level - Konserwatywny SL"
+                        is_scalp = False
+                    
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': prz_desc
+                        }
+                    
+                    # TP1 i TP2 (dla Alt Bat często krótkoterminowy scalp)
+                    ad_382 = all_fibos['AD']['retracement'].get('0.382', 0)
+                    ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                    
+                    if ad_382:
+                        tp1_desc = "TP1: AD(38.2%) - Scalp exit" if is_scalp else "TP1: AD(38.2%) - Szybkie wyjście"
+                        targets['TP1'] = {'type': 'line', 'price': ad_382, 'description': tp1_desc}
+                    
+                    if ad_618 and not is_scalp:  # Alt Bat ma zazwyczaj jeden TP
+                        targets['TP2'] = {'type': 'line', 'price': ad_618, 'description': "TP2: AD(61.8%) - Główny cel"}
+                    
+                    # SL
+                    targets['SL'] = {'type': 'line', 'price': sl_level, 'description': sl_desc}
+                        
+            elif pattern_name == 'gartley':
+                # Gartley: B = 0.618 XA; BC = 0.382–0.886 AB; D = 0.786 XA
+                # PRZ = zbieżność 0.786 XA + AB=CD; Klasyczny: TP-1 61.8 AD, TP-2 = 100% AD; SL za X
+                if 'XA' in all_fibos and 'AD' in all_fibos:
+                    xa_786 = all_fibos['XA']['retracement'].get('0.786', 0)
+                    
+                    # PRZ na poziomie 0.786 XA (+ AB=CD confluence)
+                    if xa_786 > 0:
+                        targets['PRZ'] = {
+                            'type': 'line',  # Pojedynczy poziom głównie
+                            'price': xa_786,
+                            'description': f"PRZ: XA(78.6%) + AB=CD - Klasyczny Gartley"
+                        }
+                    
+                    # TP1 i TP2 (klasyczne cele)
+                    ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                    ad_100 = all_fibos['AD']['retracement'].get('1.0', 0)  # 100% AD
+                    if ad_618:
+                        targets['TP1'] = {'type': 'line', 'price': ad_618, 'description': "TP1: AD(61.8%) - Klasyczny cel 1"}
+                    if ad_100:
+                        targets['TP2'] = {'type': 'line', 'price': ad_100, 'description': "TP2: AD(100%) - Klasyczny cel 2"}
+                    
+                    # SL za X (konserwatywny)
+                    targets['SL'] = {'type': 'line', 'price': x_price, 'description': "SL: X level - Konserwatywny SL"}
+                        
+            elif pattern_name == 'bartley':
+                # Bartley: Hybryda Bat-Gartley: XB = 0.618 XA; AC = 0.382–0.886 AB; DB = 1.272–1.618 BC; XD ≈ 0.786
+                # („max Bartley" ma spłyconą XD = 0.618); PRZ = 0.786 XD + 1.27 BC; TP-1 50% AD, TP-2 100% AD; SL ≥ 0.786 XD
+                if 'XD' in all_fibos and 'BC' in all_fibos and 'AD' in all_fibos:
+                    xd_786 = all_fibos['XD']['retracement'].get('0.786', 0)
+                    xd_618 = all_fibos['XD']['retracement'].get('0.618', 0)  # Max Bartley
+                    bc_1272 = all_fibos['BC']['extension'].get('1.272', 0)  # 127.2%
+                    bc_1618 = all_fibos['BC']['extension'].get('1.618', 0)  # 161.8%
+                    
+                    # PRZ jako strefa między XD (0.786 lub 0.618) a BC (1.272-1.618)
+                    prz_levels = []
+                    if xd_786 > 0:
+                        prz_levels.append(xd_786)
+                    if xd_618 > 0:  # Max Bartley option
+                        prz_levels.append(xd_618)
+                    if bc_1272 > 0:
+                        prz_levels.append(bc_1272)
+                    if bc_1618 > 0:
+                        prz_levels.append(bc_1618)
+                    
+                    if prz_levels:
+                        targets['PRZ'] = {
+                            'type': 'zone',
+                            'min_price': min(prz_levels),
+                            'max_price': max(prz_levels),
+                            'description': f"PRZ: XD(61.8-78.6%) + BC(127.2-161.8%) - Bartley hybrid"
+                        }
+                    
+                    # TP1 i TP2
+                    ad_50 = all_fibos['AD']['retracement'].get('0.5', 0)
+                    ad_100 = all_fibos['AD']['retracement'].get('1.0', 0)
+                    if ad_50:
+                        targets['TP1'] = {'type': 'line', 'price': ad_50, 'description': "TP1: AD(50%) - Bartley cel 1"}
+                    if ad_100:
+                        targets['TP2'] = {'type': 'line', 'price': ad_100, 'description': "TP2: AD(100%) - Bartley cel 2"}
+                    
+                    # SL ≥ 0.786 XD (lub 0.618 dla max Bartley)
+                    sl_level = xd_786 if xd_786 > 0 else xd_618
+                    if sl_level > 0:
+                        targets['SL'] = {'type': 'line', 'price': sl_level, 'description': f"SL: XD({sl_level:.1f}) - Bartley SL"}
+            
+            # Jeśli wzorzec nie został rozpoznany, dodaj podstawowe targety
+            if not targets and 'AD' in all_fibos:
+                # Podstawowe targety dla nierozpoznanych wzorców
+                ad_382 = all_fibos['AD']['retracement'].get('0.382', 0)
+                ad_618 = all_fibos['AD']['retracement'].get('0.618', 0)
+                if ad_382:
+                    targets['TP1'] = {'type': 'line', 'price': ad_382, 'description': "TP1: AD(38.2%) - Take Profit 1"}
+                if ad_618:
+                    targets['TP2'] = {'type': 'line', 'price': ad_618, 'description': "TP2: AD(61.8%) - Take Profit 2"}
+                
+                # Podstawowy SL na poziomie X lub poza wzorcem
+                targets['SL'] = {'type': 'line', 'price': x_price if x_price else d_price, 'description': "SL: Default level - Stop Loss"}
+                
+        except Exception as e:
+            logger.warning(f"Błąd podczas obliczania targetów dla wzorca {pattern_type}: {e}")
+        
+        return targets
 
     @classmethod
     def calculate_rsi(
@@ -891,7 +1247,8 @@ class TechnicalAnalysis:
         klines: List[Dict[str, Union[int, float, str]]],
         save_path: Optional[str] = None,
         title: str = "Wykres świecowy",
-        show_fibonacci: bool = True,
+        show_fibonacci: bool = False,
+        show_all_fibo_targets: bool = True,
         show_patterns: bool = True,
         show_rsi: bool = True,
         show_macd: bool = True,
@@ -1632,11 +1989,11 @@ class TechnicalAnalysis:
                         
                         logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
                     
-                    # Rysuj poziomy Fibonacciego jako linie z etykietami jeśli włączone
-                    if show_fibonacci and fibonacci_data:
+                    # Rysuj poziomy Fibonacciego i/lub targety jeśli włączone
+                    if (show_fibonacci or show_all_fibo_targets) and fibonacci_data:
                         cls._draw_fibonacci_lines_with_labels(
                             main_ax, fibonacci_data, pattern_groups, klines, 
-                            dynamic_font_size_fibo_labels, df
+                            dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci
                         )
                     
                     # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
@@ -1929,7 +2286,9 @@ class TechnicalAnalysis:
         pattern_groups: Dict,
         klines: List[Dict],
         dynamic_font_size_fibo_labels: int,
-        df: pd.DataFrame
+        df: pd.DataFrame,
+        show_all_fibo_targets: bool = True,
+        show_fibonacci: bool = True
     ):
         """
         Rysuje poziomy Fibonacciego jako linie z etykietami.
@@ -1965,7 +2324,10 @@ class TechnicalAnalysis:
             x_min, x_max = main_ax.get_xlim()
             chart_end_x = len(df) - 1  # Ostatnia świeca
             
-            logger.info(f"Rysowanie {len(fibonacci_data)} poziomów Fibonacci jako linie z etykietami")
+            if show_fibonacci:
+                logger.info(f"Rysowanie {len(fibonacci_data)} poziomów Fibonacci jako linie z etykietami")
+            else:
+                logger.info(f"Poziomy Fibonacci pomijane (show_fibonacci=False), rysowanie tylko targetów")
             
             # Iteruj od tyłu po klines aby współmiernie oznaczyć linie
             processed_patterns = set()  # Żeby uniknąć duplikowania wzorców
@@ -1998,8 +2360,12 @@ class TechnicalAnalysis:
                     
                     logger.info(f"Rysowanie poziomów Fibonacci dla wzorca {pattern_id}")
                     
-                                         # Przetwórz każdy typ poziomów Fibonacciego
+                                         # Przetwórz każdy typ poziomów Fibonacciego (tylko jeśli show_fibonacci=True)
                     for fib_type, levels in fibonacci.items():
+                        # Pomijaj rysowanie linii Fibonacci jeśli show_fibonacci=False
+                        if fib_type in ['retracement', 'extension', 'targets'] and not show_fibonacci:
+                            continue
+                            
                         linestyle = '--' if fib_type == 'retracement' else (':' if fib_type == 'extension' else '-')
                         alpha = 0.8  # Jednolita przezroczystość
                         linewidth = 1.5 if fib_type == 'targets' else 1
@@ -2074,8 +2440,160 @@ class TechnicalAnalysis:
                             
                             logger.debug(f"Narysowano linię {fib_type} Fibonacci {level_name} = {level_price:.6f} dla wzorca {pattern_id}")
             
-            logger.info(f"Pomyślnie narysowano linie Fibonacci dla {len(processed_patterns)} wzorców")
+            if show_fibonacci:
+                logger.info(f"Pomyślnie narysowano linie Fibonacci dla {len(processed_patterns)} wzorców")
+            else:
+                logger.info(f"Linie Fibonacci pominięte dla {len(processed_patterns)} wzorców (show_fibonacci=False)")
+            
+            # Teraz rysuj targety (PRZ, TP, SL) - ponownie iteruj od tyłu po klines (tylko jeśli włączone)
+            if show_all_fibo_targets:
+                processed_targets = set()  # Żeby uniknąć duplikowania wzorców
+                
+                # Oblicz dynamiczną wielkość czcionki dla targetów
+                base_font_size_fibo_targets_labels = 8
+                dynamic_font_size_fibo_targets_labels = int(base_font_size_fibo_targets_labels * (dynamic_font_size_fibo_labels / 6))  # Skalowanie względem Fibonacci
+                
+                logger.info(f"Rysowanie targetów z czcionką {dynamic_font_size_fibo_targets_labels}px (show_all_fibo_targets=True)")
+                
+                for kline_idx in range(len(klines) - 1, -1, -1):  # Od końca do początku
+                    kline = klines[kline_idx]
+                    
+                    # Sprawdź czy ta świeca zawiera wzorce z targetami
+                    if 'patterns' not in kline:
+                        continue
+                    
+                    for pattern_id, pattern_info in kline['patterns'].items():
+                        # Sprawdź czy już przetwarzaliśmy ten wzorzec
+                        if pattern_id in processed_targets:
+                            continue
+                        
+                        # Sprawdź czy ten wzorzec ma targety
+                        if 'fibonacci' not in pattern_info or 'all_targets' not in pattern_info['fibonacci']:
+                            continue
+                        
+                        all_targets = pattern_info['fibonacci']['all_targets']
+                        if not all_targets:
+                            continue
+                        
+                        processed_targets.add(pattern_id)
+                        
+                        # Znajdź punkt D tego wzorca dla pozycji startowej
+                        pattern_group = pattern_groups.get(pattern_id, {})
+                        points = pattern_group.get('points', {})
+                        d_point = points.get('D')
+                        
+                        if not d_point:
+                            continue
+                        
+                        start_x = d_point['index']
+                        logger.info(f"Rysowanie targetów dla wzorca {pattern_id} od punktu D na świecy {start_x}")
+                        
+                        # Definiuj kolory dla różnych typów targetów
+                        target_colors = {
+                            'PRZ': '#FF6B6B',    # Czerwony dla PRZ
+                            'TP1': '#4ECDC4',    # Cyan dla TP1
+                            'TP2': '#45B7D1',    # Niebieski dla TP2
+                            'TP3': '#9B59B6',    # Fioletowy dla TP3
+                            'SL': '#FFA07A'      # Łososiowy dla SL
+                        }
+                        
+                        # Rysuj każdy target
+                        for target_name, target_data in all_targets.items():
+                            target_type = target_data.get('type', 'line')
+                            original_description = target_data.get('description', f"{target_name}")
+                            description = f"ID: {pattern_id} | {original_description}"
+                            color = target_colors.get(target_name, '#FFFFFF')  # Biały fallback
+                            
+                            if target_type == 'zone':
+                                # Rysuj prostokąt dla stref (PRZ)
+                                min_price = target_data.get('min_price', 0)
+                                max_price = target_data.get('max_price', 0)
+                                
+                                if min_price > 0 and max_price > 0 and min_price != max_price:
+                                    # Rysuj prostokąt od punktu D do końca wykresu
+                                    rect_width = chart_end_x - start_x
+                                    rect_height = max_price - min_price
+                                    
+                                    rect = plt.Rectangle(
+                                        (start_x, min_price), 
+                                        rect_width, 
+                                        rect_height,
+                                        facecolor=color,
+                                        alpha=0.2,  # Transparentny prostokąt
+                                        edgecolor=color,
+                                        linewidth=1,
+                                        zorder=4  # Pod liniami Fibonacci
+                                    )
+                                    main_ax.add_patch(rect)
+                                    
+                                    # Dodaj etykietę w lewym górnym rogu prostokątu
+                                    label_x = start_x + 2  # Małe przesunięcie od lewej krawędzi
+                                    label_y = max_price - (rect_height * 0.1)  # 10% od góry prostokątu
+                                    
+                                    main_ax.annotate(
+                                        description,
+                                        (label_x, label_y),
+                                        ha='left',
+                                        va='top',
+                                        fontsize=dynamic_font_size_fibo_targets_labels,
+                                        color=color,
+                                        alpha=0.9,
+                                        bbox=dict(
+                                            boxstyle="round,pad=0.2",
+                                            facecolor='black',
+                                            alpha=0.0,  # Maksymalnie transparentne tło
+                                            edgecolor='none'  # Bez borderów
+                                        ),
+                                        zorder=7  # Nad prostokątem
+                                    )
+                                    
+                                    logger.debug(f"Narysowano prostokąt {target_name} dla wzorca {pattern_id}: {min_price:.6f} - {max_price:.6f}")
+                            
+                            elif target_type == 'line':
+                                # Rysuj linię dla pojedynczych targetów (TP, SL)
+                                price = target_data.get('price', 0)
+                                
+                                if price > 0:
+                                    # Rysuj linię od punktu D do końca wykresu
+                                    main_ax.plot(
+                                        [start_x, chart_end_x], 
+                                        [price, price],
+                                        color=color,
+                                        alpha=0.8,
+                                        linestyle='-',
+                                        linewidth=2,
+                                        zorder=5  # Nad świecami, ale pod wzorcami
+                                    )
+                                    
+                                    # Dodaj etykietę nad lewą górną krawędzią linii
+                                    label_x = start_x + 2  # Przesunięcie od początku linii
+                                    label_y = price
+                                    
+                                    main_ax.annotate(
+                                        description,
+                                        (label_x, label_y),
+                                        xytext=(0, 3),  # Małe przesunięcie w górę
+                                        textcoords='offset points',
+                                        ha='left',
+                                        va='bottom',
+                                        fontsize=dynamic_font_size_fibo_targets_labels,
+                                        color=color,
+                                        alpha=0.9,
+                                        bbox=dict(
+                                            boxstyle="round,pad=0.2",
+                                            facecolor='black',
+                                            alpha=0.0,  # Maksymalnie transparentne tło
+                                            edgecolor='none'  # Bez borderów
+                                        ),
+                                        zorder=6  # Nad liniami targetów
+                                    )
+                                    
+                                    logger.debug(f"Narysowano linię {target_name} dla wzorca {pattern_id}: {price:.6f}")
+
+                logger.info(f"Pomyślnie narysowano targety dla {len(processed_targets)} wzorców")
+            else:
+                logger.info(f"Rysowanie targetów pominięte (show_all_fibo_targets=False)")
             
         except Exception as e:
-            logger.error(f"Błąd podczas rysowania linii Fibonacci: {e}")
+            logger.error(f"Błąd podczas rysowania linii Fibonacci i targetów: {e}")
             logger.error(traceback.format_exc())
