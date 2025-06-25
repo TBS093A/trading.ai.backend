@@ -1250,6 +1250,8 @@ class TechnicalAnalysis:
         show_fibonacci: bool = False,
         show_all_fibo_targets: bool = False,
         show_all_fibonacci_levels: bool = True,
+        show_all_retracement_levels: bool = True,
+        show_all_extension_levels: bool = True,
         show_patterns: bool = True,
         show_rsi: bool = True,
         show_macd: bool = True,
@@ -1994,7 +1996,8 @@ class TechnicalAnalysis:
                     if (show_fibonacci or show_all_fibo_targets or show_all_fibonacci_levels) and fibonacci_data:
                         cls._draw_fibonacci_lines_with_labels(
                             main_ax, fibonacci_data, pattern_groups, klines, 
-                            dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels
+                            dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
+                            show_all_retracement_levels, show_all_extension_levels
                         )
                     
                     # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
@@ -2290,7 +2293,9 @@ class TechnicalAnalysis:
         df: pd.DataFrame,
         show_all_fibo_targets: bool = True,
         show_fibonacci: bool = True,
-        show_all_fibonacci_levels: bool = False
+        show_all_fibonacci_levels: bool = False,
+        show_all_retracement_levels: bool = True,
+        show_all_extension_levels: bool = True
     ):
         """
         Rysuje poziomy Fibonacciego jako linie z etykietami.
@@ -2302,6 +2307,11 @@ class TechnicalAnalysis:
             klines: Lista świeczek
             dynamic_font_size_fibo_labels: Wielkość czcionki dla etykiet Fibonacci
             df: DataFrame z danymi cenowymi
+            show_all_fibo_targets: Czy rysować targety (PRZ, TP, SL)
+            show_fibonacci: Czy rysować standardowe poziomy Fibonacci
+            show_all_fibonacci_levels: Czy rysować wszystkie poziomy z all_fibo
+            show_all_retracement_levels: Filtr dla zniesień wewnętrznych
+            show_all_extension_levels: Filtr dla zniesień zewnętrznych
         """
         try:
             # Funkcja do określania koloru na podstawie poziomu Fibonacci
@@ -2336,7 +2346,7 @@ class TechnicalAnalysis:
                 logger.info(f"Poziomy Fibonacci pomijane (show_fibonacci=False), rysowanie tylko targetów")
             
             if show_all_fibonacci_levels:
-                logger.info(f"Rysowanie wszystkich poziomów z all_fibo z etykietami na osi Y (czcionka: {dynamic_font_fibo_y_labels}px)")
+                logger.info(f"Rysowanie wszystkich poziomów z all_fibo ze standardowymi etykietami (czcionka: {dynamic_font_fibo_y_labels}px)")
             
             # Iteruj od tyłu po klines aby współmiernie oznaczyć linie
             processed_patterns = set()  # Żeby uniknąć duplikowania wzorców
@@ -2454,11 +2464,12 @@ class TechnicalAnalysis:
             else:
                 logger.info(f"Linie Fibonacci pominięte dla {len(processed_patterns)} wzorców (show_fibonacci=False)")
             
-            # Rysuj wszystkie poziomy z all_fibo z etykietami po prawej stronie (jeśli włączone)
+            # Rysuj wszystkie poziomy z all_fibo jako standardowe linie (jeśli włączone)
             if show_all_fibonacci_levels:
-                cls._draw_all_fibonacci_levels_with_y_labels(
+                cls._draw_all_fibonacci_levels(
                     main_ax, fibonacci_data, pattern_groups, klines, 
-                    dynamic_font_fibo_y_labels, df, chart_end_x, x_min, x_max
+                    dynamic_font_fibo_y_labels, df, chart_end_x, x_min, x_max,
+                    show_all_retracement_levels, show_all_extension_levels
                 )
             
             # Teraz rysuj targety (PRZ, TP, SL) - ponownie iteruj od tyłu po klines (tylko jeśli włączone)
@@ -2615,7 +2626,7 @@ class TechnicalAnalysis:
             logger.error(traceback.format_exc())
     
     @classmethod
-    def _draw_all_fibonacci_levels_with_y_labels(
+    def _draw_all_fibonacci_levels(
         cls,
         main_ax,
         fibonacci_data: List[Dict],
@@ -2626,10 +2637,11 @@ class TechnicalAnalysis:
         chart_end_x: int,
         x_min: float,
         x_max: float,
-        show_crucial_levels_only: bool = True
+        show_all_retracement_levels: bool = True,
+        show_all_extension_levels: bool = True
     ):
         """
-        Rysuje wszystkie poziomy z all_fibo z etykietami po prawej stronie osi Y.
+        Rysuje wszystkie poziomy z all_fibo jako standardowe linie z etykietami.
         
         Args:
             main_ax: Główna oś wykresu
@@ -2640,6 +2652,8 @@ class TechnicalAnalysis:
             df: DataFrame z danymi cenowymi
             chart_end_x: Pozycja X końca wykresu
             x_min, x_max: Granice osi X
+            show_all_retracement_levels: Filtr dla zniesień wewnętrznych (XA 38.2-78.6%, AB 38.2-88.6%)
+            show_all_extension_levels: Filtr dla zniesień zewnętrznych (XA 127.2-161.8%, BC 161.8-261.8%, AB 113-161.8%)
         """
         # Zielone linie dla retracement: 18.6%, 23.6%, 38.2%, 61.8%, 68.5%, 78.6%, 88.6%
         green_retracement = ['0.186', '0.236', '0.382', '0.618', '0.685', '0.786', '0.886']
@@ -2659,11 +2673,106 @@ class TechnicalAnalysis:
                 else:
                     return '#FFFFFF'  # Biały dla pozostałych
             
+            # Funkcja do filtrowania poziomów na podstawie kombinacji punktów i typu
+            def should_include_level(combination_name, fib_type, level_name, pattern_type=''):
+                """
+                Filtruje poziomy Fibonacci według kryteriów użytkownika.
+                
+                Args:
+                    combination_name: Nazwa kombinacji punktów (np. 'XA', 'BC', 'AB')
+                    fib_type: Typ poziomy ('retracement', 'extension', 'targets')
+                    level_name: Nazwa poziomu (np. '0.382', '1.618')
+                    pattern_type: Typ wzorca (np. 'Gartley', 'Bat') - opcjonalny
+                    
+                Returns:
+                    bool: True jeśli poziom powinien być uwzględniony
+                """
+                try:
+                    level_value = float(level_name)
+                except ValueError:
+                    return False
+                
+                pat = pattern_type.lower().strip()
+                comb = combination_name.upper().strip()
+                
+                # ---------------------------
+                # 1. RETRACEMENT (0‑1.0)
+                # ---------------------------
+                if fib_type == 'retracement' and show_all_retracement_levels:
+                    if comb == 'XA':
+                        if pat in ('bat',):
+                            return 0.382 <= level_value <= 0.618 or level_value == 0.886
+                        elif pat in ('alt bat',):
+                            return level_value <= 0.382
+                        elif pat in ('gartley',):
+                            return 0.618 <= level_value <= 0.786
+                        elif pat in ('cypher',):
+                            return 0.382 <= level_value <= 0.618
+                        elif pat in ('butterfly',):
+                            return level_value == 0.786
+                        elif pat in ('deep butterfly',):
+                            return level_value == 0.886
+                        elif pat in ('crab',):
+                            return 0.382 <= level_value <= 0.618
+                        elif pat in ('deep crab',):
+                            return level_value == 0.886
+                        # Shark / Deep Shark use >1.0 XA, handled in extension branch
+                    elif comb == 'AB':
+                        # Wspólny przedział dla większości struktur
+                        return 0.382 <= level_value <= 0.886
+                    elif comb == 'BC' and pat in ('five-0',):
+                        # Five‑0 szuka dokładnie 50 % cofki BC
+                        return abs(level_value - 0.50) < 1e-6
+                
+                # ---------------------------
+                # 2. EXTENSION / PROJECTION (>1.0)
+                # ---------------------------
+                elif fib_type == 'extension' and show_all_extension_levels:
+                    if comb == 'XA':
+                        if pat in ('butterfly', 'deep butterfly', 'crab', 'deep crab'):
+                            return level_value in (1.272, 1.618)
+                        elif pat in ('alt bat',):
+                            return 1.13 <= level_value <= 1.618 and level_value != 1.272
+                        elif pat in ('shark',):
+                            return 1.13 <= level_value <= 1.618
+                        elif pat in ('deep shark',):
+                            return 1.618 <= level_value <= 2.24
+                    elif comb == 'BC':
+                        if pat in ('bat', 'gartley', 'butterfly'):
+                            return 1.618 <= level_value <= 2.618
+                        elif pat in ('alt bat',):
+                            return 2.0 <= level_value <= 3.0
+                        elif pat in ('crab',):
+                            return 2.618 <= level_value <= 3.618
+                        elif pat in ('deep crab',):
+                            return 2.24 <= level_value <= 3.618
+                        elif pat in ('shark',):
+                            return 1.13 <= level_value <= 1.618
+                        elif pat in ('deep shark',):
+                            return 1.618 <= level_value <= 2.24
+                    elif comb == 'AB':
+                        # Klasyczne projekcje AB=CD / external 113‑161.8 %
+                        return 1.13 <= level_value <= 1.618
+                
+                # ---------------------------
+                # 3. TARGETS - rekurencyjne wywołanie dla retracement/extension
+                # ---------------------------
+                elif fib_type == 'targets':
+                    if show_all_retracement_levels and level_value < 1.0:
+                        return should_include_level(combination_name, 'retracement', level_name, pattern_type)
+                    elif show_all_extension_levels and level_value >= 1.0:
+                        return should_include_level(combination_name, 'extension', level_name, pattern_type)
+                
+                # ---------------------------
+                # 4. Fallback – nic nie pasuje
+                # ---------------------------
+                return False
+            
             # Zbierz wszystkie poziomy z wszystkich wzorców wraz z nazwami punktów
             all_levels_data = []
             processed_patterns = set()
             
-            logger.info(f"Zbieranie poziomów z all_fibo dla etykiet osi Y")
+            logger.info(f"Zbieranie poziomów z all_fibo dla standardowych etykiet (retracement: {show_all_retracement_levels}, extension: {show_all_extension_levels})")
             
             for kline_idx in range(len(klines) - 1, -1, -1):  # Od końca do początku
                 kline = klines[kline_idx]
@@ -2686,11 +2795,12 @@ class TechnicalAnalysis:
                     
                     processed_patterns.add(pattern_id)
                     
-                    # Znajdź punkty wzorca
+                    # Znajdź punkty wzorca i typ wzorca
                     pattern_group = pattern_groups.get(pattern_id, {})
                     points = pattern_group.get('points', {})
+                    pattern_type = pattern_group.get('pattern_type', '')
                     
-                    logger.debug(f"Przetwarzanie all_fibo dla wzorca {pattern_id}")
+                    logger.debug(f"Przetwarzanie all_fibo dla wzorca {pattern_id} typu {pattern_type}")
                     
                     # Iteruj przez wszystkie kombinacje punktów w all_fibos
                     for combination_name, combination_data in all_fibos.items():
@@ -2719,30 +2829,13 @@ class TechnicalAnalysis:
                             alpha = 0.6  # Trochę mniej przezroczyste niż zwykłe Fibonacci
                             linewidth = 1
                             
-                            # Dodaj każdy poziom do listy
+                            # Dodaj każdy poziom do listy (z filtrowaniem)
                             for level_name, level_price in levels.items():
                                 if level_price == 0 or pd.isna(level_price):
                                     continue
-
-                                if show_crucial_levels_only:
-                                    logger.info(f"show_crucial_levels_only: {level_name}")
-                                    if level_name in green_retracement or level_name in green_extension:
-                                        color = get_fibonacci_color(fib_type, level_name)
                                 
-                                        all_levels_data.append({
-                                            'pattern_id': pattern_id,
-                                            'combination_name': combination_name,
-                                            'fib_type': fib_type,
-                                            'level_name': level_name,
-                                            'level_price': level_price,
-                                            'color': color,
-                                            'linestyle': linestyle,
-                                            'alpha': alpha,
-                                            'linewidth': linewidth,
-                                            'start_x': start_x
-                                        })
-                                else:
-                                
+                                # Sprawdź czy poziom powinien być uwzględniony według filtrów
+                                if should_include_level(combination_name, fib_type, level_name, pattern_type):
                                     color = get_fibonacci_color(fib_type, level_name)
                                     
                                     all_levels_data.append({
@@ -2755,8 +2848,13 @@ class TechnicalAnalysis:
                                         'linestyle': linestyle,
                                         'alpha': alpha,
                                         'linewidth': linewidth,
-                                        'start_x': start_x
+                                        'start_x': start_x,
+                                        'pattern_type': pattern_type
                                     })
+                                    
+                                    logger.debug(f"Uwzględniono poziom {combination_name} {level_name} ({level_price:.6f}) dla wzorca {pattern_type} ID:{pattern_id}")
+                                else:
+                                    logger.debug(f"Pominięto poziom {combination_name} {level_name} ({level_price:.6f}) dla wzorca {pattern_type} ID:{pattern_id} - nie spełnia filtrów")
             
             logger.info(f"Zebrano {len(all_levels_data)} poziomów z all_fibo z {len(processed_patterns)} wzorców")
             
@@ -2767,9 +2865,7 @@ class TechnicalAnalysis:
             # Sortuj poziomy według ceny dla lepszego pozycjonowania etykiet
             all_levels_data.sort(key=lambda x: x['level_price'])
             
-            # Rysuj linie i zbieraj etykiety do inteligentnego pozycjonowania
-            labels_to_place = []
-            
+            # Rysuj linie ze standardowymi etykietami
             for level_data in all_levels_data:
                 # Rysuj linię od punktu startowego do końca wykresu
                 main_ax.plot(
@@ -2782,152 +2878,55 @@ class TechnicalAnalysis:
                     zorder=3  # Pod wzorcami harmonicznymi
                 )
                 
-                # Przygotuj etykietę
+                # Oblicz procent poziomu Fibonacci
                 try:
                     fib_value = float(level_data['level_name'])
                     fib_percent = f"{fib_value * 100:.1f}%"
                 except ValueError:
                     fib_percent = level_data['level_name']
                 
-                label_text = f"ID:{level_data['pattern_id']} {level_data['combination_name']} {fib_percent}"
+                # Tekst etykiety
+                label_text = f"ID: {level_data['pattern_id']} | {level_data['combination_name']} {fib_percent} | {level_data['level_price']:.6f}"
                 
-                labels_to_place.append({
-                    'text': label_text,
-                    'price': level_data['level_price'],
-                    'color': level_data['color']
-                })
+                # Pozycja etykiety - lewa górna krawędź linii
+                label_x = level_data['start_x'] + 2  # Przesunięcie od początku linii
+                label_y = level_data['level_price']
                 
-                logger.debug(f"Narysowano all_fibo linię {level_data['combination_name']} {level_data['level_name']} = {level_data['level_price']:.6f}")
-            
-            # Inteligentne pozycjonowanie etykiet po prawej stronie
-            cls._place_y_axis_labels_intelligently(main_ax, labels_to_place, dynamic_font_fibo_y_labels, x_max)
-            
-            logger.info(f"Pomyślnie narysowano {len(all_levels_data)} poziomów z all_fibo z inteligentnymi etykietami")
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas rysowania poziomów z all_fibo: {e}")
-            logger.error(traceback.format_exc())
-    
-    @classmethod
-    def _place_y_axis_labels_intelligently(
-        cls,
-        main_ax,
-        labels_to_place: List[Dict],
-        font_size: int,
-        x_max: float
-    ):
-        """
-        Inteligentnie umieszcza etykiety po prawej stronie osi Y, unikając nakładania się.
-        
-        Args:
-            main_ax: Główna oś wykresu
-            labels_to_place: Lista etykiet do umieszczenia
-            font_size: Wielkość czcionki
-            x_max: Maksymalna pozycja X wykresu
-        """
-        try:
-            if not labels_to_place:
-                return
-            
-            # Pobierz granice osi Y w skali logarytmicznej
-            y_min, y_max = main_ax.get_ylim()
-            
-            import numpy as np
-            
-            # Konwertuj ceny na pozycje w skali logarytmicznej
-            def price_to_log_position(price):
-                if price <= 0:
-                    return np.log(0.0001)
-                return np.log(price)
-            
-            def log_position_to_price(log_pos):
-                return np.exp(log_pos)
-            
-            log_y_min = np.log(y_min) if y_min > 0 else np.log(0.0001)
-            log_y_max = np.log(y_max) if y_max > 0 else np.log(0.0001)
-            log_range = log_y_max - log_y_min
-            
-            # Oblicz minimalną odległość między etykietami w skali logarytmicznej
-            min_spacing_log = log_range * (font_size / 1000.0)  # Dynamiczne skalowanie na podstawie wielkości czcionki
-            
-            # Sortuj etykiety według ceny
-            labels_to_place.sort(key=lambda x: x['price'])
-            
-            # Konwertuj pozycje na skalę logarytmiczną
-            for label in labels_to_place:
-                label['log_position'] = price_to_log_position(label['price'])
-                label['original_log_position'] = label['log_position']
-            
-            # Algorytm rozwiązywania kolizji w skali logarytmicznej
-            max_iterations = 10
-            for iteration in range(max_iterations):
-                moved_any = False
-                
-                for i in range(len(labels_to_place)):
-                    current_label = labels_to_place[i]
-                    
-                    # Sprawdź kolizje z etykietami powyżej
-                    for j in range(i + 1, len(labels_to_place)):
-                        other_label = labels_to_place[j]
-                        distance = other_label['log_position'] - current_label['log_position']
-                        
-                        if distance < min_spacing_log:
-                            # Kolizja! Przesuń górną etykietę
-                            required_move = min_spacing_log - distance
-                            other_label['log_position'] += required_move
-                            moved_any = True
-                
-                if not moved_any:
-                    break
-            
-            # Upewnij się, że etykiety nie wychodzą poza granice wykresu
-            for label in labels_to_place:
-                if label['log_position'] > log_y_max:
-                    label['log_position'] = log_y_max
-                elif label['log_position'] < log_y_min:
-                    label['log_position'] = log_y_min
-            
-            # Konwertuj z powrotem na ceny i umieść etykiety
-            x_label_position = x_max + (x_max * 0.02)  # 2% za prawą krawędzią
-            
-            for label in labels_to_place:
-                final_price = log_position_to_price(label['log_position'])
-                
-                # Umieść etykietę
+                # Dodaj etykietę z transparentnym tłem
                 main_ax.annotate(
-                    label['text'],
-                    (x_label_position, final_price),
+                    label_text,
+                    (label_x, label_y),
+                    xytext=(0, 3),  # Małe przesunięcie w górę
+                    textcoords='offset points',
                     ha='left',
-                    va='center',
-                    fontsize=font_size,
-                    color=label['color'],
+                    va='bottom',
+                    fontsize=dynamic_font_fibo_y_labels,
+                    color=level_data['color'],
                     alpha=0.9,
                     bbox=dict(
                         boxstyle="round,pad=0.2",
                         facecolor='black',
                         alpha=0.1,  # Maksymalnie transparentne tło
-                        edgecolor='none'
+                        edgecolor='none'  # Bez borderów
                     ),
-                    zorder=8,  # Nad wszystkimi liniami
-                    clip_on=False  # Pozwól na rysowanie poza granicami wykresu
+                    zorder=6  # Nad liniami Fibonacci
                 )
                 
-                # Dodaj linię łączącą etykietę z oryginalną pozycją (jeśli została przesunięta)
-                original_price = log_position_to_price(label['original_log_position'])
-                if abs(final_price - original_price) / original_price > 0.001:  # Jeśli przesunięcie > 0.1%
-                    main_ax.plot(
-                        [x_max, x_label_position], 
-                        [original_price, final_price],
-                        color=label['color'],
-                        alpha=0.3,
-                        linestyle=':',
-                        linewidth=0.5,
-                        zorder=7,
-                        clip_on=False
-                    )
+                logger.debug(f"Narysowano all_fibo linię {level_data['combination_name']} {level_data['level_name']} = {level_data['level_price']:.6f}")
             
-            logger.info(f"Umieszczono {len(labels_to_place)} etykiet na osi Y z inteligentnym pozycjonowaniem")
+            
+            # Loguj statystyki filtrowania
+            retracement_count = sum(1 for level in all_levels_data if level['fib_type'] == 'retracement')
+            extension_count = sum(1 for level in all_levels_data if level['fib_type'] == 'extension')
+            targets_count = sum(1 for level in all_levels_data if level['fib_type'] == 'targets')
+            
+            logger.info(f"Pomyślnie narysowano {len(all_levels_data)} poziomów z all_fibo ze standardowymi etykietami:")
+            logger.info(f"  - Retracement: {retracement_count} poziomów")
+            logger.info(f"  - Extension: {extension_count} poziomów") 
+            logger.info(f"  - Targets: {targets_count} poziomów")
             
         except Exception as e:
-            logger.error(f"Błąd podczas inteligentnego pozycjonowania etykiet osi Y: {e}")
+            logger.error(f"Błąd podczas rysowania poziomów z all_fibo: {e}")
             logger.error(traceback.format_exc())
+    
+
