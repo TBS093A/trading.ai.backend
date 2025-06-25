@@ -1247,15 +1247,17 @@ class TechnicalAnalysis:
         klines: List[Dict[str, Union[int, float, str]]],
         save_path: Optional[str] = None,
         title: str = "Wykres świecowy",
-        show_fibonacci: bool = False,
-        show_all_fibo_targets: bool = False,
-        show_all_fibonacci_levels: bool = True,
-        show_all_retracement_levels: bool = True,
-        show_all_extension_levels: bool = True,
-        show_patterns: bool = True,
-        show_rsi: bool = True,
-        show_macd: bool = True,
-        show_obv: bool = True,
+        show_fibonacci: bool = False, # Show general single fibonacci of patterns(from max / min to max / min point) 
+        show_all_fibo_targets: bool = False, # Show all fibonacci PRZ (Potential Reversal Zone), TP (Take Profit), SL (Stop Loss)
+        show_all_fibonacci_levels: bool = True, # Show crucial fibonacci levels for each point pair in patterns (need to set which should be mapped with show_all_retracement_levels & show_all_extension_levels)
+        show_all_retracement_levels: bool = True, # Shows all point pairs retracement fibonacci levels
+        show_all_extension_levels: bool = True, # Shows all point pairs extension fibonacci levels
+        # TODO show_all_median_line_andrews_pitchfork: bool = True, # Shows all point pairs median line andrews pitchfork levels
+        # TODO show_all_alternate_price_projection: bool = True, # Shows all point pairs alternate price projection levels
+        show_patterns: bool = True, # Show patterns on chart
+        show_rsi: bool = True, # Show RSI on chart
+        show_macd: bool = True, # Show MACD on chart
+        show_obv: bool = True, # Show OBV on chart
     ) -> str:
         """
         Tworzy wykres świecowy z dodatkowymi wskaźnikami technicznymi oraz wzorcami harmonicznymi
