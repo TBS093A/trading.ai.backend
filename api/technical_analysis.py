@@ -30,6 +30,7 @@ class FibonacciLevels:
     retracement: Dict[str, float]  # Poziomy retracementu (0.236, 0.382, 0.5, 0.618, 0.786)
     extension: Dict[str, float]    # Poziomy extension (1.272, 1.618, 2.0, 2.618)
     targets: Dict[str, float]      # Poziomy targetów (T1, T2, T3, T4)
+    all_fibos: Dict[str, Dict[str, Dict[str, float]]]  # Wszystkie kombinacje punktów XABCD
 
 @dataclass
 class HarmonicPattern:
@@ -298,7 +299,7 @@ class TechnicalAnalysis:
                                     continue
 
                                 # Nanieś punkty na odpowiednie świece
-                                pattern_points = {}  # Zbieranie punktów dla obliczenia proporcji
+                                pattern_points = {}  # Zbieranie punktów dla obliczenia proporcji i fibonacci
                                 
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
                                     if i >= len(point_names):
@@ -307,8 +308,11 @@ class TechnicalAnalysis:
                                     kline_idx = find_kline_index(x_point)
                                     point_name = point_names[i]
                                     
-                                    # Zapisz punkt do obliczenia proporcji
-                                    pattern_points[point_name] = float(y_point)
+                                    # Zapisz punkt do obliczenia proporcji i fibonacci dla wszystkich kombinacji
+                                    pattern_points[point_name] = {
+                                        'index': kline_idx,
+                                        'price': float(y_point)
+                                    }
 
                                     # Dodaj informacje o punkcie do świecy w nowej strukturze + kompatybilnej ze starą
                                     if 'patterns' not in klines[kline_idx]:
@@ -342,12 +346,20 @@ class TechnicalAnalysis:
                                     min_price = min(y_points)
                                     is_uptrend = bool(pattern.bullish)
 
-                                    # Oblicz poziomy Fibonacciego
+                                    # Oblicz ogólne poziomy Fibonacciego (jak poprzednio)
                                     fib_levels = cls.calculate_fibonacci_levels(
                                         start_price=max_price if is_uptrend else min_price,
                                         end_price=min_price if is_uptrend else max_price,
                                         is_uptrend=is_uptrend
                                     )
+
+                                    # Oblicz poziomy Fibonacciego dla wszystkich kombinacji punktów XABCD
+                                    all_points_fibonacci = cls.calculate_all_points_fibonacci(pattern_points)
+                                    
+                                    # Loguj przykłady obliczonych kombinacji
+                                    if all_points_fibonacci:
+                                        example_combinations = list(all_points_fibonacci.keys())[:5]  # Pierwsze 5 kombinacji
+                                        logger.info(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
 
                                     # Upewnij się że istnieje struktura patterns
                                     if 'patterns' not in klines[first_kline_idx]:
@@ -359,7 +371,8 @@ class TechnicalAnalysis:
                                     fibonacci_levels = {
                                         'retracement': fib_levels.retracement,
                                         'extension': fib_levels.extension, 
-                                        'targets': fib_levels.targets
+                                        'targets': fib_levels.targets,
+                                        'all_fibos': all_points_fibonacci  # Nowe pole z wszystkimi kombinacjami
                                     }
 
                                 # Teraz dodaj fibonacci do każdego punktu tego wzorca (pattern_retraces już są dodane w linii 301)
@@ -376,7 +389,10 @@ class TechnicalAnalysis:
                                     logger.info(f"Dodano punkt {point_name} wzorca {pattern_name} do świecy {kline_idx}: {str(klines[kline_idx]).replace(',', ',\n')}")
                                 
                                 
-                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces i {len(fibonacci_levels)} poziomami Fibonacci")
+                                total_fib_levels = len(fibonacci_levels.get('retracement', {})) + len(fibonacci_levels.get('extension', {})) + len(fibonacci_levels.get('targets', {}))
+                                total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci i {total_all_fibos} kombinacjami punktów XABCD")
+                                logger.info(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
 
                                 patterns_count += 1
 
@@ -593,7 +609,115 @@ class TechnicalAnalysis:
             "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618)   # 261.8%
         }
         
-        return FibonacciLevels(retracement, extension, targets)
+        # Puste pole all_fibos - będzie wypełnione przez calculate_all_points_fibonacci
+        all_fibos = {}
+        
+        return FibonacciLevels(retracement, extension, targets, all_fibos)
+
+    @classmethod
+    def calculate_all_points_fibonacci(
+        cls,
+        pattern_points: Dict[str, Dict[str, Union[int, float]]]
+    ) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """
+        Oblicza poziomy Fibonacciego dla wszystkich kombinacji punktów XABCD wzorca harmonicznego.
+        
+        Args:
+            pattern_points: Słownik punktów wzorca w formacie {point_name: {'index': int, 'price': float}}
+            
+        Returns:
+            Słownik zawierający poziomy Fibonacci dla wszystkich kombinacji punktów
+            Struktura: {
+                'XA': {'retracement': {...}, 'extension': {...}, 'targets': {...}},
+                'XB': {'retracement': {...}, 'extension': {...}, 'targets': {...}},
+                ...
+            }
+        """
+        all_fibos = {}
+        
+        # Lista wszystkich dostępnych punktów
+        available_points = list(pattern_points.keys())
+        
+        # Generuj wszystkie kombinacje punktów (każdy z każdym)
+        for point1 in available_points:
+            for point2 in available_points:
+                if point1 != point2:  # Nie obliczaj dla tego samego punktu
+                    combination_name = f"{point1}{point2}"
+                    
+                    # Pobierz ceny punktów
+                    start_price = float(pattern_points[point1]['price'])
+                    end_price = float(pattern_points[point2]['price'])
+                    
+                    # Określ czy to trend wzrostowy czy spadkowy
+                    is_uptrend = end_price > start_price
+                    
+                    # Oblicz zakres cenowy
+                    price_range = abs(end_price - start_price)
+                    
+                    if price_range == 0:
+                        # Jeśli punkty mają tę samą cenę, pomiń
+                        continue
+                    
+                    # Oblicz poziomy retracementu (od end_price w kierunku start_price)
+                    retracement = {}
+                    for level_name, level_ratio in [
+                        ("0.0", 0.0), ("0.186", 0.186), ("0.236", 0.236), ("0.382", 0.382), 
+                        ("0.5", 0.5), ("0.618", 0.618), ("0.685", 0.685), ("0.786", 0.786), 
+                        ("0.886", 0.886), ("1.0", 1.0)
+                    ]:
+                        if is_uptrend:
+                            # Dla trendu wzrostowego: retracement w dół od end_price
+                            retracement[level_name] = end_price - (price_range * level_ratio)
+                        else:
+                            # Dla trendu spadkowego: retracement w górę od end_price
+                            retracement[level_name] = end_price + (price_range * level_ratio)
+                    
+                    # Oblicz poziomy extension (przedłużenie ruchu poza end_price)
+                    extension = {}
+                    for level_name, level_ratio in [
+                        ("1.13", 1.13), ("1.272", 1.272), ("1.46", 1.46), ("1.618", 1.618), 
+                        ("2.236", 2.236), ("2.618", 2.618)
+                    ]:
+                        if is_uptrend:
+                            # Dla trendu wzrostowego: extension w górę od end_price
+                            extension[level_name] = end_price + (price_range * (level_ratio - 1.0))
+                        else:
+                            # Dla trendu spadkowego: extension w dół od end_price
+                            extension[level_name] = end_price - (price_range * (level_ratio - 1.0))
+                    
+                    # Oblicz targety (kombinacja retracement i extension)
+                    targets = {}
+                    for level_name, level_ratio in [
+                        ("0.186", 0.186), ("0.236", 0.236), ("0.382", 0.382), ("0.618", 0.618), 
+                        ("0.685", 0.685), ("0.786", 0.786), ("0.886", 0.886), ("1.13", 1.13), 
+                        ("1.272", 1.272), ("1.46", 1.46), ("1.618", 1.618), ("2.236", 2.236), 
+                        ("2.618", 2.618)
+                    ]:
+                        if level_ratio <= 1.0:
+                            # Poziomy poniżej 100% - jako retracement
+                            if is_uptrend:
+                                targets[level_name] = end_price - (price_range * level_ratio)
+                            else:
+                                targets[level_name] = end_price + (price_range * level_ratio)
+                        else:
+                            # Poziomy powyżej 100% - jako extension
+                            if is_uptrend:
+                                targets[level_name] = end_price + (price_range * (level_ratio - 1.0))
+                            else:
+                                targets[level_name] = end_price - (price_range * (level_ratio - 1.0))
+                    
+                    # Zapisz obliczone poziomy dla tej kombinacji
+                    all_fibos[combination_name] = {
+                        'retracement': retracement,
+                        'extension': extension,
+                        'targets': targets,
+                        'start_price': start_price,
+                        'end_price': end_price,
+                        'is_uptrend': is_uptrend,
+                        'price_range': price_range
+                    }
+        
+        return all_fibos
 
     @classmethod
     def calculate_rsi(
