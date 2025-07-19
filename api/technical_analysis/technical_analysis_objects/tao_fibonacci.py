@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_technical_analysis_object import TechnicalAnalysisObject
+from abstract_technical_analysis_object import TechnicalAnalysisObject, FibonacciLevels
 
 class Fibonacci(TechnicalAnalysisObject):
     """Podstawowe poziomy Fibonacciego"""
@@ -43,41 +43,75 @@ class Fibonacci(TechnicalAnalysisObject):
             start_price = min(prices)
             end_price = max(prices)
         
-        self.calculated_data = self._calculate_fibonacci_levels(start_price, end_price, is_uptrend)
+        self.calculated_data = self.__calculate_fibonacci_levels(start_price, end_price, is_uptrend)
     
-    def _calculate_fibonacci_levels(self, start_price: float, end_price: float, is_uptrend: bool) -> FibonacciLevels:
-        """Oblicza podstawowe poziomy Fibonacciego"""
+    def __calculate_fibonacci_levels(
+        self,
+        start_price: float,
+        end_price: float,
+        is_uptrend: bool
+    ) -> FibonacciLevels:
+        """
+        Oblicza poziomy Fibonacciego dla danego ruchu cenowego.
+        
+        Args:
+            start_price: Cena początkowa
+            end_price: Cena końcowa
+            is_uptrend: Czy trend jest wzrostowy
+            
+        Returns:
+            Obiekt FibonacciLevels zawierający poziomy retracementu, extension i targety
+        """
         price_range = abs(end_price - start_price)
         
-        retracement = {}
-        extension = {}
-        targets = {}
+        # Poziomy retracementu (wewnętrzne zniesienia): 0%, 23.6%, 38.2%, 50%, 61.8%, 78.6%, 88.6%, 100%
+        retracement = {
+            "0.0": end_price + (price_range * 0.0 if is_uptrend else -price_range * 0.0),        # 0%
+            "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
+            "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
+            "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),        # 50%
+            "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
+            "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
+            "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
+            "1.0": end_price + (price_range * 1.0 if is_uptrend else -price_range * 1.0)         # 100%
+        }
         
-        # Poziomy retracementu
-        for level_name, level_ratio in [("0.236", 0.236), ("0.382", 0.382), ("0.5", 0.5), 
-                                      ("0.618", 0.618), ("0.786", 0.786)]:
-            if is_uptrend:
-                retracement[level_name] = end_price - (price_range * level_ratio)
-            else:
-                retracement[level_name] = end_price + (price_range * level_ratio)
+        # Poziomy extension (zewnętrzne rozszerzenia): 113%, 127.2%, 141.4%, 161.8%, 200%, 224%, 261.8%, 314%, 361.8%
+        extension = {
+            "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
+            "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
+            "1.414": end_price + (price_range * 1.414 if is_uptrend else -price_range * 1.414),  # 141.4%
+            "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
+            "2.0": end_price + (price_range * 2.0 if is_uptrend else -price_range * 2.0),        # 200%
+            "2.24": end_price + (price_range * 2.24 if is_uptrend else -price_range * 2.24),     # 224%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618),  # 261.8%
+            "3.14": end_price + (price_range * 3.14 if is_uptrend else -price_range * 3.14),     # 314%
+            "3.618": end_price + (price_range * 3.618 if is_uptrend else -price_range * 3.618)   # 361.8%
+        }
         
-        # Poziomy extension
-        for level_name, level_ratio in [("1.272", 1.272), ("1.618", 1.618), ("2.0", 2.0), ("2.618", 2.618)]:
-            if is_uptrend:
-                extension[level_name] = end_price + (price_range * (level_ratio - 1.0))
-            else:
-                extension[level_name] = end_price - (price_range * (level_ratio - 1.0))
+        # Targety cenowe (kombinacja wewnętrznych i zewnętrznych): 23.6%, 38.2%, 50%, 61.8%, 78.6%, 88.6%, 113%, 127.2%, 141.4%, 161.8%, 200%, 224%, 261.8%, 314%, 361.8%
+        targets = {
+            "0.236": end_price + (price_range * 0.236 if is_uptrend else -price_range * 0.236),  # 23.6%
+            "0.382": end_price + (price_range * 0.382 if is_uptrend else -price_range * 0.382),  # 38.2%
+            "0.5": end_price + (price_range * 0.5 if is_uptrend else -price_range * 0.5),        # 50%
+            "0.618": end_price + (price_range * 0.618 if is_uptrend else -price_range * 0.618),  # 61.8%
+            "0.786": end_price + (price_range * 0.786 if is_uptrend else -price_range * 0.786),  # 78.6%
+            "0.886": end_price + (price_range * 0.886 if is_uptrend else -price_range * 0.886),  # 88.6%
+            "1.13": end_price + (price_range * 1.13 if is_uptrend else -price_range * 1.13),     # 113%
+            "1.272": end_price + (price_range * 1.272 if is_uptrend else -price_range * 1.272),  # 127.2%
+            "1.414": end_price + (price_range * 1.414 if is_uptrend else -price_range * 1.414),  # 141.4%
+            "1.618": end_price + (price_range * 1.618 if is_uptrend else -price_range * 1.618),  # 161.8%
+            "2.0": end_price + (price_range * 2.0 if is_uptrend else -price_range * 2.0),        # 200%
+            "2.24": end_price + (price_range * 2.24 if is_uptrend else -price_range * 2.24),     # 224%
+            "2.618": end_price + (price_range * 2.618 if is_uptrend else -price_range * 2.618),  # 261.8%
+            "3.14": end_price + (price_range * 3.14 if is_uptrend else -price_range * 3.14),     # 314%
+            "3.618": end_price + (price_range * 3.618 if is_uptrend else -price_range * 3.618)   # 361.8%
+        }
         
-        # Targety (kombinacja retracement i extension)
-        targets.update(retracement)
-        targets.update(extension)
+        # Puste pole all_fibos - będzie wypełnione przez calculate_all_points_fibonacci
+        all_fibos = {}
         
-        return FibonacciLevels(
-            retracement=retracement,
-            extension=extension,
-            targets=targets,
-            all_fibos={}
-        )
+        return FibonacciLevels(retracement, extension, targets, all_fibos)
     
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
         """Rysuje podstawowe poziomy Fibonacciego"""

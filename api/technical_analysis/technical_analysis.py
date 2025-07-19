@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from indicators import IndicatorRSI, IndicatorMACD, IndicatorOBV
-from technical_analysis_objects import Fibonacci, AllTargetsFibonacci, AllFibonacciLevels, HarmonicPatterns, HarmonicPatternsForming, AllMedianLineAndrewsPitchfork, AllAlternatePriceProjection
+from technical_analysis_objects import Fibonacci, FibonacciTargets, FibonacciAllHarmonicPatternPointsLevels, HarmonicPatterns, HarmonicPatternsForming, AllMedianLineAndrewsPitchfork, AllAlternatePriceProjection
 
 class TechnicalAnalysis:
     """Główna klasa analizy technicznej używająca wzorca Strategy Pattern"""
@@ -41,8 +41,8 @@ class TechnicalAnalysis:
     
     TECHNICAL_ANALYSIS_OBJECTS = {
         'Fibonacci': Fibonacci,
-        'AllTargetsFibonacci': AllTargetsFibonacci,
-        'AllFibonacciLevels': AllFibonacciLevels,
+        'FibonacciTargets': FibonacciTargets,
+        'FibonacciAllHarmonicPatternPointsLevels': FibonacciAllHarmonicPatternPointsLevels,
         'HarmonicPatterns': HarmonicPatterns,
         'HarmonicPatternsForming': HarmonicPatternsForming,
         'AllMedianLineAndrewsPitchfork': AllMedianLineAndrewsPitchfork,

@@ -37,7 +37,13 @@ class IndicatorRSI(Indicator):
         self.period = 14
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], period: int = 14, **kwargs) -> None:
-        """Oblicza wskaźnik RSI"""
+        """
+        Oblicza wskaźnik RSI (Relative Strength Index).
+        
+        Args:
+            klines: Lista świeczek w formacie zwracanym przez _get_klines
+            period: Okres obliczania RSI (domyślnie 14)
+        """
         self.period = period
         
         if len(klines) < period + 1:

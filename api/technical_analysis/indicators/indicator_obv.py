@@ -36,7 +36,12 @@ class IndicatorOBV(Indicator):
         super().__init__("OBV")
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
-        """Oblicza wskaźnik OBV"""
+        """
+        Oblicza wskaźnik OBV (On-Balance Volume).
+        
+        Args:
+            klines: Lista świeczek w formacie zwracanym przez _get_klines
+        """
         if len(klines) < 2:
             self.calculated_data = []
             return

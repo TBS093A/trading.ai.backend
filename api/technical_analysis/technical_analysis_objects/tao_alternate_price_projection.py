@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 from abstract_technical_analysis_object import TechnicalAnalysisObject
 
 
-class AllAlternatePriceProjection(TechnicalAnalysisObject):
+class AlternatePriceProjection(TechnicalAnalysisObject):
     """Alternatywne projekcje cenowe"""
     
     def __init__(self):
-        super().__init__("AllAlternatePriceProjection")
+        super().__init__("AlternatePriceProjection")
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
         """Oblicza alternatywne projekcje cenowe"""
