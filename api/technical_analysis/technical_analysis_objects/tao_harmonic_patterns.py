@@ -26,6 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from technical_analysis.draw_utils import DrawUtils
 from abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern
 from tao_fibonacci import Fibonacci
 from tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
@@ -750,7 +751,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             show_all_extension_levels = kwargs.get('show_all_extension_levels', True)
             
             if (show_fibonacci or show_all_fibo_targets or show_all_fibonacci_levels) and fibonacci_data:
-                self.__draw_fibonacci_lines_with_labels(
+                DrawUtils.draw_fibonacci_lines_with_labels(
                     main_ax, fibonacci_data, pattern_groups, klines, 
                     dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
                     show_all_retracement_levels, show_all_extension_levels
@@ -758,52 +759,18 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             
             # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
             if pattern_labels_for_padding:
-                self.__draw_pattern_labels_in_padding(
+                DrawUtils.draw_pattern_labels_in_padding(
                     main_ax, pattern_labels_for_padding, df, 
                     dynamic_width, dynamic_height, dynamic_font_size_labels
                 )
             
             # Zastosuj skalowaną czcionkę do osi X i Y
-            self.__apply_scaled_font_to_axes(main_ax, dynamic_font_size_axes)
+            DrawUtils.apply_scaled_font_to_axes(main_ax, dynamic_font_size_axes)
             
         except Exception as e:
             logger.error(f"Błąd podczas rysowania wzorców harmonicznych: {e}")
             import traceback
             logger.error(traceback.format_exc())
-    
-    def __draw_fibonacci_lines_with_labels(self, main_ax, fibonacci_data, pattern_groups, klines, 
-                                         dynamic_font_size_fibo_labels, df, show_all_fibo_targets, 
-                                         show_fibonacci, show_all_fibonacci_levels,
-                                         show_all_retracement_levels, show_all_extension_levels):
-        """Rysuje linie Fibonacciego z etykietami"""
-        try:
-            # Implementacja rysowania linii Fibonacciego
-            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
-            logger.info("Rysowanie linii Fibonacciego...")
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas rysowania linii Fibonacciego: {e}")
-    
-    def __draw_pattern_labels_in_padding(self, main_ax, pattern_labels_for_padding, df, 
-                                       dynamic_width, dynamic_height, dynamic_font_size_labels):
-        """Rysuje etykiety wzorców w paddingu"""
-        try:
-            # Implementacja rysowania etykiet w paddingu
-            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
-            logger.info("Rysowanie etykiet wzorców w paddingu...")
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas rysowania etykiet w paddingu: {e}")
-    
-    def __apply_scaled_font_to_axes(self, main_ax, dynamic_font_size_axes):
-        """Zastosowuje skalowaną czcionkę do osi"""
-        try:
-            # Implementacja skalowania czcionki osi
-            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
-            logger.info("Zastosowanie skalowanej czcionki do osi...")
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas skalowania czcionki osi: {e}")
     
     def __draw_harmonic_patterns(self, main_ax, df, klines, kwargs):
         """Implementacja rysowania wzorców harmonicznych"""
