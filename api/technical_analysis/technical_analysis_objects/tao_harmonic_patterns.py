@@ -359,8 +359,451 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         if not show_patterns:
             return
         
-        # Implementacja rysowania wzorców harmonicznych
-        self.__draw_harmonic_patterns(main_ax, df, klines, kwargs)
+        # Przygotowanie danych wzorców harmonicznych z nowej zagnieżdżonej struktury
+        patterns_data = []
+        forming_patterns_data = []
+        fibonacci_data = []
+        retraces_data = []
+        
+        for i, kline in enumerate(klines):
+            # Wzorce formed
+            if 'patterns' in kline:
+                for pattern_id, pattern_info in kline['patterns'].items():
+                    if 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
+                        patterns_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'point_name': pattern_info['pattern_point_name'],
+                            'price': pattern_info['pattern_point_price'],
+                            'pattern_name': pattern_info.get('pattern_name', ''),
+                            'pattern_type': pattern_info.get('pattern_type', ''),
+                            'is_bullish': pattern_info.get('pattern_is_bullish', False),
+                            'is_formed': pattern_info.get('pattern_is_formed', False),
+                            'tolerance_strategy': pattern_info.get('pattern_fib_tolerance_strategy', ''),
+                            'tolerance': pattern_info.get('pattern_fib_tolerance', 0),
+                        })
+                    
+                    # Fibonacci levels
+                    if 'fibonacci' in pattern_info:
+                        fibonacci_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'fibonacci': pattern_info['fibonacci']
+                        })
+                    
+                    # Pattern retraces (nowa struktura zamiast proportions)
+                    if 'pattern_retraces' in pattern_info:
+                        retraces_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'pattern_retraces': pattern_info['pattern_retraces']
+                        })
+            
+            # Wzorce forming
+            if 'forming_patterns' in kline:
+                for pattern_id, pattern_info in kline['forming_patterns'].items():
+                    if 'pattern_point_name' in pattern_info and 'pattern_point_price' in pattern_info:
+                        forming_patterns_data.append({
+                            'index': i,
+                            'pattern_id': pattern_id,
+                            'point_name': pattern_info['pattern_point_name'],
+                            'price': pattern_info['pattern_point_price'],
+                            'pattern_name': pattern_info.get('pattern_name', ''),
+                            'pattern_type': pattern_info.get('pattern_type', ''),
+                            'is_bullish': pattern_info.get('pattern_is_bullish', False),
+                        })
+        
+        logger.info(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
+        logger.info(f"Znalezione poziomy Fibonacci: {len(fibonacci_data)}")
+        logger.info(f"Znalezione retraces: {len(retraces_data)}")
+        
+        # Wyświetl szczegółowe informacje o wzorcach
+        if patterns_data:
+            logger.info("Szczegóły znalezionych wzorców:")
+            for pattern in patterns_data[:5]:  # Pokaż pierwsze 5
+                logger.info(f"Wzorzec {pattern['pattern_id']}: {pattern['point_name']} @ {pattern['price']:.2f} - {pattern['pattern_name']}")
+        
+        # Wyświetl informacje o retraces
+        if retraces_data:
+            logger.info("Znalezione retraces wzorców:")
+            for retraces_info in retraces_data[:5]:  # Pokaż pierwsze 5
+                for retrace_name, retrace_value in retraces_info['pattern_retraces'].items():
+                    logger.info(f"Wzorzec {retraces_info['pattern_id']}: {retrace_name} = {retrace_value:.4f}")
+                    break  # Tylko jedna na wzorzec dla czytelności
+        
+        # Rysuj wzorce harmoniczne
+        if patterns_data:
+            self.__draw_harmonic_patterns(main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs)
+    
+    def __draw_harmonic_patterns(self, main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs):
+        """Implementacja rysowania wzorców harmonicznych"""
+        try:
+            # Pobierz główny subplot z cenami - obsługa różnych typów axes
+            if not main_ax or not hasattr(main_ax, 'plot'):
+                logger.error("Nie można znaleźć prawidłowego subplot do rysowania wzorców")
+                return
+            
+            logger.debug(f"Typ main_ax: {type(main_ax)}")
+            
+            # Grupuj punkty według pattern_id
+            pattern_groups = {}
+            for pattern in patterns_data:
+                pattern_id = pattern['pattern_id']
+                if pattern_id not in pattern_groups:
+                    pattern_groups[pattern_id] = {
+                        'points': {},
+                        'pattern_retraces': {},
+                        'pattern_name': pattern['pattern_name'],
+                        'pattern_type': pattern['pattern_type'],
+                        'is_bullish': pattern['is_bullish']
+                    }
+                
+                # Dodaj punkt do grupy
+                pattern_groups[pattern_id]['points'][pattern['point_name']] = {
+                    'index': pattern['index'],
+                    'price': pattern['price']
+                }
+                
+                # Dodaj pattern_retraces (z pierwszego punktu który je ma)
+                if not pattern_groups[pattern_id]['pattern_retraces']:
+                    # Znajdź pattern_retraces w klines
+                    kline = klines[pattern['index']]
+                    if 'patterns' in kline and pattern_id in kline['patterns']:
+                        if 'pattern_retraces' in kline['patterns'][pattern_id]:
+                            pattern_groups[pattern_id]['pattern_retraces'] = kline['patterns'][pattern_id]['pattern_retraces']
+            
+            logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
+            
+            # Inicjalizuj listę etykiet do rysowania w paddingu
+            pattern_labels_for_padding = []
+            
+            # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
+            dynamic_width = kwargs.get('dynamic_width', 20)
+            dynamic_height = kwargs.get('dynamic_height', 20)
+            
+            base_font_size_labels = 12 # wielkosc bazowa dla etykiet
+            base_font_size_axes = 14  # Oddzielna wielkość bazowa dla wrtosci na osiach 
+            base_font_size_fibo_labels = 6  # Wielkość bazowa dla etykiet Fibonacci
+            width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
+            height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
+            padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
+            scaling_ratio = (width_factor + height_factor + padding_factor) / 3  # Wspólny współczynnik skalowania
+            
+            dynamic_font_size_labels = int(base_font_size_labels * scaling_ratio)  # Dla etykiet
+            dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
+            dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
+            
+            logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+            
+            # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
+            all_points_by_candle = {}
+            for pattern_id, pattern_group in pattern_groups.items():
+                for point_name, point_data in pattern_group['points'].items():
+                    candle_idx = point_data['index']
+                    if candle_idx not in all_points_by_candle:
+                        all_points_by_candle[candle_idx] = []
+                    all_points_by_candle[candle_idx].append((pattern_id, point_name, point_data))
+            
+            # Loguj informacje o punktach na świecach dla debugowania
+            logger.info(f"Mapa punktów na świecach:")
+            for candle_idx, points_list in all_points_by_candle.items():
+                if len(points_list) > 1:  # Tylko świece z wieloma punktami
+                    point_descriptions = [f"({pid}:{name})" for pid, name, _ in points_list]
+                    logger.info(f"Świeca {candle_idx}: {len(points_list)} punktów: {', '.join(point_descriptions)}")
+            
+            # Rysuj linie i trójkąty dla każdego wzorca
+            for pattern_id, pattern_group in pattern_groups.items():
+                points = pattern_group['points']
+                pattern_retraces = pattern_group['pattern_retraces']
+                is_bullish = pattern_group['is_bullish']
+                pattern_name = pattern_group['pattern_name'].split('_')[0]  # Tylko nazwa bez parametrów
+                
+                # Kolory dla wzorców
+                line_color = 'green' if is_bullish else 'red'
+                triangle_color = 'green' if is_bullish else 'red'
+                alpha = 0.7
+                triangle_alpha = 0.2
+                
+                logger.debug(f"Rysowanie wzorca {pattern_name} (ID: {pattern_id}) z punktami: {list(points.keys())}")
+                
+                # Rysuj oznaczenia literowe punktów (X, A, B, C, D) z inteligentnym rozmieszczeniem
+                point_sequence = ['X', 'A', 'B', 'C', 'D']
+                for point_name in point_sequence:
+                    if point_name in points:
+                        point = points[point_name]
+                        candle_idx = point['index']
+                        
+                        # Podstawowy y_offset na podstawie typu wzorca i punktu
+                        base_y_offset = 15
+                        if is_bullish:
+                            if point_name in ['X', 'B', 'D']:
+                                base_y_offset = base_y_offset * -1
+                            elif point_name in ['A', 'C']:
+                                base_y_offset = base_y_offset
+                        else:
+                            if point_name in ['X', 'B', 'D']:
+                                base_y_offset = base_y_offset
+                            elif point_name in ['A', 'C']:
+                                base_y_offset = base_y_offset * -1
+                        
+                        # Oblicz x_offset i dodatkowy y_offset na podstawie WSZYSTKICH punktów na świecy
+                        points_on_candle = all_points_by_candle.get(candle_idx, [])
+                        num_points = len(points_on_candle)
+                        
+                        # Znajdź pozycję tego punktu w liście wszystkich punktów na świecy
+                        point_position = next((i for i, (pid, name, _) in enumerate(points_on_candle) 
+                                             if pid == pattern_id and name == point_name), 0)
+                        
+                        # Oblicz offsety na podstawie liczby punktów
+                        x_offset = 0
+                        additional_y_offset = 0
+                        
+                        if num_points == 1:
+                            # Jeden punkt: bez przesunięć
+                            x_offset = 0
+                            additional_y_offset = 0
+                        elif num_points == 2:
+                            # Dwa punkty: pierwszy +7, drugi -7
+                            x_offset = 7 if point_position == 0 else -7
+                        elif num_points == 3:
+                            # Trzy punkty: pierwszy +7, drugi -7, trzeci nowy wiersz
+                            if point_position == 0:
+                                x_offset = 7
+                            elif point_position == 1:
+                                x_offset = -7
+                            else:  # point_position == 2
+                                x_offset = 0
+                                additional_y_offset = 10 if base_y_offset > 0 else -10  # Nowy wiersz
+                        elif num_points >= 4:
+                            # Więcej punktów: rozłóż równomiernie
+                            if point_position < 2:
+                                x_offset = 7 if point_position == 0 else -7
+                            else:
+                                x_offset = 7 if point_position % 2 == 0 else -7
+                                row = (point_position - 2) // 2 + 1
+                                additional_y_offset = row * (10 if base_y_offset > 0 else -10)
+                        
+                        final_y_offset = base_y_offset + additional_y_offset
+                        
+                        logger.debug(f"Punkt {point_name} wzorca {pattern_id}: świeca {candle_idx}, pozycja {point_position+1}/{num_points}, x_offset={x_offset}, y_offset={final_y_offset}")
+                        
+                        # Rysuj literę zamiast kropki z unikalnymi kolorami dla wzorców
+                        main_ax.annotate(point_name, (point['index'], point['price']),
+                                       xytext=(x_offset, final_y_offset), textcoords='offset points',
+                                       ha='center', va='center', fontsize=9, weight='normal',
+                                       color=line_color, 
+                                       bbox=dict(boxstyle="circle", 
+                                               facecolor='black', alpha=0.5, edgecolor=line_color))
+                
+                # Zbierz dane wzorca dla etykiety w paddingu (przenieś poza pętlę wzorców)
+                if 'D' in points:
+                    d_point = points['D']
+                    direction_text = "BULLISH" if is_bullish else "BEARISH"
+                    
+                    # Zbierz wszystkie proporcje wzorca
+                    retraces_text = ""
+                    if pattern_retraces:
+                        retraces_lines = []
+                        # Kolejność proporcji zgodna z życzeniem użytkownika
+                        for retrace_name in ['XABCD', 'XAB', 'ABC', 'BCD']:
+                            if retrace_name in pattern_retraces:
+                                retraces_lines.append(f"{retrace_name}: {pattern_retraces[retrace_name]:.3f}")
+                        
+                        # Dodaj inne proporcje które mogą być dostępne
+                        for retrace_name, retrace_value in pattern_retraces.items():
+                            if retrace_name not in ['XABCD', 'XAB', 'ABC', 'BCD']:
+                                retraces_lines.append(f"{retrace_name}: {retrace_value:.3f}")
+                        
+                        if retraces_lines:
+                            retraces_text = "\n" + "\n".join(retraces_lines)
+                    
+                    pattern_label = f"ID: {pattern_id} | {pattern_name}\n{direction_text}{retraces_text}"
+                    
+                    # Zapisz dane etykiety do późniejszego rysowania w paddingu
+                    pattern_labels_for_padding.append({
+                        'pattern_id': pattern_id,
+                        'pattern_name': pattern_name,
+                        'pattern_label': pattern_label,
+                        'd_point': d_point,
+                        'line_color': line_color,
+                        'is_bullish': is_bullish
+                    })
+                    
+                    # Dodaj etykietę ID pod punktem D z inteligentnym pozycjonowaniem i stylem jak w paddingu
+                    id_label = f"ID: {pattern_id}"
+                    
+                    # Sprawdź ile wzorców kończy się na tej świecy (punkt D)
+                    d_candle_idx = d_point['index']
+                    d_patterns_on_candle = [
+                        p for p in pattern_labels_for_padding 
+                        if p['d_point']['index'] == d_candle_idx
+                    ]
+                    
+                    # Znajdź pozycję tego wzorca w liście wzorców kończących się na tej świecy
+                    current_pattern_position = len(d_patterns_on_candle)  # Pozycja tego wzorca (1-based)
+                    
+                    # Oblicz inteligentny margines górny na podstawie ilości wzorców i wierszy
+                    total_d_patterns = len(d_patterns_on_candle) + 1  # +1 dla bieżącego wzorca
+                    
+                    # Podstawowy margines + dodatkowy na podstawie wielkości czcionki i ilości wzorców
+                    base_margin = 30 + (dynamic_font_size_labels * 0.5)  # Margines rośnie z czcionką
+                    pattern_spacing = dynamic_font_size_labels + 8  # Odstęp między wzorcami
+                    
+                    # Oblicz całkowity margines dla wszystkich wzorców na tej świecy
+                    total_margin_for_candle = base_margin + (total_d_patterns * pattern_spacing)
+                    
+                    # Oblicz przesunięcie dla tego konkretnego wzorca
+                    final_id_y_offset = -base_margin - (current_pattern_position - 1) * pattern_spacing
+                    
+                    # Dodaj dodatkowy margines jeśli jest więcej niż 3 wzorce na świecy
+                    if total_d_patterns > 3:
+                        extra_margin = (total_d_patterns - 3) * (dynamic_font_size_labels * 0.3)
+                        final_id_y_offset -= extra_margin
+                    
+                    main_ax.annotate(
+                        id_label,
+                        (d_point['index'], d_point['price']),
+                        xytext=(0, final_id_y_offset),
+                        textcoords='offset points',
+                        ha='center',
+                        va='top',
+                        fontsize=dynamic_font_size_labels,  # Używaj dynamicznej wielkości czcionki
+                        weight='bold',  # Taki sam styl jak w paddingu
+                        color=line_color,  # Kolor wzorca zamiast białego
+                        alpha=0.9,  # Taka sama przezroczystość jak w paddingu
+                        bbox=dict(
+                            boxstyle="round,pad=0.5",  # Taki sam padding jak w paddingu
+                            facecolor='black',
+                            alpha=0.7,  # Taka sama przezroczystość jak w paddingu
+                            edgecolor=line_color  # Ramka w kolorze wzorca
+                        ),
+                        zorder=12
+                    )
+                    
+                    logger.debug(f"Dodano etykietę ID {pattern_id} pod punktem D na pozycji {current_pattern_position}/{total_d_patterns} z y_offset={final_id_y_offset}, total_margin={total_margin_for_candle:.1f}, font_size={dynamic_font_size_labels}")
+                
+                # Rysuj główne linie wzorca harmonicznego (X-A-B-C-D) z pattern_retraces
+                available_points = [p for p in point_sequence if p in points]
+                for i in range(len(available_points) - 1):
+                    p1_name = available_points[i]
+                    p2_name = available_points[i + 1]
+                    
+                    p1 = points[p1_name]
+                    p2 = points[p2_name]
+                    
+                    # Rysuj linię
+                    main_ax.plot([p1['index'], p2['index']], [p1['price'], p2['price']], 
+                               color=line_color, alpha=alpha, linewidth=2, linestyle='-')
+                
+                # Rysuj dodatkowe linie wzorca harmonicznego
+                # Linia X-D (completion line)
+                if 'X' in points and 'D' in points:
+                    p_x = points['X']
+                    p_d = points['D']
+                    main_ax.plot([p_x['index'], p_d['index']], [p_x['price'], p_d['price']], 
+                               color=line_color, alpha=alpha*0.7, linewidth=1, linestyle='--')
+                
+                # Linia A-C (impulse line)
+                if 'A' in points and 'C' in points:
+                    p_a = points['A']
+                    p_c = points['C']
+                    main_ax.plot([p_a['index'], p_c['index']], [p_a['price'], p_c['price']], 
+                               color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                
+                # Linia B-D (retrace line)
+                if 'B' in points and 'D' in points:
+                    p_b = points['B']
+                    p_d = points['D']
+                    main_ax.plot([p_b['index'], p_d['index']], [p_b['price'], p_d['price']], 
+                               color=line_color, alpha=alpha*0.5, linewidth=1, linestyle=':')
+                
+                # Rysuj trójkąty z przezroczystym tłem
+                # Trójkąt X-A-B
+                if 'X' in points and 'A' in points and 'B' in points:
+                    x_coords = [points['X']['index'], points['A']['index'], points['B']['index'], points['X']['index']]
+                    y_coords = [points['X']['price'], points['A']['price'], points['B']['price'], points['X']['price']]
+                    
+                    main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
+                               edgecolor=line_color, linewidth=1)
+                    
+                
+                # Trójkąt B-C-D
+                if 'B' in points and 'C' in points and 'D' in points:
+                    x_coords = [points['B']['index'], points['C']['index'], points['D']['index'], points['B']['index']]
+                    y_coords = [points['B']['price'], points['C']['price'], points['D']['price'], points['B']['price']]
+                    
+                    main_ax.fill(x_coords, y_coords, color=triangle_color, alpha=triangle_alpha, 
+                               edgecolor=line_color, linewidth=1)
+                    
+                
+                # Oblicz ile punktów tego wzorca ma przesunięcia
+                displaced_points = sum(1 for point_name in points.keys() 
+                                     if len(all_points_by_candle.get(points[point_name]['index'], [])) > 1)
+                
+                logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
+            
+            # Rysuj poziomy Fibonacciego i/lub targety jeśli włączone
+            show_fibonacci = kwargs.get('show_fibonacci', False)
+            show_all_fibo_targets = kwargs.get('show_all_fibo_targets', False)
+            show_all_fibonacci_levels = kwargs.get('show_all_fibonacci_levels', True)
+            show_all_retracement_levels = kwargs.get('show_all_retracement_levels', True)
+            show_all_extension_levels = kwargs.get('show_all_extension_levels', True)
+            
+            if (show_fibonacci or show_all_fibo_targets or show_all_fibonacci_levels) and fibonacci_data:
+                self.__draw_fibonacci_lines_with_labels(
+                    main_ax, fibonacci_data, pattern_groups, klines, 
+                    dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
+                    show_all_retracement_levels, show_all_extension_levels
+                )
+            
+            # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
+            if pattern_labels_for_padding:
+                self.__draw_pattern_labels_in_padding(
+                    main_ax, pattern_labels_for_padding, df, 
+                    dynamic_width, dynamic_height, dynamic_font_size_labels
+                )
+            
+            # Zastosuj skalowaną czcionkę do osi X i Y
+            self.__apply_scaled_font_to_axes(main_ax, dynamic_font_size_axes)
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania wzorców harmonicznych: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def __draw_fibonacci_lines_with_labels(self, main_ax, fibonacci_data, pattern_groups, klines, 
+                                         dynamic_font_size_fibo_labels, df, show_all_fibo_targets, 
+                                         show_fibonacci, show_all_fibonacci_levels,
+                                         show_all_retracement_levels, show_all_extension_levels):
+        """Rysuje linie Fibonacciego z etykietami"""
+        try:
+            # Implementacja rysowania linii Fibonacciego
+            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
+            logger.info("Rysowanie linii Fibonacciego...")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania linii Fibonacciego: {e}")
+    
+    def __draw_pattern_labels_in_padding(self, main_ax, pattern_labels_for_padding, df, 
+                                       dynamic_width, dynamic_height, dynamic_font_size_labels):
+        """Rysuje etykiety wzorców w paddingu"""
+        try:
+            # Implementacja rysowania etykiet w paddingu
+            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
+            logger.info("Rysowanie etykiet wzorców w paddingu...")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania etykiet w paddingu: {e}")
+    
+    def __apply_scaled_font_to_axes(self, main_ax, dynamic_font_size_axes):
+        """Zastosowuje skalowaną czcionkę do osi"""
+        try:
+            # Implementacja skalowania czcionki osi
+            # To jest uproszczona wersja - pełna implementacja wymaga przeniesienia z TechnicalAnalysis
+            logger.info("Zastosowanie skalowanej czcionki do osi...")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas skalowania czcionki osi: {e}")
     
     def __draw_harmonic_patterns(self, main_ax, df, klines, kwargs):
         """Implementacja rysowania wzorców harmonicznych"""
