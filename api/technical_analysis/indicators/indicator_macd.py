@@ -38,9 +38,26 @@ class IndicatorMACD(Indicator):
         self.slow_period = 26
         self.signal_period = 9
     
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
-                  fast_period: int = 12, slow_period: int = 26, signal_period: int = 9, **kwargs) -> None:
-        """Oblicza wskaźnik MACD"""
+    def calculate(
+        self, 
+        klines: List[Dict[str, Union[int, float, str]]], 
+        fast_period: int = 12, 
+        slow_period: int = 26, 
+        signal_period: int = 9, 
+        **kwargs
+    ) -> None:
+        """
+        Oblicza wskaźnik MACD (Moving Average Convergence Divergence):
+            - macd_line: Wartości linii MACD
+            - signal_line: Wartości linii sygnałowej
+            - histogram: Wartości histogramu
+        
+        Args:
+            klines: Lista świeczek w formacie zwracanym przez _get_klines
+            fast_period: Okres szybkiej średniej (domyślnie 12)
+            slow_period: Okres wolnej średniej (domyślnie 26)
+            signal_period: Okres linii sygnałowej (domyślnie 9)
+        """
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period

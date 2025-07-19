@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 from abstract_technical_analysis_object import TechnicalAnalysisObject
 
-class AllMedianLineAndrewsPitchfork(TechnicalAnalysisObject):
+class MedianLineAndrewsPitchfork(TechnicalAnalysisObject):
     """Andrews Pitchfork - linie mediany"""
     
     def __init__(self):
-        super().__init__("AllMedianLineAndrewsPitchfork")
+        super().__init__("MedianLineAndrewsPitchfork")
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
         """Oblicza linie Andrews Pitchfork"""
