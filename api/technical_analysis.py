@@ -149,7 +149,7 @@ class TechnicalAnalysis:
             show_rsi=show_rsi,
             show_macd=show_macd,
             show_obv=show_obv
-                 )
+        )
         for col in df.columns:
             if col in ['rsi', 'macd', 'signal', 'histogram', 'obv']:
                 columns_to_keep.append(col)

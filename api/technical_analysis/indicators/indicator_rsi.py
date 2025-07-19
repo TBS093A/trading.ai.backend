@@ -27,6 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from abstract_indicator import Indicator
+from ..draw_utils import DrawUtils
 
 
 class IndicatorRSI(Indicator):
@@ -82,10 +83,47 @@ class IndicatorRSI(Indicator):
                 klines[kline_index]['rsi'] = rsi_val
     
     def draw(self, main_ax, df: pd.DataFrame, add_plots: List, panel: int, **kwargs) -> int:
-        """Rysuje RSI na wykresie"""
-        if 'rsi' in df.columns and not df['rsi'].isna().all():
+        """
+        Rysuje RSI na wykresie.
+        
+        Args:
+            main_ax: Główna oś wykresu
+            df: DataFrame z danymi cenowymi
+            add_plots: Lista dodatkowych wykresów
+            panel: Numer panelu do rysowania
+            **kwargs: Dodatkowe parametry (show_rsi, dynamic_font_size_axes)
+            
+        Returns:
+            int: Numer następnego dostępnego panelu
+        """
+        show_rsi = kwargs.get('show_rsi', True)
+        dynamic_font_size_axes = kwargs.get('dynamic_font_size_axes', 14)
+        
+        if not show_rsi:
+            logger.debug("RSI pominięte (show_rsi=False)")
+            return panel
+        
+        if 'rsi' not in df.columns or df['rsi'].isna().all():
+            logger.warning("Brak danych RSI w DataFrame")
+            return panel
+        
+        try:
+            # Dodaj RSI do wykresu
             add_plots.append(
                 mpf.make_addplot(df['rsi'], panel=panel, color='yellow', ylabel='RSI')
             )
+            
+            logger.info(f"RSI dodane do panelu {panel}")
+            
+            # Zastosuj skalowaną czcionkę do osi RSI jeśli dostępne
+            if hasattr(main_ax, '__len__') and len(main_ax) > panel:
+                rsi_ax = main_ax[panel]
+                DrawUtils.apply_scaled_font_to_axes(rsi_ax, [rsi_ax], dynamic_font_size_axes)
+                logger.debug(f"Zastosowano skalowaną czcionkę {dynamic_font_size_axes}px do osi RSI")
+            
             return panel + 1
-        return panel
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas rysowania RSI: {e}")
+            logger.error(traceback.format_exc())
+            return panel
