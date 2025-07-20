@@ -15,7 +15,7 @@ import mplfinance as mpf
 from api.telegram import TelegramAPI, TelegramAPIMock
 from api.openai import OpenaiAPI
 from api.binance import BinanceAPI
-from api.technical_analysis import TechnicalAnalysis as TA
+from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
 from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
 
 def get_test_data() -> List[Dict[str, Union[int, float, str]]]:

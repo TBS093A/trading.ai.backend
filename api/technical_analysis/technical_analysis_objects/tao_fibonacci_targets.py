@@ -26,7 +26,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_technical_analysis_object import TechnicalAnalysisObject
+from .abstract_technical_analysis_object import TechnicalAnalysisObject
+from ..draw_utils import DrawUtils
 
 
 class FibonacciTargets(TechnicalAnalysisObject):
@@ -401,7 +402,7 @@ class FibonacciTargets(TechnicalAnalysisObject):
         return targets
     
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
-        """Rysuje targety Fibonacciego (PRZ, TP, SL)"""
+        """Rysuje targety Fibonacciego (PRZ, TP, SL) używając DrawUtils"""
         if self.calculated_data is None:
             return
         
@@ -409,15 +410,56 @@ class FibonacciTargets(TechnicalAnalysisObject):
         if not show_all_fibo_targets:
             return
         
+        # Przygotuj dane w formacie wymaganym przez DrawUtils
+        fibonacci_data = []
+        pattern_groups = {}
+        
+        # Konwertuj targety do formatu fibonacci wymaganego przez DrawUtils
         for target_data in self.calculated_data:
             targets = target_data['targets']
             pattern_type = target_data['pattern_type']
+            pattern_id = target_data['pattern_id']
+            
+            # Konwertuj targety do formatu fibonacci
+            fibonacci = {
+                'targets': {}
+            }
             
             for target_name, target_info in targets.items():
                 if target_info['type'] == 'line':
-                    color = 'orange' if 'TP' in target_name else 'red' if 'SL' in target_name else 'purple'
-                    main_ax.axhline(y=target_info['price'], color=color, linestyle='-', alpha=0.8,
-                                  label=f"{pattern_type} {target_name}")
+                    fibonacci['targets'][target_name] = target_info['price']
                 elif target_info['type'] == 'zone':
-                    main_ax.axhspan(target_info['min_price'], target_info['max_price'], 
-                                  alpha=0.2, color='purple', label=f'{pattern_type} PRZ {target_name}')
+                    # Dla stref używaj średniej ceny
+                    avg_price = (target_info['min_price'] + target_info['max_price']) / 2
+                    fibonacci['targets'][target_name] = avg_price
+            
+            fibonacci_data.append({
+                'kline_idx': target_data['kline_idx'],
+                'pattern_id': pattern_id,
+                'fibonacci': fibonacci
+            })
+            
+            # Przygotuj pattern_groups jeśli nie istnieje
+            if pattern_id not in pattern_groups:
+                pattern_groups[pattern_id] = {
+                    'points': {},
+                    'pattern_retraces': {},
+                    'pattern_name': pattern_type,
+                    'pattern_type': pattern_type,
+                    'is_bullish': True  # Domyślnie bullish
+                }
+        
+        # Użyj DrawUtils do rysowania
+        DrawUtils.draw_fibonacci_lines_with_labels(
+            main_ax=main_ax,
+            fibonacci_data=fibonacci_data,
+            pattern_groups=pattern_groups,
+            klines=klines,
+            dynamic_font_size_fibo_labels=kwargs.get('dynamic_font_size_fibo_labels', 8),
+            df=df,
+            show_all_fibo_targets=True,  # FibonacciTargets - włącz targety
+            show_fibonacci=False,  # FibonacciTargets - nie podstawowe poziomy
+            show_all_fibonacci_levels=False,  # FibonacciTargets - nie wszystkie poziomy
+            show_all_retracement_levels=True,  # FibonacciTargets - włącz retracement
+            show_all_extension_levels=True  # FibonacciTargets - włącz extension
+        )

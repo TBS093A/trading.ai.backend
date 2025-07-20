@@ -26,7 +26,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_technical_analysis_object import TechnicalAnalysisObject, FibonacciLevels
+from .abstract_technical_analysis_object import TechnicalAnalysisObject, FibonacciLevels
+from ..draw_utils import DrawUtils
 
 class Fibonacci(TechnicalAnalysisObject):
     """Podstawowe poziomy Fibonacciego"""
@@ -114,7 +115,7 @@ class Fibonacci(TechnicalAnalysisObject):
         return FibonacciLevels(retracement, extension, targets, all_fibos)
     
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
-        """Rysuje podstawowe poziomy Fibonacciego"""
+        """Rysuje podstawowe poziomy Fibonacciego używając DrawUtils"""
         if self.calculated_data is None:
             return
         
@@ -122,11 +123,42 @@ class Fibonacci(TechnicalAnalysisObject):
         if not show_fibonacci:
             return
         
-        fib_levels = self.calculated_data
-        for level_name, price in fib_levels.retracement.items():
-            main_ax.axhline(y=price, color='green', linestyle='--', alpha=0.7, 
-                          label=f'Fib {level_name}' if level_name in ['0.382', '0.618'] else None)
+        # Przygotuj dane w formacie wymaganym przez DrawUtils
+        fibonacci_data = []
+        pattern_groups = {}
         
-        for level_name, price in fib_levels.extension.items():
-            main_ax.axhline(y=price, color='red', linestyle='--', alpha=0.7,
-                          label=f'Fib Ext {level_name}' if level_name in ['1.272', '1.618'] else None)
+        # Konwertuj dane do formatu wymaganego przez DrawUtils
+        for kline_idx, kline in enumerate(klines):
+            if 'patterns' in kline:
+                for pattern_id, pattern_info in kline['patterns'].items():
+                    if 'fibonacci' in pattern_info:
+                        fibonacci_data.append({
+                            'kline_idx': kline_idx,
+                            'pattern_id': pattern_id,
+                            'fibonacci': pattern_info['fibonacci']
+                        })
+                        
+                        # Przygotuj pattern_groups jeśli nie istnieje
+                        if pattern_id not in pattern_groups:
+                            pattern_groups[pattern_id] = {
+                                'points': {},
+                                'pattern_retraces': {},
+                                'pattern_name': pattern_info.get('pattern_name', ''),
+                                'pattern_type': pattern_info.get('pattern_type', ''),
+                                'is_bullish': pattern_info.get('pattern_is_bullish', False)
+                            }
+        
+        # Użyj DrawUtils do rysowania
+        DrawUtils.draw_fibonacci_lines_with_labels(
+            main_ax=main_ax,
+            fibonacci_data=fibonacci_data,
+            pattern_groups=pattern_groups,
+            klines=klines,
+            dynamic_font_size_fibo_labels=kwargs.get('dynamic_font_size_fibo_labels', 8),
+            df=df,
+            show_all_fibo_targets=False,  # Fibonacci - tylko podstawowe poziomy
+            show_fibonacci=True,  # Fibonacci - włącz podstawowe poziomy
+            show_all_fibonacci_levels=False,  # Fibonacci - nie wszystkie poziomy
+            show_all_retracement_levels=True,  # Fibonacci - włącz retracement
+            show_all_extension_levels=True  # Fibonacci - włącz extension
+        )
