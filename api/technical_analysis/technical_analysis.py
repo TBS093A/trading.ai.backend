@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Dict, Union, Optional, Tuple
+from typing import List, Dict, Union, Optional, Tuple, Type
 import logging
 from dataclasses import dataclass
 import mplfinance as mpf
@@ -94,40 +94,38 @@ class TechnicalAnalysis:
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
-            enabled_indicators: Lista nazw wskaźników do obliczenia
-            enabled_objects: Lista nazw obiektów analizy technicznej do obliczenia
+            enabled_indicators: Lista nazw wskaźników do obliczenia (None = nie obliczaj żadnych)
+            enabled_objects: Lista nazw obiektów analizy technicznej do obliczenia (None = nie obliczaj żadnych)
             **kwargs: Dodatkowe parametry przekazywane do poszczególnych metod calculate
         """
-        # Jeśli nie podano, włącz wszystkie
-        if enabled_indicators is None:
-            enabled_indicators = list(self.INDICATORS.keys())
-        if enabled_objects is None:
-            enabled_objects = list(self.TECHNICAL_ANALYSIS_OBJECTS.keys())
-        
         # Wyczyść poprzednie obliczenia
         self.indicators.clear()
         self.technical_analysis_objects.clear()
         
-        # Oblicz wskaźniki
-        for indicator_name in enabled_indicators:
-            if indicator_name in self.INDICATORS:
-                indicator_class = self.INDICATORS[indicator_name]
-                indicator_instance = indicator_class()
-                indicator_instance.calculate(klines, **kwargs)
-                self.indicators.append(indicator_instance)
-                logger.info(f"Obliczono wskaźnik: {indicator_name}")
+        # Oblicz wskaźniki tylko jeśli podano enabled_indicators
+        if enabled_indicators is not None:
+            for indicator_name in enabled_indicators:
+                if indicator_name in self.INDICATORS:
+                    indicator_class = self.INDICATORS[indicator_name]
+                    indicator_instance = indicator_class()
+                    indicator_instance.calculate(klines, **kwargs)
+                    self.indicators.append(indicator_instance)
+                    logger.info(f"Obliczono wskaźnik: {indicator_name}")
         
-        # Oblicz obiekty analizy technicznej
-        for object_name in enabled_objects:
-            if object_name in self.TECHNICAL_ANALYSIS_OBJECTS:
-                object_class = self.TECHNICAL_ANALYSIS_OBJECTS[object_name]
-                object_instance = object_class()
-                object_instance.calculate(klines, **kwargs)
-                self.technical_analysis_objects.append(object_instance)
-                logger.info(f"Obliczono obiekt analizy technicznej: {object_name}")
+        # Oblicz obiekty analizy technicznej tylko jeśli podano enabled_objects
+        if enabled_objects is not None:
+            for object_name in enabled_objects:
+                if object_name in self.TECHNICAL_ANALYSIS_OBJECTS:
+                    object_class = self.TECHNICAL_ANALYSIS_OBJECTS[object_name]
+                    object_instance = object_class()
+                    object_instance.calculate(klines, **kwargs)
+                    self.technical_analysis_objects.append(object_instance)
+                    logger.info(f"Obliczono obiekt analizy technicznej: {object_name}")
     
     def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
                               save_path: Optional[str] = None, title: str = "Wykres świecowy",
+                              enabled_indicators: Dict[str, Type] = None,
+                              enabled_objects: Dict[str, Type] = None,
                               **kwargs) -> str:
         """
         Tworzy wykres świecowy używając obliczonych indicators i technical analysis objects.
@@ -136,6 +134,8 @@ class TechnicalAnalysis:
             klines: Lista świeczek zawierająca dane OHLCV oraz obliczone wskaźniki i wzorce
             save_path: Opcjonalna ścieżka do zapisu wykresu
             title: Tytuł wykresu
+            enabled_indicators: Słownik z nazwami wskaźników jako kluczami i klasami jako wartościami
+            enabled_objects: Słownik z nazwami obiektów jako kluczami i klasami jako wartościami
             **kwargs: Dodatkowe parametry konfiguracji wykresu
             
         Returns:
@@ -143,6 +143,10 @@ class TechnicalAnalysis:
         """
         # Inicjalizuj konfigurację wykresu
         chart_config = self.__init_candlestick_chart_config(klines, title, **kwargs)
+        
+        # Jeśli podano enabled_indicators lub enabled_objects, oblicz je
+        if enabled_indicators is not None or enabled_objects is not None:
+            self.calculate(klines, enabled_indicators, enabled_objects, **kwargs)
         
         # Konwersja danych do formatu pandas DataFrame
         df = pd.DataFrame(klines)
@@ -198,23 +202,26 @@ class TechnicalAnalysis:
         if 'volume' in df.columns:
             panel_ratios.append(1)  # Panel 1: volume
         
-        # Dodaj proporcje paneli dla wskaźników
+        # Dodaj proporcje paneli tylko dla aktywnych wskaźników
         for indicator in self.indicators:
             panel_ratio = indicator.get_panel_ratio(**kwargs)
-            if panel_ratio > 0:
+            if panel_ratio > 0 and indicator.get_active_panel_name(**kwargs) in active_panels:
                 panel_ratios.append(panel_ratio)
         
         logger.info(f"Panel ratios: {panel_ratios} dla paneli: główny + volume + {active_panels}")
         
         # Utwórz wykres z konfiguracją
         try:
+            # Przygotuj parametr addplot - mplfinance nie akceptuje None
+            addplot_param = add_plots if add_plots else []
+            
             fig, axes = mpf.plot(
                 df,
                 type='candle',
                 style=self.CHART_STYLES["binance_dark"],
                 title=chart_config['title'],
                 volume='volume' in df.columns,
-                addplot=add_plots if add_plots else None,
+                addplot=addplot_param,
                 returnfig=True,
                 figsize=(chart_config['dynamic_width'], chart_config['dynamic_height']),
                 yscale='log',  # Skala logarytmiczna dla osi Y

@@ -86,79 +86,133 @@ class TestTechnicalAnalysis(unittest.TestCase):
 
     def test_calculate_rsi(self):
         """Test obliczania wskaźnika RSI"""
-        # Obliczenie RSI
-        rsi_values = self.__ta.calculate_rsi(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie RSI do danych
-        for i, rsi in enumerate(rsi_values):
-            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        # Obliczenie RSI używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators)
         
         # Generowanie i zapisywanie wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_rsi.png")
-        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test RSI - BTC/USDT 1W")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_calculate_rsi",
+            enabled_indicators=enabled_indicators
+        )
         
-        self.assertIsInstance(rsi_values, list)
-        self.assertTrue(len(rsi_values) > 0)
-        self.assertTrue(all(0 <= x <= 100 for x in rsi_values))
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy RSI zostało obliczone (sprawdź w klines)
+        rsi_found = False
+        for kline in self.klines:
+            if 'rsi' in kline:
+                rsi_found = True
+                self.assertTrue(0 <= kline['rsi'] <= 100)
+                break
+        
+        self.assertTrue(rsi_found, "RSI powinno być obliczone i dodane do klines")
 
     def test_calculate_macd(self):
         """Test obliczania wskaźnika MACD"""
-        # Obliczenie MACD
-        macd_data = self.__ta.calculate_macd(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie MACD do danych
-        for i in range(len(macd_data['macd_line'])):
-            idx = -(len(macd_data['macd_line'])-i)
-            self.klines[idx]['macd'] = macd_data['macd_line'][i]
-            self.klines[idx]['signal'] = macd_data['signal_line'][i]
-            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        # Obliczenie MACD używając fabryki
+        enabled_indicators = {
+            'IndicatorMACD': factory.get_indicator_macd_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators)
         
         # Generowanie i zapisywanie wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_macd.png")
-        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test MACD - BTC/USDT 1W")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_calculate_macd",
+            enabled_indicators=enabled_indicators
+        )
         
-        self.assertIsInstance(macd_data, dict)
-        self.assertIn("macd_line", macd_data)
-        self.assertIn("signal_line", macd_data)
-        self.assertIn("histogram", macd_data)
-        self.assertTrue(len(macd_data["macd_line"]) > 0)
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy MACD zostało obliczone (sprawdź w klines)
+        macd_found = False
+        for kline in self.klines:
+            if 'macd' in kline and 'signal' in kline:
+                macd_found = True
+                self.assertIsInstance(kline['macd'], (int, float))
+                self.assertIsInstance(kline['signal'], (int, float))
+                break
+        
+        self.assertTrue(macd_found, "MACD powinno być obliczone i dodane do klines")
 
     def test_calculate_obv(self):
         """Test obliczania wskaźnika OBV"""
-        # Obliczenie OBV
-        obv_values = self.__ta.calculate_obv(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie OBV do danych
-        for i, obv in enumerate(obv_values):
-            self.klines[i]['obv'] = obv
+        # Obliczenie OBV używając fabryki
+        enabled_indicators = {
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators)
         
         # Generowanie i zapisywanie wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_obv.png")
-        self.__ta.create_candlestick_chart(self.klines, save_path=chart_path, title="Test OBV - BTC/USDT 1W")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_calculate_obv",
+            enabled_indicators=enabled_indicators
+        )
         
-        self.assertIsInstance(obv_values, list)
-        self.assertTrue(len(obv_values) > 0)
-        self.assertTrue(all(isinstance(x, float) for x in obv_values))
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy OBV zostało obliczone (sprawdź w klines)
+        obv_found = False
+        for kline in self.klines:
+            if 'obv' in kline:
+                obv_found = True
+                self.assertIsInstance(kline['obv'], (int, float))
+                break
+        
+        self.assertTrue(obv_found, "OBV powinno być obliczone i dodane do klines")
 
     def test_calculate_harmonic_patterns_basic(self):
         """Test obliczania wzorców harmonicznych - podstawowy"""
-        # Obliczenie wzorców harmonicznych (teraz zwraca liczbę wzorców i modyfikuje klines)
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Generowanie i zapisywanie wykresu (wzorce są już w klines)
+        # Obliczenie wzorców harmonicznych używając fabryki
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
+        
+        # Generowanie i zapisywanie wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_basic.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Harmonic Patterns Basic - BTC/USDT 1W"
+            title="test_calculate_harmonic_patterns_basic",
+            enabled_objects=enabled_objects
         )
-        
-        # Sprawdź czy zwrócono liczbę wzorców
-        self.assertIsInstance(patterns_count, int)
-        self.assertGreaterEqual(patterns_count, 0)
         
         # Sprawdź czy wykres został wygenerowany
         self.assertIsInstance(chart_base64, str)
@@ -172,9 +226,6 @@ class TestTechnicalAnalysis(unittest.TestCase):
                 if key.startswith('pattern_') and key.endswith('_price'):
                     pattern_keys.append(key)
                     print(f"Znaleziono punkt wzorca: {key} = {kline[key]}")
-        
-        if patterns_count > 0:
-            self.assertTrue(len(pattern_keys) > 0, "Punkty wzorców powinny być dodane do klines")
             
             # Sprawdź strukturę danych wzorców w klines
             for kline in self.klines:
@@ -204,19 +255,27 @@ class TestTechnicalAnalysis(unittest.TestCase):
                         self.assertIsInstance(kline[key], (int, float))
                         print(f"Cena punktu: {kline[key]}")
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych - basic")
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - basic")
 
     def test_calculate_harmonic_patterns_no_show(self):
         """Test obliczania wzorców harmonicznych - wszystkie show na False"""
-        # Obliczenie wzorców harmonicznych
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Obliczenie wzorców harmonicznych używając fabryki
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z wszystkimi show na False
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_no_show.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Harmonic Patterns No Show - BTC/USDT 1W",
+            title="test_calculate_harmonic_patterns_no_show",
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=False,
             show_all_fibonacci_levels=False,
@@ -228,28 +287,39 @@ class TestTechnicalAnalysis(unittest.TestCase):
             show_obv=False
         )
         
-        # Sprawdź czy zwrócono liczbę wzorców
-        self.assertIsInstance(patterns_count, int)
-        self.assertGreaterEqual(patterns_count, 0)
-        
         # Sprawdź czy wykres został wygenerowany (powinien być tylko wykres świecowy)
         self.assertIsInstance(chart_base64, str)
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych - no show (tylko świece)")
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+        
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - no show (tylko świece)")
 
     def test_calculate_harmonic_patterns_targets_only(self):
         """Test obliczania wzorców harmonicznych - tylko targety PRZ/TP/SL"""
-        # Obliczenie wzorców harmonicznych
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Obliczenie wzorców harmonicznych używając fabryki
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z tylko targetami
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_targets_only.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Harmonic Patterns Targets Only - BTC/USDT 1W",
+            title="test_calculate_harmonic_patterns_targets_only",
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=True,
             show_all_fibonacci_levels=False,
@@ -261,28 +331,39 @@ class TestTechnicalAnalysis(unittest.TestCase):
             show_obv=False
         )
         
-        # Sprawdź czy zwrócono liczbę wzorców
-        self.assertIsInstance(patterns_count, int)
-        self.assertGreaterEqual(patterns_count, 0)
-        
         # Sprawdź czy wykres został wygenerowany
         self.assertIsInstance(chart_base64, str)
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych - targets only")
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+        
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - targets only")
 
     def test_calculate_harmonic_patterns_fibonacci_levels(self):
         """Test obliczania wzorców harmonicznych - poziomy Fibonacci dla par punktów"""
-        # Obliczenie wzorców harmonicznych
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Obliczenie wzorców harmonicznych używając fabryki
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z poziomami Fibonacci dla par punktów
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_fibonacci_levels.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Harmonic Patterns Fibonacci Levels - BTC/USDT 1W",
+            title="test_calculate_harmonic_patterns_fibonacci_levels",
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=False,
             show_all_fibonacci_levels=True,
@@ -294,33 +375,40 @@ class TestTechnicalAnalysis(unittest.TestCase):
             show_obv=False
         )
         
-        # Sprawdź czy zwrócono liczbę wzorców
-        self.assertIsInstance(patterns_count, int)
-        self.assertGreaterEqual(patterns_count, 0)
-        
         # Sprawdź czy wykres został wygenerowany
         self.assertIsInstance(chart_base64, str)
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych - fibonacci levels")
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+        
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - fibonacci levels")
 
     def test_calculate_harmonic_patterns_forming(self):
         """Test obliczania wzorców harmonicznych w trakcie formowania się"""
-        # Obliczenie wzorców w trakcie formowania (teraz zwraca liczbę wzorców i modyfikuje klines)
-        forming_patterns_count = self.__ta.calculate_harmonic_patterns_forming(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Generowanie i zapisywanie wykresu (wzorce forming są już w klines)
+        # Obliczenie wzorców forming używając fabryki
+        enabled_objects = {
+            'HarmonicPatternsForming': factory.get_harmonic_patterns_forming_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
+        
+        # Generowanie i zapisywanie wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_forming.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Test Forming Harmonic Patterns - BTC/USDT 1W"
+            title="test_calculate_harmonic_patterns_forming",
+            enabled_objects=enabled_objects
         )
-        
-        # Sprawdź czy zwrócono liczbę wzorców
-        self.assertIsInstance(forming_patterns_count, int)
-        self.assertGreaterEqual(forming_patterns_count, 0)
         
         # Sprawdź czy wykres został wygenerowany
         self.assertIsInstance(chart_base64, str)
@@ -334,9 +422,6 @@ class TestTechnicalAnalysis(unittest.TestCase):
                 if key.startswith('forming_pattern_') and key.endswith('_price'):
                     forming_pattern_keys.append(key)
                     print(f"Znaleziono punkt forming wzorca: {key} = {kline[key]}")
-        
-        if forming_patterns_count > 0:
-            self.assertTrue(len(forming_pattern_keys) > 0, "Punkty forming wzorców powinny być dodane do klines")
             
             # Sprawdź strukturę danych forming wzorców w klines
             for kline in self.klines:
@@ -366,17 +451,20 @@ class TestTechnicalAnalysis(unittest.TestCase):
                         self.assertIsInstance(kline[key], (int, float))
                         print(f"Cena forming punktu: {kline[key]}")
         
-        print(f"Znaleziono {forming_patterns_count} wzorców forming")
+        print(f"Znaleziono {len(forming_pattern_keys)} punktów forming wzorców")
 
     def test_harmonic_patterns_visualization(self):
         """Test wizualizacji wzorców harmonicznych na wykresie"""
-        # Obliczenie wszystkich typów wzorców (teraz modyfikują klines)
-        formed_patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
-        forming_patterns_count = self.__ta.calculate_harmonic_patterns_forming(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Wyświetl informacje o wzorcach
-        print(f"Znaleziono {formed_patterns_count} uformowanych wzorców")
-        print(f"Znaleziono {forming_patterns_count} wzorców w trakcie formowania")
+        # Obliczenie wszystkich typów wzorców używając fabryki
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class(),
+            'HarmonicPatternsForming': factory.get_harmonic_patterns_forming_class()
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
         
         # Zlicz wszystkie punkty wzorców w klines
         pattern_points = 0
@@ -392,12 +480,13 @@ class TestTechnicalAnalysis(unittest.TestCase):
         print(f"Znaleziono {pattern_points} punktów zwykłych wzorców w klines")
         print(f"Znaleziono {forming_pattern_points} punktów forming wzorców w klines")
         
-        # Generowanie wykresu z wszystkimi wzorcami (które są już w klines)
+        # Generowanie wykresu z wszystkimi wzorcami
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_visualization.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns Visualization - BTC/USDT 1W"
+            title="test_harmonic_patterns_visualization",
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -413,38 +502,35 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.fail(f"Nieprawidłowy format base64: {e}")
         
         # Sprawdź czy wzorce zostały znalezione
-        total_patterns = formed_patterns_count + forming_patterns_count
+        total_patterns = pattern_points + forming_pattern_points
         self.assertGreaterEqual(total_patterns, 0)
 
     def test_harmonic_patterns_with_indicators_basic(self):
         """Test wzorców harmonicznych z wskaźnikami technicznymi - podstawowy"""
-        # Obliczenie wskaźników technicznych
-        rsi_values = self.__ta.calculate_rsi(self.klines)
-        macd_data = self.__ta.calculate_macd(self.klines)
-        obv_values = self.__ta.calculate_obv(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie wskaźników do danych
-        for i, rsi in enumerate(rsi_values):
-            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
         
-        for i in range(len(macd_data['macd_line'])):
-            idx = -(len(macd_data['macd_line'])-i)
-            self.klines[idx]['macd'] = macd_data['macd_line'][i]
-            self.klines[idx]['signal'] = macd_data['signal_line'][i]
-            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
         
-        for i, obv in enumerate(obv_values):
-            self.klines[i]['obv'] = obv
-        
-        # Obliczenie wzorców harmonicznych (modyfikuje klines)
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
         
         # Generowanie kompleksowego wykresu
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_basic.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns + Technical Indicators Basic - BTC/USDT 1W"
+            title="test_harmonic_patterns_with_indicators_basic",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -452,17 +538,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        # Sprawdź czy wskaźniki zostały obliczone
-        self.assertTrue(len(rsi_values) > 0)
-        self.assertTrue(len(macd_data['macd_line']) > 0)
-        self.assertTrue(len(obv_values) > 0)
-        
-        # Sprawdź czy wzorce zostały obliczone
-        self.assertIsInstance(patterns_count, int)
-        self.assertGreaterEqual(patterns_count, 0)
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych z wskaźnikami technicznymi - basic")
-        
-        # Sprawdź czy wzorce i wskaźniki są razem w klines
+        # Sprawdź czy wskaźniki i wzorce są w klines
         indicators_found = False
         patterns_found = False
         
@@ -478,38 +554,36 @@ class TestTechnicalAnalysis(unittest.TestCase):
                     break
         
         self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
-        if patterns_count > 0:
-            self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki i wzorce harmoniczne - basic")
 
     def test_harmonic_patterns_with_indicators_no_show(self):
         """Test wzorców harmonicznych z wskaźnikami - tylko wskaźniki, bez wzorców"""
-        # Obliczenie wskaźników technicznych
-        rsi_values = self.__ta.calculate_rsi(self.klines)
-        macd_data = self.__ta.calculate_macd(self.klines)
-        obv_values = self.__ta.calculate_obv(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie wskaźników do danych
-        for i, rsi in enumerate(rsi_values):
-            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
         
-        for i in range(len(macd_data['macd_line'])):
-            idx = -(len(macd_data['macd_line'])-i)
-            self.klines[idx]['macd'] = macd_data['macd_line'][i]
-            self.klines[idx]['signal'] = macd_data['signal_line'][i]
-            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
         
-        for i, obv in enumerate(obv_values):
-            self.klines[i]['obv'] = obv
-        
-        # Obliczenie wzorców harmonicznych (modyfikuje klines)
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z tylko wskaźnikami
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_no_show.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns + Indicators No Show - BTC/USDT 1W",
+            title="test_harmonic_patterns_with_indicators_no_show",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=False,
             show_all_fibonacci_levels=False,
@@ -526,37 +600,43 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych z wskaźnikami - no show patterns")
+        # Sprawdź czy wskaźniki są w klines
+        indicators_found = False
+        for kline in self.klines:
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+                break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki z wzorcami harmonicznymi - no show patterns")
 
     def test_harmonic_patterns_with_indicators_targets_only(self):
         """Test wzorców harmonicznych z wskaźnikami - tylko targety PRZ/TP/SL"""
-        # Obliczenie wskaźników technicznych
-        rsi_values = self.__ta.calculate_rsi(self.klines)
-        macd_data = self.__ta.calculate_macd(self.klines)
-        obv_values = self.__ta.calculate_obv(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie wskaźników do danych
-        for i, rsi in enumerate(rsi_values):
-            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
         
-        for i in range(len(macd_data['macd_line'])):
-            idx = -(len(macd_data['macd_line'])-i)
-            self.klines[idx]['macd'] = macd_data['macd_line'][i]
-            self.klines[idx]['signal'] = macd_data['signal_line'][i]
-            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
         
-        for i, obv in enumerate(obv_values):
-            self.klines[i]['obv'] = obv
-        
-        # Obliczenie wzorców harmonicznych (modyfikuje klines)
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z targetami i wskaźnikami
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_targets_only.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns + Indicators Targets Only - BTC/USDT 1W",
+            title="test_harmonic_patterns_with_indicators_targets_only",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=True,  # Tylko targety
             show_all_fibonacci_levels=False,
@@ -573,37 +653,52 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych z wskaźnikami - targets only")
+        # Sprawdź czy wskaźniki i wzorce są w klines
+        indicators_found = False
+        patterns_found = False
+        
+        for kline in self.klines:
+            # Sprawdź wskaźniki
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+            
+            # Sprawdź wzorce
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki i wzorce harmoniczne - targets only")
 
     def test_harmonic_patterns_with_indicators_fibonacci_levels(self):
         """Test wzorców harmonicznych z wskaźnikami - poziomy Fibonacci dla par punktów"""
-        # Obliczenie wskaźników technicznych
-        rsi_values = self.__ta.calculate_rsi(self.klines)
-        macd_data = self.__ta.calculate_macd(self.klines)
-        obv_values = self.__ta.calculate_obv(self.klines)
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
         
-        # Dodanie wskaźników do danych
-        for i, rsi in enumerate(rsi_values):
-            self.klines[-(len(rsi_values)-i)]['rsi'] = rsi
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
         
-        for i in range(len(macd_data['macd_line'])):
-            idx = -(len(macd_data['macd_line'])-i)
-            self.klines[idx]['macd'] = macd_data['macd_line'][i]
-            self.klines[idx]['signal'] = macd_data['signal_line'][i]
-            self.klines[idx]['histogram'] = macd_data['histogram'][i]
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+        }
         
-        for i, obv in enumerate(obv_values):
-            self.klines[i]['obv'] = obv
-        
-        # Obliczenie wzorców harmonicznych (modyfikuje klines)
-        patterns_count = self.__ta.calculate_harmonic_patterns(self.klines)
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z poziomami Fibonacci i wskaźnikami
         chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_fibonacci_levels.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="Harmonic Patterns + Indicators Fibonacci Levels - BTC/USDT 1W",
+            title="test_harmonic_patterns_with_indicators_fibonacci_levels",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects,
             show_fibonacci=False,
             show_all_fibo_targets=False,
             show_all_fibonacci_levels=True,  # Poziomy Fibonacci dla par punktów
@@ -620,7 +715,63 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(len(chart_base64) > 0)
         self.assertTrue(os.path.exists(chart_path))
         
-        print(f"Znaleziono {patterns_count} wzorców harmonicznych z wskaźnikami - fibonacci levels")
+        # Sprawdź czy wskaźniki i wzorce są w klines
+        indicators_found = False
+        patterns_found = False
+        
+        for kline in self.klines:
+            # Sprawdź wskaźniki
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+            
+            # Sprawdź wzorce
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki i wzorce harmoniczne - fibonacci levels")
+
+    def test_generate_chart_without_indicators_and_objects(self):
+        """Test generowania wykresu bez żadnych wskaźników i obiektów"""
+        # Generowanie wykresu bez żadnych wskaźników i obiektów
+        chart_path = os.path.join(self.test_charts_dir, "test_generate_chart_without_indicators_and_objects.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_generate_chart_without_indicators_and_objects",
+            enabled_indicators=None,  # Brak wskaźników
+            enabled_objects=None      # Brak obiektów
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy nie ma wskaźników w klines
+        indicators_found = False
+        for kline in self.klines:
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+                break
+        
+        # Sprawdź czy nie ma wzorców w klines
+        patterns_found = False
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        # Powinno być tylko świece, bez wskaźników i wzorców
+        self.assertFalse(indicators_found, "Nie powinno być wskaźników w klines")
+        self.assertFalse(patterns_found, "Nie powinno być wzorców w klines")
+        
+        print(f"Wygenerowano wykres bez wskaźników i obiektów - tylko świece")
 
 class TestAITechnicalAnalysis(unittest.TestCase):
     def setUp(self):
