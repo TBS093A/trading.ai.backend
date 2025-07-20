@@ -26,11 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from technical_analysis.draw_utils import DrawUtils
-from abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern
-from tao_fibonacci import Fibonacci
-from tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
-from tao_fibonacci_targets import FibonacciTargets
+from ..draw_utils import DrawUtils
+from .abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern
+from .tao_fibonacci import Fibonacci
+from .tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
+from .tao_fibonacci_targets import FibonacciTargets
 
 
 class HarmonicPatterns(TechnicalAnalysisObject):

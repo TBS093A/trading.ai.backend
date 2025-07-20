@@ -26,7 +26,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_technical_analysis_object import TechnicalAnalysisObject
+from .abstract_technical_analysis_object import TechnicalAnalysisObject
+from ..draw_utils import DrawUtils
 
 
 class FibonacciAllHarmonicPatternPointsLevels(TechnicalAnalysisObject):
@@ -160,7 +161,7 @@ class FibonacciAllHarmonicPatternPointsLevels(TechnicalAnalysisObject):
         return all_fibos
     
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
-        """Rysuje wszystkie poziomy Fibonacciego"""
+        """Rysuje wszystkie poziomy Fibonacciego używając DrawUtils"""
         if self.calculated_data is None:
             return
         
@@ -171,71 +172,67 @@ class FibonacciAllHarmonicPatternPointsLevels(TechnicalAnalysisObject):
         if not show_all_fibonacci_levels:
             return
         
-        # Przygotuj dane do rysowania
+        # Przygotuj dane w formacie wymaganym przez DrawUtils
         fibonacci_data = []
+        pattern_groups = {}
+        
+        # Konwertuj dane do formatu wymaganego przez DrawUtils
         for fib_entry in self.calculated_data:
             all_fibos = fib_entry['all_fibos']
-            for combination_name, fib_data in all_fibos.items():
-                fibonacci_data.append({
-                    'combination_name': combination_name,
-                    'fib_data': fib_data
-                })
-        
-        self._draw_all_fibonacci_levels(
-            main_ax, fibonacci_data, {}, klines, 8, df, len(df),
-            float(df.index[0].timestamp()), float(df.index[-1].timestamp()),
-            show_all_retracement_levels, show_all_extension_levels
-        )
-    
-    def _draw_all_fibonacci_levels(self, main_ax, fibonacci_data, pattern_groups, klines, 
-                                  dynamic_font_fibo_y_labels, df, chart_end_x, x_min, x_max,
-                                  show_all_retracement_levels=True, show_all_extension_levels=True):
-        """Implementacja rysowania wszystkich poziomów Fibonacciego"""
-        try:
-            def get_fibonacci_color(fib_type, level_name):
-                if fib_type == 'retracement':
-                    retracement_colors = {
-                        '0.186': '#00ff7f', '0.236': '#32cd32', '0.382': '#90ee90',
-                        '0.5': '#98fb98', '0.618': '#adff2f', '0.68': '#7fff00',
-                        '0.786': '#9acd32', '0.886': '#6b8e23'
-                    }
-                    return retracement_colors.get(level_name, '#90EE90')
-                else:
-                    extension_colors = {
-                        '1.13': '#1e90ff', '1.272': '#4169e1', '1.414': '#0000ff',
-                        '1.618': '#191970', '2.0': '#000080', '2.24': '#483d8b',
-                        '2.618': '#6a5acd', '3.14': '#9370db', '3.618': '#8b008b'
-                    }
-                    return extension_colors.get(level_name, '#87CEEB')
-        
-            def should_include_level(combination_name, fib_type, level_name, pattern_type=''):
-                crucial_retracement = ['0.236', '0.382', '0.5', '0.618', '0.786', '0.886']
-                crucial_extension = ['1.13', '1.272', '1.414', '1.618', '2.0', '2.24', '2.618']
-                
-                if fib_type == 'retracement':
-                    return show_all_retracement_levels and level_name in crucial_retracement
-                elif fib_type == 'extension':
-                    return show_all_extension_levels and level_name in crucial_extension
-                
-                return False
+            pattern_id = fib_entry.get('pattern_id', 'unknown')
+            pattern_type = fib_entry.get('pattern_type', 'unknown')
             
-            # Rysuj linie Fibonacciego
-            for fib_entry in fibonacci_data:
-                combination_name = fib_entry['combination_name']
-                fib_data = fib_entry['fib_data']
+            # Konwertuj all_fibos do formatu fibonacci
+            fibonacci = {
+                'retracement': {},
+                'extension': {},
+                'targets': {}
+            }
+            
+            # Agreguj wszystkie poziomy z all_fibos
+            for combination_name, fib_data in all_fibos.items():
+                if 'retracement' in fib_data:
+                    for level_name, price in fib_data['retracement'].items():
+                        if price > 0:
+                            fibonacci['retracement'][f"{combination_name}_{level_name}"] = price
                 
-                for fib_type in ['retracement', 'extension']:
-                    if fib_type in fib_data:
-                        for level_name, price in fib_data[fib_type].items():
-                            if should_include_level(combination_name, fib_type, level_name):
-                                color = get_fibonacci_color(fib_type, level_name)
-                                
-                                main_ax.axhline(y=price, color=color, linestyle='--', alpha=0.6, linewidth=1)
-                                
-                                # Dodaj etykietę
-                                main_ax.text(x_max * 0.98, price, f'{combination_name} {level_name}',
-                                           fontsize=dynamic_font_fibo_y_labels, color=color,
-                                           ha='right', va='center', alpha=0.8)
+                if 'extension' in fib_data:
+                    for level_name, price in fib_data['extension'].items():
+                        if price > 0:
+                            fibonacci['extension'][f"{combination_name}_{level_name}"] = price
+                
+                if 'targets' in fib_data:
+                    for level_name, price in fib_data['targets'].items():
+                        if price > 0:
+                            fibonacci['targets'][f"{combination_name}_{level_name}"] = price
+            
+            fibonacci_data.append({
+                'kline_idx': fib_entry['kline_idx'],
+                'pattern_id': pattern_id,
+                'fibonacci': fibonacci
+            })
+            
+            # Przygotuj pattern_groups jeśli nie istnieje
+            if pattern_id not in pattern_groups:
+                pattern_groups[pattern_id] = {
+                    'points': {},
+                    'pattern_retraces': {},
+                    'pattern_name': pattern_type,
+                    'pattern_type': pattern_type,
+                    'is_bullish': True  # Domyślnie bullish
+                }
         
-        except Exception as e:
-            logger.error(f"Błąd podczas rysowania poziomów Fibonacciego: {e}")
+        # Użyj DrawUtils do rysowania
+        DrawUtils.draw_fibonacci_lines_with_labels(
+            main_ax=main_ax,
+            fibonacci_data=fibonacci_data,
+            pattern_groups=pattern_groups,
+            klines=klines,
+            dynamic_font_size_fibo_labels=kwargs.get('dynamic_font_size_fibo_labels', 8),
+            df=df,
+            show_all_fibo_targets=False,  # FibonacciAllHarmonicPatternPointsLevels - nie targety
+            show_fibonacci=False,  # FibonacciAllHarmonicPatternPointsLevels - nie podstawowe poziomy
+            show_all_fibonacci_levels=True,  # FibonacciAllHarmonicPatternPointsLevels - włącz wszystkie poziomy
+            show_all_retracement_levels=show_all_retracement_levels,  # FibonacciAllHarmonicPatternPointsLevels - włącz retracement
+            show_all_extension_levels=show_all_extension_levels  # FibonacciAllHarmonicPatternPointsLevels - włącz extension
+        )

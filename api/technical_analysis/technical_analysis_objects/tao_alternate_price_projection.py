@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_technical_analysis_object import TechnicalAnalysisObject
+from .abstract_technical_analysis_object import TechnicalAnalysisObject
 
 
 class AlternatePriceProjection(TechnicalAnalysisObject):

@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from abstract_indicator import Indicator
+from .abstract_indicator import Indicator
 from ..draw_utils import DrawUtils
 
 

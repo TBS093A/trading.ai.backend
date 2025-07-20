@@ -13,7 +13,7 @@ import numpy as np
 from api.telegram import TelegramAPI
 from api.openai import OpenaiAPI, OpenAIError, AnalysisError, ImageProcessingError
 from api.mexc import MexcAPI
-from api.technical_analysis import TechnicalAnalysis as TA
+from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -61,7 +61,7 @@ class TechnicalAnalysis:
 
     def _generate_technical_chart(self, df: pd.DataFrame, analysis: Dict) -> str:
         """
-        Generuje wykres techniczny z wskaźnikami
+        Generuje wykres techniczny z wskaźnikami używając TechnicalAnalysisFacade
         
         Args:
             df: DataFrame z danymi świeczek
@@ -79,40 +79,14 @@ class TechnicalAnalysis:
             if 'open_time' not in kline:
                 kline['open_time'] = int(df.index[i].timestamp() * 1000)
         
-        # Obliczanie wskaźników
-        rsi = self.__ta.calculate_rsi(klines_data)
-        macd = self.__ta.calculate_macd(klines_data)
-        obv = self.__ta.calculate_obv(klines_data)
+        # Użyj TechnicalAnalysisFacade do obliczenia wszystkich wskaźników i obiektów
+        # Włącz wszystkie dostępne wskaźniki i obiekty analizy technicznej
+        self.__ta.calculate(klines_data)
         
-        # Dodaj wskaźniki do klines_data
-        for i, rsi_val in enumerate(rsi):
-            klines_data[-(len(rsi)-i)]['rsi'] = rsi_val
+        # Generuj wykres używając metody create_candlestick_chart
+        chart_base64 = self.__ta.create_candlestick_chart(klines_data)
         
-        for i in range(len(macd['macd_line'])):
-            idx = -(len(macd['macd_line'])-i)
-            klines_data[idx]['macd'] = macd['macd_line'][i]
-            klines_data[idx]['signal'] = macd['signal_line'][i]
-            klines_data[idx]['histogram'] = macd['histogram'][i]
-        
-        for i, obv_val in enumerate(obv):
-            klines_data[i]['obv'] = obv_val
-        
-        # Oblicz wzorce harmoniczne (dodaje je do klines_data)
-        patterns_count = self.__ta.calculate_harmonic_patterns_with_fibonacci(klines_data)
-        
-        # Użyj nowej funkcji create_candlestick_chart do generowania wykresu
-        # Wszystkie wskaźniki i wzorce są już w klines_data
-        chart_base64 = self.__ta.create_candlestick_chart(
-            klines_data,
-            title=f"{analysis['asset']}/{analysis['quote']} - Analiza Techniczna",
-            show_fibonacci=True,
-            show_patterns=True,
-            show_rsi=True,
-            show_macd=True,
-            show_obv=True
-        )
-        
-        logger.info(f"Wygenerowano wykres z {patterns_count} wzorcami harmonicznymi")
+        logger.info(f"Wygenerowano wykres techniczny z wszystkimi wskaźnikami i wzorcami")
         return chart_base64
 
     async def analyze_message(self, message: str, image: Optional[Union[str, bytes]] = None) -> Optional[Dict]:
