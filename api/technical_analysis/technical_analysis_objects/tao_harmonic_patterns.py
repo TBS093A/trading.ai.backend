@@ -119,6 +119,9 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             return 0
 
         try:
+            # Inicjalizuj licznik wzorców
+            patterns_count = 0
+            
             # Konwertuj dane na DataFrame wymagany przez pyharmonics
             df = self._convert_klines_to_dataframe(klines)
             
@@ -150,8 +153,6 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                         patterns = harmonic_search.get_patterns()
 
                     logger.info(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
-
-                    patterns_count = 0
 
                     # Przetwórz wzorce i nanieś punkty na klines
                     for pattern_type_key in patterns:
