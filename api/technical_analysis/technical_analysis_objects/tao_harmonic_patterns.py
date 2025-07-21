@@ -50,30 +50,36 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         },
         all_fibonacci_targets: dict[str, bool] = {
             'show': False
-        }
+        },
+        use_database: bool = False,
+        database_factory = None,
+        asset_id: int = None
     ):
         super().__init__("HarmonicPatterns")
         self.general_fibonacci_levels = general_fibonacci_levels
         self.all_points_fibonacci_levels = all_points_fibonacci_levels
         self.all_fibonacci_targets = all_fibonacci_targets
+        self.use_database = use_database
+        self.database_factory = database_factory
+        self.asset_id = asset_id
         # Inicjalizuj obiekty Fibonacci do współpracy
         self.fibonacci = Fibonacci()
         self.fibonacci_all_levels = FibonacciAllHarmonicPatternPointsLevels()
         self.fibonacci_targets = FibonacciTargets()
     
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
+    async def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
                   min_points: int = 5, symbol: str = '', interval: str = '',
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
         # Usuń chart_config z kwargs przed przekazaniem do __calculate_harmonic_patterns
         calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
         
-        patterns_count = self.__calculate_harmonic_patterns(
+        patterns_count = await self.__calculate_harmonic_patterns(
             klines, min_points, symbol, interval, find_only_xabcd, **calculate_kwargs
         )
         self.calculated_data = patterns_count
     
-    def __calculate_harmonic_patterns(
+    async def __calculate_harmonic_patterns(
         self,
         klines: List[Dict[str, Union[int, float, str]]],
         min_points: int = 5,
@@ -140,6 +146,33 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_points}")
             return 0
 
+        # Integracja z bazą danych
+        existing_patterns = []
+        patterns_to_delete = []
+        
+        if self.use_database and self.database_factory and self.asset_id is not None:
+            try:
+                # Pobierz zakres czasowy z klines
+                if klines:
+                    start_timestamp = str(klines[0]['open_time'])
+                    end_timestamp = str(klines[-1]['close_time'])
+                    
+                    # Pobierz istniejące wzorce z bazy dla tego zakresu czasowego
+                    technical_analysis_table = self.database_factory.get_technical_analysis_table()
+                    existing_patterns = await technical_analysis_table.get_by_timestamp_range_and_asset_id(
+                        start_timestamp, end_timestamp, self.asset_id
+                    )
+                    
+                    logger.info(f"Pobrano {len(existing_patterns)} istniejących wzorców z bazy danych")
+                    
+                    # Przygotuj listę wzorców do usunięcia (wszystkie istniejące)
+                    patterns_to_delete = [pattern['id'] for pattern in existing_patterns]
+                    
+            except Exception as e:
+                logger.error(f"Błąd podczas pobierania wzorców z bazy danych: {e}")
+                existing_patterns = []
+                patterns_to_delete = []
+
         try:
             # Inicjalizuj licznik wzorców
             patterns_count = 0
@@ -149,6 +182,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             
             # Słownik do śledzenia już dodanych wzorców (dla deduplikacji)
             added_patterns = {}  # Klucz: (pattern_type, points_hash), Wartość: pattern_id
+            new_patterns_data = []  # Lista nowych wzorców do zapisania w bazie
             
             # Inicjalizuj Technicals z pyharmonics
             for peak_spacing_strategy_name, peak_spacing in peak_spacing_strategy.items():
@@ -381,6 +415,49 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 # Zarejestruj wzorzec jako dodany
                                 added_patterns[pattern_key] = patterns_count
                                 
+                                # Zapisz wzorzec do bazy danych jeśli używamy bazy
+                                if self.use_database and self.database_factory and self.asset_id is not None:
+                                    try:
+                                        # Przygotuj dane wzorca do zapisania
+                                        pattern_data = {
+                                            'asset_id': self.asset_id,
+                                            'ta_object_json': {
+                                                'pattern_name': pattern_name,
+                                                'pattern_type': str(pattern.name),
+                                                'is_bullish': bool(pattern.bullish),
+                                                'is_formed': bool(pattern.formed),
+                                                'completion_max_price': float(pattern.completion_max_price),
+                                                'completion_min_price': float(pattern.completion_min_price),
+                                                'fib_tolerance_strategy': fib_tolerance_strategy_name,
+                                                'fib_tolerance': fib_tolerance,
+                                                'peak_spacing_strategy': peak_spacing_strategy_name,
+                                                'peak_spacing': peak_spacing,
+                                                'retraces': pattern.retraces,
+                                                'points': pattern_points,
+                                                'fibonacci_levels': fibonacci_levels
+                                            },
+                                            'x_point_timestamp': str(x_points[0]) if len(x_points) > 0 else None,
+                                            'a_point_timestamp': str(x_points[1]) if len(x_points) > 1 else None,
+                                            'b_point_timestamp': str(x_points[2]) if len(x_points) > 2 else None,
+                                            'c_point_timestamp': str(x_points[3]) if len(x_points) > 3 else None,
+                                            'd_point_timestamp': str(x_points[4]) if len(x_points) > 4 else None
+                                        }
+                                        
+                                        # Zapisz do bazy danych
+                                        technical_analysis_table = self.database_factory.get_technical_analysis_table()
+                                        new_pattern_id = await technical_analysis_table.create(**pattern_data)
+                                        
+                                        if new_pattern_id:
+                                            logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
+                                            # Usuń z listy wzorców do usunięcia (jeśli był tam)
+                                            if new_pattern_id in patterns_to_delete:
+                                                patterns_to_delete.remove(new_pattern_id)
+                                        else:
+                                            logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
+                                            
+                                    except Exception as e:
+                                        logger.error(f"Błąd podczas zapisywania wzorca {pattern_name} do bazy danych: {e}")
+                                
                                 patterns_count += 1
 
                             except Exception as e:
@@ -390,6 +467,25 @@ class HarmonicPatterns(TechnicalAnalysisObject):
 
             logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
             logger.info(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
+            
+            # Usuń wzorce z bazy danych, które nie zostały ponownie wygenerowane
+            if self.use_database and self.database_factory and patterns_to_delete:
+                try:
+                    technical_analysis_table = self.database_factory.get_technical_analysis_table()
+                    deleted_count = 0
+                    
+                    for pattern_id in patterns_to_delete:
+                        if await technical_analysis_table.delete(pattern_id):
+                            deleted_count += 1
+                            logger.info(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
+                        else:
+                            logger.warning(f"Nie udało się usunąć wzorca z bazy danych o ID: {pattern_id}")
+                    
+                    logger.info(f"Usunięto {deleted_count} wzorców z bazy danych, które nie zostały ponownie wygenerowane")
+                    
+                except Exception as e:
+                    logger.error(f"Błąd podczas usuwania wzorców z bazy danych: {e}")
+            
             return patterns_count
 
         except Exception as e:

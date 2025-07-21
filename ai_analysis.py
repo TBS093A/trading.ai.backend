@@ -59,7 +59,7 @@ class TechnicalAnalysis:
             
         return df
 
-    def _generate_technical_chart(self, df: pd.DataFrame, analysis: Dict) -> str:
+    async def _generate_technical_chart(self, df: pd.DataFrame, analysis: Dict) -> str:
         """
         Generuje wykres techniczny z wskaźnikami używając TechnicalAnalysisFacade
         
@@ -81,10 +81,10 @@ class TechnicalAnalysis:
         
         # Użyj TechnicalAnalysisFacade do obliczenia wszystkich wskaźników i obiektów
         # Włącz wszystkie dostępne wskaźniki i obiekty analizy technicznej
-        self.__ta.calculate(klines_data)
+        await self.__ta.calculate(klines_data)
         
         # Generuj wykres używając metody create_candlestick_chart
-        chart_base64 = self.__ta.create_candlestick_chart(klines_data)
+        chart_base64 = await self.__ta.create_candlestick_chart(klines_data)
         
         logger.info(f"Wygenerowano wykres techniczny z wszystkimi wskaźnikami i wzorcami")
         return chart_base64
@@ -167,7 +167,7 @@ class TechnicalAnalysis:
                         df = self._prepare_klines_data(klines)
                         
                         # Wygeneruj wykres techniczny
-                        chart_base64 = self._generate_technical_chart(df, analysis)
+                        chart_base64 = await self._generate_technical_chart(df, analysis)
                         
                         # Wyślij wykres do OpenAI w celu weryfikacji analizy
                         verification = await self.__openai_api.send_message(
