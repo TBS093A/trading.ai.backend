@@ -1,0 +1,173 @@
+from typing import Optional, Dict, Any, List
+from .abstract_table import AbstractTable
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+class TechnicalAnalysisTable(AbstractTable):
+    """Klasa do zarządzania tabelą TechnicalAnalysis."""
+    
+    def create_table(self) -> str:
+        return """
+        CREATE TABLE IF NOT EXISTS technical_analysis (
+            id SERIAL PRIMARY KEY,
+            asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            x_point_timestamp TEXT NOT NULL,
+            ta_object_json JSONB NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    
+    async def create(self, asset_id: int, x_point_timestamp: str, ta_object_json: Dict[str, Any]) -> Optional[int]:
+        """Tworzy nową analizę techniczną i zwraca jej ID."""
+        try:
+            analysis_id = await self.fetch_val(
+                "INSERT INTO technical_analysis (asset_id, x_point_timestamp, ta_object_json) VALUES ($1, $2, $3) RETURNING id",
+                asset_id, x_point_timestamp, json.dumps(ta_object_json)
+            )
+            logger.info(f"Utworzono analizę techniczną z ID: {analysis_id}")
+            return analysis_id
+        except Exception as e:
+            logger.error(f"Błąd podczas tworzenia analizy technicznej: {e}", exc_info=True)
+            return None
+    
+    async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """Pobiera analizę techniczną po ID."""
+        result = await self.fetch_one("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.id = $1
+        """, record_id)
+        
+        if result:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return result
+    
+    async def update(self, record_id: int, **kwargs) -> bool:
+        """Aktualizuje analizę techniczną o podanym ID."""
+        try:
+            update_fields = []
+            values = []
+            param_count = 1
+            
+            if 'asset_id' in kwargs:
+                update_fields.append(f"asset_id = ${param_count}")
+                values.append(kwargs['asset_id'])
+                param_count += 1
+            
+            if 'x_point_timestamp' in kwargs:
+                update_fields.append(f"x_point_timestamp = ${param_count}")
+                values.append(kwargs['x_point_timestamp'])
+                param_count += 1
+            
+            if 'ta_object_json' in kwargs:
+                update_fields.append(f"ta_object_json = ${param_count}")
+                values.append(json.dumps(kwargs['ta_object_json']))
+                param_count += 1
+            
+            if not update_fields:
+                return False
+            
+            values.append(record_id)
+            query = f"UPDATE technical_analysis SET {', '.join(update_fields)} WHERE id = ${param_count}"
+            
+            await self.execute_query(query, *values)
+            logger.info(f"Zaktualizowano analizę techniczną z ID: {record_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas aktualizacji analizy technicznej: {e}", exc_info=True)
+            return False
+    
+    async def delete(self, record_id: int) -> bool:
+        """Usuwa analizę techniczną o podanym ID."""
+        try:
+            await self.execute_query("DELETE FROM technical_analysis WHERE id = $1", record_id)
+            logger.info(f"Usunięto analizę techniczną z ID: {record_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas usuwania analizy technicznej: {e}", exc_info=True)
+            return False
+    
+    async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie analizy techniczne z limitem i offsetem."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        ORDER BY ta.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
+    
+    async def get_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy techniczne dla asset."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.asset_id = $1
+        ORDER BY ta.id DESC LIMIT $2 OFFSET $3
+        """, asset_id, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
+    
+    async def get_by_timestamp_range(self, start_timestamp: str, end_timestamp: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy techniczne z określonego zakresu czasowego."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.x_point_timestamp >= $1 AND ta.x_point_timestamp <= $2
+        ORDER BY ta.id DESC LIMIT $3 OFFSET $4
+        """, start_timestamp, end_timestamp, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
+    
+    async def get_latest_by_asset_id(self, asset_id: int) -> Optional[Dict[str, Any]]:
+        """Pobiera najnowszą analizę techniczną dla asset."""
+        result = await self.fetch_one("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.asset_id = $1
+        ORDER BY ta.id DESC
+        LIMIT 1
+        """, asset_id)
+        
+        if result:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return result
+    
+    async def search_by_json_pattern(self, pattern: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Wyszukuje analizy techniczne po wzorcu w JSON."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.ta_object_json::text ILIKE $1
+        ORDER BY ta.id DESC LIMIT $2 OFFSET $3
+        """, f"%{pattern}%", limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results 
