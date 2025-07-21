@@ -623,7 +623,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
         }
         
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_fibonacci_targets={'show': False}
+            )
         }
         
         self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
@@ -676,7 +680,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
         }
         
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_fibonacci_targets={'show': False}
+            )
         }
         
         self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
@@ -720,7 +728,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
         }
         
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_fibonacci_targets={'show': True}
+            )
         }
         
         self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
@@ -773,7 +785,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
         }
         
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_points_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+                all_fibonacci_targets={'show': False}
+            )
         }
         
         self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
@@ -812,6 +828,120 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
         
         print(f"Znaleziono wskaźniki i wzorce harmoniczne - fibonacci levels")
+
+    def test_harmonic_patterns_with_indicators_general_fibonacci_levels(self):
+        """Test wzorców harmonicznych z wskaźnikami - ogólne poziomy Fibonacci"""
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
+        
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+                all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+                all_fibonacci_targets={'show': False}
+            )
+        }
+        
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
+        
+        # Generowanie wykresu z ogólnymi poziomami Fibonacci i wskaźnikami
+        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_general_fibonacci_levels.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_harmonic_patterns_with_indicators_general_fibonacci_levels",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy wskaźniki i wzorce są w klines
+        indicators_found = False
+        patterns_found = False
+        
+        for kline in self.klines:
+            # Sprawdź wskaźniki
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+            
+            # Sprawdź wzorce
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki i wzorce harmoniczne - general fibonacci levels")
+
+    def test_harmonic_patterns_with_indicators_all_fibonacci(self):
+        """Test wzorców harmonicznych z wskaźnikami - wszystkie opcje Fibonacci włączone"""
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Obliczenie wskaźników i wzorców używając fabryki
+        enabled_indicators = {
+            'IndicatorRSI': factory.get_indicator_rsi_class(),
+            'IndicatorMACD': factory.get_indicator_macd_class(),
+            'IndicatorOBV': factory.get_indicator_obv_class()
+        }
+        
+        enabled_objects = {
+            'HarmonicPatterns': factory.get_harmonic_patterns(
+                general_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+                all_points_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+                all_fibonacci_targets={'show': True}
+            )
+        }
+        
+        self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
+        
+        # Generowanie wykresu ze wszystkimi opcjami Fibonacci i wskaźnikami
+        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_all_fibonacci.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_harmonic_patterns_with_indicators_all_fibonacci",
+            enabled_indicators=enabled_indicators,
+            enabled_objects=enabled_objects
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy wskaźniki i wzorce są w klines
+        indicators_found = False
+        patterns_found = False
+        
+        for kline in self.klines:
+            # Sprawdź wskaźniki
+            if 'rsi' in kline or 'macd' in kline or 'obv' in kline:
+                indicators_found = True
+            
+            # Sprawdź wzorce
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    patterns_found = True
+                    break
+        
+        self.assertTrue(indicators_found, "Wskaźniki techniczne powinny być w klines")
+        self.assertTrue(patterns_found, "Wzorce harmoniczne powinny być w klines")
+        
+        print(f"Znaleziono wskaźniki i wzorce harmoniczne - wszystkie fibonacci włączone")
 
     def test_generate_chart_without_indicators_and_objects(self):
         """Test generowania wykresu bez żadnych wskaźników i obiektów"""

@@ -35,8 +35,26 @@ from .tao_fibonacci_targets import FibonacciTargets
 class HarmonicPatternsForming(TechnicalAnalysisObject):
     """Wzorce harmoniczne w trakcie formowania"""
     
-    def __init__(self):
+    def __init__(
+        self, 
+        general_fibonacci_levels: dict[str, bool] = {
+            'show': False,
+            'retracement': False,
+            'extension': False
+        },
+        all_points_fibonacci_levels: dict[str, bool] = {
+            'show': False,
+            'retracement': False,
+            'extension': False
+        },
+        all_fibonacci_targets: dict[str, bool] = {
+            'show': False
+        }
+    ):
         super().__init__("HarmonicPatternsForming")
+        self.general_fibonacci_levels = general_fibonacci_levels
+        self.all_points_fibonacci_levels = all_points_fibonacci_levels
+        self.all_fibonacci_targets = all_fibonacci_targets
         # Inicjalizuj obiekty Fibonacci do współpracy
         self.fibonacci = Fibonacci()
         self.fibonacci_all_levels = FibonacciAllHarmonicPatternPointsLevels()
@@ -203,29 +221,35 @@ class HarmonicPatternsForming(TechnicalAnalysisObject):
                             is_uptrend = bool(pattern.bullish)
 
                             # Użyj klasy Fibonacci do obliczenia podstawowych poziomów
-                            self.fibonacci.calculate(
-                                klines, 
-                                start_price=max_price if is_uptrend else min_price,
-                                end_price=min_price if is_uptrend else max_price,
-                                is_uptrend=is_uptrend
-                            )
-                            fib_levels = self.fibonacci.calculated_data
+                            fib_levels = None
+                            if self.general_fibonacci_levels['show']:
+                                self.fibonacci.calculate(
+                                    klines, 
+                                    start_price=max_price if is_uptrend else min_price,
+                                    end_price=min_price if is_uptrend else max_price,
+                                    is_uptrend=is_uptrend
+                                )
+                                fib_levels = self.fibonacci.calculated_data
 
                             # Użyj klasy FibonacciAllHarmonicPatternPointsLevels do obliczenia wszystkich kombinacji
-                            self.fibonacci_all_levels.calculate(
-                                klines,
-                                pattern_points=pattern_points
-                            )
-                            all_points_fibonacci = self.fibonacci_all_levels.calculated_data
+                            all_points_fibonacci = None
+                            if self.all_points_fibonacci_levels['show']:
+                                self.fibonacci_all_levels.calculate(
+                                    klines,
+                                    pattern_points=pattern_points
+                                )
+                                all_points_fibonacci = self.fibonacci_all_levels.calculated_data
                             
                             # Użyj klasy FibonacciTargets do obliczenia targetów
-                            self.fibonacci_targets.calculate(
-                                klines,
-                                pattern_points=pattern_points,
-                                pattern_type=str(pattern.name),
-                                is_bullish=bool(pattern.bullish)
-                            )
-                            all_targets = self.fibonacci_targets.calculated_data
+                            all_targets = None
+                            if self.all_fibonacci_targets['show']:
+                                self.fibonacci_targets.calculate(
+                                    klines,
+                                    pattern_points=pattern_points,
+                                    pattern_type=str(pattern.name),
+                                    is_bullish=bool(pattern.bullish)
+                                )
+                                all_targets = self.fibonacci_targets.calculated_data
                             
                             # Loguj przykłady obliczonych kombinacji i targetów
                             if all_points_fibonacci:
@@ -243,13 +267,17 @@ class HarmonicPatternsForming(TechnicalAnalysisObject):
                                 klines[first_kline_idx]['forming_patterns'][f'{patterns_count}'] = {}
 
                             # Dodaj poziomy Fibonacciego do wzorca w zagnieżdżonej strukturze
-                            fibonacci_levels = {
-                                'retracement': fib_levels.retracement,
-                                'extension': fib_levels.extension, 
-                                'targets': fib_levels.targets,
-                                'all_fibos': all_points_fibonacci,  # Nowe pole z wszystkimi kombinacjami
-                                'all_targets': all_targets  # Nowe pole z PRZ, TP, SL
-                            }
+                            fibonacci_levels = {}
+                            if fib_levels:
+                                fibonacci_levels.update({
+                                    'retracement': fib_levels.retracement,
+                                    'extension': fib_levels.extension, 
+                                    'targets': fib_levels.targets
+                                })
+                            if all_points_fibonacci:
+                                fibonacci_levels['all_fibos'] = all_points_fibonacci  # Nowe pole z wszystkimi kombinacjami
+                            if all_targets:
+                                fibonacci_levels['all_targets'] = all_targets  # Nowe pole z PRZ, TP, SL
 
                         # Teraz dodaj fibonacci do każdego punktu tego wzorca
                         for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
