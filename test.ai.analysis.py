@@ -27,9 +27,9 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     base_currency = "BTC"
     quote_currency = "USDT"
     
-    # interval = "1d"
-    # start_time = int(datetime(2022, 1, 1).timestamp() * 1000)
-    # end_time = int(datetime(2025, 7, 1).timestamp() * 1000)
+    interval = "1d"
+    start_time = int(datetime(2022, 1, 1).timestamp() * 1000)
+    end_time = int(datetime(2025, 7, 1).timestamp() * 1000)
 
     # interval = "4h"
     # start_time = int(datetime(2022, 6, 1).timestamp() * 1000)
@@ -39,9 +39,9 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     # start_time = int(datetime(2022, 3, 1).timestamp() * 1000)
     # end_time = int(datetime(2022, 6, 1).timestamp() * 1000)
 
-    interval = "4h"
-    start_time = int(datetime(2021, 1, 1).timestamp() * 1000)
-    end_time = int(datetime(2021, 4, 1).timestamp() * 1000)
+    # interval = "4h"
+    # start_time = int(datetime(2021, 1, 1).timestamp() * 1000)
+    # end_time = int(datetime(2021, 4, 1).timestamp() * 1000)
 
     data_file = f"test_data/{base_currency.lower()}_{quote_currency.lower()}_{interval}_{start_time}_{end_time}_binance.json"
     os.makedirs("test_data", exist_ok=True)
@@ -275,16 +275,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.klines, 
             save_path=chart_path, 
             title="test_calculate_harmonic_patterns_no_show",
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=False,
-            show_all_fibonacci_levels=False,
-            show_all_retracement_levels=False,
-            show_all_extension_levels=False,
-            show_patterns=False,
-            show_rsi=False,
-            show_macd=False,
-            show_obv=False
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany (powinien być tylko wykres świecowy)
@@ -319,16 +310,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.klines, 
             save_path=chart_path, 
             title="test_calculate_harmonic_patterns_targets_only",
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=True,
-            show_all_fibonacci_levels=False,
-            show_all_retracement_levels=False,
-            show_all_extension_levels=False,
-            show_patterns=True,  # Wzorce muszą być widoczne żeby targety miały sens
-            show_rsi=False,
-            show_macd=False,
-            show_obv=False
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -363,16 +345,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             self.klines, 
             save_path=chart_path, 
             title="test_calculate_harmonic_patterns_fibonacci_levels",
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=False,
-            show_all_fibonacci_levels=True,
-            show_all_retracement_levels=True,
-            show_all_extension_levels=True,
-            show_patterns=True,  # Wzorce muszą być widoczne
-            show_rsi=False,
-            show_macd=False,
-            show_obv=False
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -583,16 +556,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             save_path=chart_path, 
             title="test_harmonic_patterns_with_indicators_no_show",
             enabled_indicators=enabled_indicators,
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=False,
-            show_all_fibonacci_levels=False,
-            show_all_retracement_levels=False,
-            show_all_extension_levels=False,
-            show_patterns=False,  # Wzorce ukryte
-            show_rsi=True,       # Wskaźniki włączone
-            show_macd=True,
-            show_obv=True
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -636,16 +600,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             save_path=chart_path, 
             title="test_harmonic_patterns_with_indicators_targets_only",
             enabled_indicators=enabled_indicators,
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=True,  # Tylko targety
-            show_all_fibonacci_levels=False,
-            show_all_retracement_levels=False,
-            show_all_extension_levels=False,
-            show_patterns=True,  # Wzorce muszą być widoczne żeby targety miały sens
-            show_rsi=True,       # Wskaźniki włączone
-            show_macd=True,
-            show_obv=True
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
@@ -698,16 +653,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
             save_path=chart_path, 
             title="test_harmonic_patterns_with_indicators_fibonacci_levels",
             enabled_indicators=enabled_indicators,
-            enabled_objects=enabled_objects,
-            show_fibonacci=False,
-            show_all_fibo_targets=False,
-            show_all_fibonacci_levels=True,  # Poziomy Fibonacci dla par punktów
-            show_all_retracement_levels=True,
-            show_all_extension_levels=True,
-            show_patterns=True,  # Wzorce muszą być widoczne
-            show_rsi=True,       # Wskaźniki włączone
-            show_macd=True,
-            show_obv=True
+            enabled_objects=enabled_objects
         )
         
         # Sprawdź czy wykres został wygenerowany
