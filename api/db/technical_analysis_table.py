@@ -138,6 +138,22 @@ class TechnicalAnalysisTable(AbstractTable):
             result['ta_object_json'] = json.loads(result['ta_object_json'])
         
         return results
+
+    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: str, end_timestamp: str, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy techniczne z określonego zakresu czasowego i asset."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.ta_object_json, ta.created_at,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.x_point_timestamp >= $1 AND ta.x_point_timestamp <= $2 AND ta.asset_id = $3
+        ORDER BY ta.id DESC LIMIT $4 OFFSET $5
+        """, start_timestamp, end_timestamp, asset_id, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
     
     async def get_latest_by_asset_id(self, asset_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera najnowszą analizę techniczną dla asset."""
