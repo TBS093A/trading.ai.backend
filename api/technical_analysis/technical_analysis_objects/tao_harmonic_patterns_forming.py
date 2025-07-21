@@ -46,8 +46,11 @@ class HarmonicPatternsForming(TechnicalAnalysisObject):
                   min_points: int = 5, symbol: str = '', interval: str = '',
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne w trakcie formowania"""
+        # Usuń chart_config z kwargs przed przekazaniem do calculate_harmonic_patterns_forming
+        calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
+        
         patterns_count = self.calculate_harmonic_patterns_forming(
-            klines, min_points, symbol, interval, find_only_xabcd, **kwargs
+            klines, min_points, symbol, interval, find_only_xabcd, **calculate_kwargs
         )
         self.calculated_data = patterns_count
     

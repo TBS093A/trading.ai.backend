@@ -47,8 +47,11 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                   min_points: int = 5, symbol: str = '', interval: str = '',
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
+        # Usuń chart_config z kwargs przed przekazaniem do __calculate_harmonic_patterns
+        calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
+        
         patterns_count = self.__calculate_harmonic_patterns(
-            klines, min_points, symbol, interval, find_only_xabcd, **kwargs
+            klines, min_points, symbol, interval, find_only_xabcd, **calculate_kwargs
         )
         self.calculated_data = patterns_count
     
@@ -436,9 +439,11 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         
         # Rysuj wzorce harmoniczne
         if patterns_data:
-            self.__draw_harmonic_patterns(main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs)
+            # Przekaż chart_config z kwargs do metody rysowania
+            chart_config = kwargs.get('chart_config', {})
+            self.__draw_harmonic_patterns(main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs, chart_config)
     
-    def __draw_harmonic_patterns(self, main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs):
+    def __draw_harmonic_patterns(self, main_ax, df, klines, patterns_data, fibonacci_data, retraces_data, kwargs, chart_config=None):
         """Implementacja rysowania wzorców harmonicznych"""
         try:
             # Pobierz główny subplot z cenami - obsługa różnych typów axes
@@ -480,23 +485,33 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             # Inicjalizuj listę etykiet do rysowania w paddingu
             pattern_labels_for_padding = []
             
-            # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
-            dynamic_width = kwargs.get('dynamic_width', 20)
-            dynamic_height = kwargs.get('dynamic_height', 20)
-            
-            base_font_size_labels = 12 # wielkosc bazowa dla etykiet
-            base_font_size_axes = 14  # Oddzielna wielkość bazowa dla wrtosci na osiach 
-            base_font_size_fibo_labels = 6  # Wielkość bazowa dla etykiet Fibonacci
-            width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
-            height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
-            padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
-            scaling_ratio = (width_factor + height_factor + padding_factor) / 3  # Wspólny współczynnik skalowania
-            
-            dynamic_font_size_labels = int(base_font_size_labels * scaling_ratio)  # Dla etykiet
-            dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
-            dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
-            
-            logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+            # Użyj chart_config jeśli dostępny, w przeciwnym razie oblicz lokalnie
+            chart_config = kwargs.get('chart_config', {})
+            if chart_config:
+                dynamic_font_size_labels = chart_config.get('dynamic_font_size_labels', 12)
+                dynamic_font_size_axes = chart_config.get('dynamic_font_size_axes', 14)
+                dynamic_font_size_fibo_labels = chart_config.get('dynamic_font_size_fibo_labels', 6)
+                dynamic_width = chart_config.get('dynamic_width', 20)
+                dynamic_height = chart_config.get('dynamic_height', 20)
+                logger.info(f"Użyto chart_config - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels}")
+            else:
+                # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
+                dynamic_width = kwargs.get('dynamic_width', 20)
+                dynamic_height = kwargs.get('dynamic_height', 20)
+                
+                base_font_size_labels = 12 # wielkosc bazowa dla etykiet
+                base_font_size_axes = 14  # Oddzielna wielkość bazowa dla wrtosci na osiach 
+                base_font_size_fibo_labels = 6  # Wielkość bazowa dla etykiet Fibonacci
+                width_factor = max(0.5, min(2.0, dynamic_width / 15))  # Skalowanie na podstawie szerokości
+                height_factor = max(0.5, min(2.0, dynamic_height / 20))  # Skalowanie na podstawie wysokości
+                padding_factor = max(0.8, min(1.5, dynamic_height / 30))  # Dodatkowy czynnik dla paddingu
+                scaling_ratio = (width_factor + height_factor + padding_factor) / 3  # Wspólny współczynnik skalowania
+                
+                dynamic_font_size_labels = int(base_font_size_labels * scaling_ratio)  # Dla etykiet
+                dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
+                dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
+                
+                logger.info(f"Obliczono lokalnie - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
             
             # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
             all_points_by_candle = {}
@@ -756,7 +771,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 DrawUtils.draw_fibonacci_lines_with_labels(
                     main_ax, fibonacci_data, pattern_groups, klines, 
                     dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
-                    show_all_retracement_levels, show_all_extension_levels
+                    show_all_retracement_levels, show_all_extension_levels, chart_config
                 )
             
             # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
@@ -767,7 +782,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 )
             
             # Zastosuj skalowaną czcionkę do osi X i Y
-            DrawUtils.apply_scaled_font_to_axes(main_ax, dynamic_font_size_axes)
+            DrawUtils.apply_scaled_font_to_axes(main_ax, [main_ax], dynamic_font_size_axes)
             
         except Exception as e:
             logger.error(f"Błąd podczas rysowania wzorców harmonicznych: {e}")
