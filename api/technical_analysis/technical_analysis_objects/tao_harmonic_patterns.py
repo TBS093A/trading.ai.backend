@@ -48,7 +48,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
         patterns_count = self.__calculate_harmonic_patterns(
-            klines, min_points, symbol, interval, find_only_xabcd, kwargs
+            klines, min_points, symbol, interval, find_only_xabcd, **kwargs
         )
         self.calculated_data = patterns_count
     
@@ -325,7 +325,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
                                 total_all_targets = len(fibonacci_levels.get('all_targets', {}))
                                 logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
-                                logger.info(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
+                                logger.debug(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
 
                                 patterns_count += 1
 
@@ -774,36 +774,3 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             import traceback
             logger.error(traceback.format_exc())
     
-    def __draw_harmonic_patterns(self, main_ax, df, klines, kwargs):
-        """Implementacja rysowania wzorców harmonicznych"""
-        # Znajdź wszystkie wzorce w klines i narysuj je
-        for kline_idx, kline in enumerate(klines):
-            if 'patterns' in kline:
-                for pattern_id, pattern_data in kline['patterns'].items():
-                    if 'points' in pattern_data:
-                        self.__draw_single_pattern(main_ax, pattern_data, kline_idx)
-    
-    def __draw_single_pattern(self, main_ax, pattern_data, kline_idx):
-        """Rysuje pojedynczy wzorzec harmoniczny"""
-        points = pattern_data.get('points', {})
-        pattern_name = pattern_data.get('name', 'Unknown')
-        
-        # Rysuj linie łączące punkty XABCD
-        point_names = ['X', 'A', 'B', 'C', 'D']
-        colors = ['red', 'blue', 'green', 'orange', 'purple']
-        
-        for i in range(len(point_names) - 1):
-            if point_names[i] in points and point_names[i+1] in points:
-                point1 = points[point_names[i]]
-                point2 = points[point_names[i+1]]
-                
-                # Rysuj linię między punktami
-                main_ax.plot([point1['index'], point2['index']], 
-                           [point1['price'], point2['price']], 
-                           color=colors[i], linewidth=2, alpha=0.7)
-                
-                # Dodaj etykietę punktu
-                main_ax.annotate(point_names[i], 
-                               (point1['index'], point1['price']),
-                               xytext=(5, 5), textcoords='offset points',
-                               fontsize=8, color=colors[i])
