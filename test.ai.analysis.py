@@ -772,7 +772,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         
         print(f"Znaleziono wskaźniki i wzorce harmoniczne - targets only")
 
-    def test_harmonic_patterns_with_indicators_fibonacci_levels(self):
+    def test_harmonic_patterns_with_indicators_all_points_fibonacci_levels(self):
         """Test wzorców harmonicznych z wskaźnikami - poziomy Fibonacci dla par punktów"""
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
@@ -795,11 +795,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.__ta.calculate(self.klines, enabled_indicators=enabled_indicators, enabled_objects=enabled_objects)
         
         # Generowanie wykresu z poziomami Fibonacci i wskaźnikami
-        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_fibonacci_levels.png")
+        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_with_indicators_all_points_fibonacci_levels.png")
         chart_base64 = self.__ta.create_candlestick_chart(
             self.klines, 
             save_path=chart_path, 
-            title="test_harmonic_patterns_with_indicators_fibonacci_levels",
+            title="test_harmonic_patterns_with_indicators_all_points_fibonacci_levels",
             enabled_indicators=enabled_indicators,
             enabled_objects=enabled_objects
         )
