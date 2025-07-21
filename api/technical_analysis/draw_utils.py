@@ -252,7 +252,8 @@ class DrawUtils:
         show_fibonacci: bool = True,
         show_all_fibonacci_levels: bool = False,
         show_all_retracement_levels: bool = True,
-        show_all_extension_levels: bool = True
+        show_all_extension_levels: bool = True,
+        chart_config: dict = None
     ):
         """
         Rysuje poziomy Fibonacciego jako linie z etykietami.
@@ -426,7 +427,7 @@ class DrawUtils:
                 DrawUtils.draw_all_fibonacci_levels(
                     main_ax, fibonacci_data, pattern_groups, klines, 
                     dynamic_font_fibo_y_labels, df, chart_end_x, x_min, x_max,
-                    show_all_retracement_levels, show_all_extension_levels
+                    show_all_retracement_levels, show_all_extension_levels, chart_config
                 )
             
             # Teraz rysuj targety (PRZ, TP, SL) - ponownie iteruj od tyłu po klines (tylko jeśli włączone)
@@ -594,7 +595,8 @@ class DrawUtils:
         x_min: float,
         x_max: float,
         show_all_retracement_levels: bool = True,
-        show_all_extension_levels: bool = True
+        show_all_extension_levels: bool = True,
+        chart_config: dict = None
     ):
         """
         Rysuje wszystkie poziomy z all_fibo jako standardowe linie z etykietami.

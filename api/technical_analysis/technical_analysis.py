@@ -146,7 +146,9 @@ class TechnicalAnalysis:
         
         # Jeśli podano enabled_indicators lub enabled_objects, oblicz je
         if enabled_indicators is not None or enabled_objects is not None:
-            self.calculate(klines, enabled_indicators, enabled_objects, **kwargs)
+            # Dodaj chart_config do kwargs
+            kwargs_with_config = {**kwargs, 'chart_config': chart_config}
+            self.calculate(klines, enabled_indicators, enabled_objects, **kwargs_with_config)
         
         # Konwersja danych do formatu pandas DataFrame
         df = pd.DataFrame(klines)
