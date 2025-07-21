@@ -101,7 +101,11 @@ Główna klasa zarządzająca bazą danych:
 ### TechnicalAnalysis
 - **id** (SERIAL PRIMARY KEY)
 - **asset_id** (INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE)
-- **x_point_timestamp** (TEXT NOT NULL)
+- **x_point_timestamp** (TEXT) - punkt X wzorca harmonicznego
+- **a_point_timestamp** (TEXT) - punkt A wzorca harmonicznego
+- **b_point_timestamp** (TEXT) - punkt B wzorca harmonicznego
+- **c_point_timestamp** (TEXT) - punkt C wzorca harmonicznego
+- **d_point_timestamp** (TEXT) - punkt D wzorca harmonicznego
 - **ta_object_json** (JSONB NOT NULL)
 - **created_at** (TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP)
 
@@ -175,7 +179,14 @@ analysis_id = await db.create_fundamental_analysis(asset_id, "2024-01-01T12:00:0
 
 # Tworzenie analizy technicznej
 ta_data = {"pattern": "harmonic", "points": [...]}
-ta_id = await db.create_technical_analysis(asset_id, "2024-01-01T12:00:00Z", ta_data)
+ta_id = await db.get_technical_analysis_table().create(
+    asset_id, ta_data,
+    x_point_timestamp="2024-01-01T12:00:00Z",
+    a_point_timestamp="2024-01-01T13:00:00Z",
+    b_point_timestamp="2024-01-01T14:00:00Z",
+    c_point_timestamp="2024-01-01T15:00:00Z",
+    d_point_timestamp="2024-01-01T16:00:00Z"
+)
 
 # Tworzenie kanału sygnałów Telegram
 channel_id = await db.get_telegram_signal_channels_table().create("@signals_channel", "Crypto Signals")
@@ -243,9 +254,13 @@ Każda klasa tabeli ma dodatkowe metody specyficzne dla swojej domeny:
 
 ### TechnicalAnalysisTable
 - `get_by_asset_id(asset_id)`
-- `get_by_timestamp_range(start, end)`
+- `get_by_timestamp_range(start, end)` - używa x_point_timestamp
 - `get_latest_by_asset_id(asset_id)`
 - `search_by_json_pattern(pattern)`
+- `get_by_point_timestamp(point_type, timestamp)` - point_type: 'x', 'a', 'b', 'c', 'd'
+- `get_by_point_timestamp_range(point_type, start, end)` - zakres czasowy dla konkretnego punktu
+- `get_complete_patterns(asset_id)` - wszystkie punkty wypełnione
+- `get_incomplete_patterns(asset_id)` - przynajmniej jeden punkt NULL
 
 ### GeneralInterpretationTable
 - `get_by_asset_id(asset_id)`
