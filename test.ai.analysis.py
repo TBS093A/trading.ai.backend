@@ -198,9 +198,16 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wzorców harmonicznych używając fabryki
+        # Utwórz obiekt HarmonicPatterns z podstawową konfiguracją
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': harmonic_patterns
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
@@ -262,9 +269,16 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wzorców harmonicznych używając fabryki
+        # Utwórz obiekt HarmonicPatterns z wyłączonymi wszystkimi opcjami
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': harmonic_patterns
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
@@ -297,9 +311,16 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wzorców harmonicznych używając fabryki
+        # Utwórz obiekt HarmonicPatterns z włączonymi tylko targetami
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': True}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': harmonic_patterns
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
@@ -332,9 +353,16 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wzorców harmonicznych używając fabryki
+        # Utwórz obiekt HarmonicPatterns z włączonymi poziomami Fibonacci
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class()
+            'HarmonicPatterns': harmonic_patterns
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
@@ -362,14 +390,105 @@ class TestTechnicalAnalysis(unittest.TestCase):
         
         print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - fibonacci levels")
 
+    def test_calculate_harmonic_patterns_general_fibonacci_levels(self):
+        """Test obliczania wzorców harmonicznych - ogólne poziomy Fibonacci"""
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Utwórz obiekt HarmonicPatterns z włączonymi ogólnymi poziomami Fibonacci
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
+        enabled_objects = {
+            'HarmonicPatterns': harmonic_patterns
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
+        
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_general_fibonacci_levels.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_calculate_harmonic_patterns_general_fibonacci_levels",
+            enabled_objects=enabled_objects
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+        
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - general fibonacci levels")
+
+    def test_calculate_harmonic_patterns_all_fibonacci_enabled(self):
+        """Test obliczania wzorców harmonicznych - wszystkie opcje Fibonacci włączone"""
+        # Pobierz fabrykę
+        factory = self.__ta.get_technical_analysis_factory()
+        
+        # Utwórz obiekt HarmonicPatterns ze wszystkimi opcjami Fibonacci włączonymi
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+            all_points_fibonacci_levels={'show': True, 'retracement': True, 'extension': True},
+            all_fibonacci_targets={'show': True}
+        )
+        
+        # Obliczenie wzorców harmonicznych używając gotowego obiektu
+        enabled_objects = {
+            'HarmonicPatterns': harmonic_patterns
+        }
+        
+        self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
+        
+        # Generowanie i zapisywanie wykresu
+        chart_path = os.path.join(self.test_charts_dir, "test_calculate_harmonic_patterns_all_fibonacci_enabled.png")
+        chart_base64 = self.__ta.create_candlestick_chart(
+            self.klines, 
+            save_path=chart_path, 
+            title="test_calculate_harmonic_patterns_all_fibonacci_enabled",
+            enabled_objects=enabled_objects
+        )
+        
+        # Sprawdź czy wykres został wygenerowany
+        self.assertIsInstance(chart_base64, str)
+        self.assertTrue(len(chart_base64) > 0)
+        self.assertTrue(os.path.exists(chart_path))
+        
+        # Sprawdź czy punkty wzorców zostały dodane do klines
+        pattern_keys = []
+        for kline in self.klines:
+            for key in kline.keys():
+                if key.startswith('pattern_') and key.endswith('_price'):
+                    pattern_keys.append(key)
+        
+        print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - wszystkie fibonacci włączone")
+
     def test_calculate_harmonic_patterns_forming(self):
         """Test obliczania wzorców harmonicznych w trakcie formowania się"""
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wzorców forming używając fabryki
+        # Utwórz obiekt HarmonicPatternsForming z podstawową konfiguracją
+        harmonic_patterns_forming = factory.get_harmonic_patterns_forming(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wzorców forming używając gotowego obiektu
         enabled_objects = {
-            'HarmonicPatternsForming': factory.get_harmonic_patterns_forming_class()
+            'HarmonicPatternsForming': harmonic_patterns_forming
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
@@ -431,10 +550,23 @@ class TestTechnicalAnalysis(unittest.TestCase):
         # Pobierz fabrykę
         factory = self.__ta.get_technical_analysis_factory()
         
-        # Obliczenie wszystkich typów wzorców używając fabryki
+        # Utwórz obiekty z odpowiednimi konfiguracjami
+        harmonic_patterns = factory.get_harmonic_patterns(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        harmonic_patterns_forming = factory.get_harmonic_patterns_forming(
+            general_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_points_fibonacci_levels={'show': False, 'retracement': False, 'extension': False},
+            all_fibonacci_targets={'show': False}
+        )
+        
+        # Obliczenie wszystkich typów wzorców używając gotowych obiektów
         enabled_objects = {
-            'HarmonicPatterns': factory.get_harmonic_patterns_class(),
-            'HarmonicPatternsForming': factory.get_harmonic_patterns_forming_class()
+            'HarmonicPatterns': harmonic_patterns,
+            'HarmonicPatternsForming': harmonic_patterns_forming
         }
         
         self.__ta.calculate(self.klines, enabled_objects=enabled_objects)
