@@ -41,7 +41,7 @@ class TechnicalAnalysisFacade:
         """Zwraca fabrykę obiektów analizy technicznej"""
         return self.factory
 
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
+    async def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
                   enabled_indicators: Dict[str, Type] = None, 
                   enabled_objects: Dict[str, Type] = None, **kwargs) -> None:
         """
@@ -53,13 +53,13 @@ class TechnicalAnalysisFacade:
             enabled_objects: Słownik z nazwami obiektów jako kluczami i klasami jako wartościami (None = nie obliczaj żadnych)
             **kwargs: Dodatkowe parametry przekazywane do poszczególnych metod calculate
         """
-        self.technical_analysis.calculate(klines, enabled_indicators, enabled_objects, **kwargs)
+        await self.technical_analysis.calculate(klines, enabled_indicators, enabled_objects, **kwargs)
 
-    def create_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
+    async def create_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
                                 save_path: Optional[str] = None, title: str = "Wykres świecowy",
                                 enabled_indicators: Dict[str, Type] = None,
                                 enabled_objects: Dict[str, Type] = None,
                                 **kwargs) -> str:
-        return self.technical_analysis.draw_candlestick_chart(
+        return await self.technical_analysis.draw_candlestick_chart(
             klines, save_path, title, enabled_indicators, enabled_objects, **kwargs
         )

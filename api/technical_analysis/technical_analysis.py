@@ -86,7 +86,7 @@ class TechnicalAnalysis:
         self.indicators = []
         self.technical_analysis_objects = []
     
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
+    async def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
                   enabled_indicators: Dict[str, Union[Type, object]] = None, 
                   enabled_objects: Dict[str, Union[Type, object]] = None, **kwargs) -> None:
         """
@@ -126,17 +126,17 @@ class TechnicalAnalysis:
                 if isinstance(object_value, type):
                     # To klasa - utwórz instancję
                     object_instance = object_value()
-                    object_instance.calculate(klines, **kwargs)
+                    await object_instance.calculate(klines, **kwargs)
                     self.technical_analysis_objects.append(object_instance)
                     logger.info(f"Obliczono obiekt analizy technicznej z klasy: {object_key}")
                 else:
                     # To gotowy obiekt - użyj bezpośrednio
                     object_instance = object_value
-                    object_instance.calculate(klines, **kwargs)
+                    await object_instance.calculate(klines, **kwargs)
                     self.technical_analysis_objects.append(object_instance)
                     logger.info(f"Obliczono obiekt analizy technicznej z gotowego obiektu: {object_key}")
     
-    def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
+    async def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
                               save_path: Optional[str] = None, title: str = "Wykres świecowy",
                               enabled_indicators: Dict[str, Union[Type, object]] = None,
                               enabled_objects: Dict[str, Union[Type, object]] = None,
@@ -162,7 +162,7 @@ class TechnicalAnalysis:
         if enabled_indicators is not None or enabled_objects is not None:
             # Dodaj chart_config do kwargs
             kwargs_with_config = {**kwargs, 'chart_config': chart_config}
-            self.calculate(klines, enabled_indicators, enabled_objects, **kwargs_with_config)
+            await self.calculate(klines, enabled_indicators, enabled_objects, **kwargs_with_config)
         
         # Konwersja danych do formatu pandas DataFrame
         df = pd.DataFrame(klines)

@@ -208,6 +208,31 @@ users_table = db.get_users_table()
 user = await users_table.get_by_username("john")
 ```
 
+## Przykład użycia z integracją bazy danych
+from telegram.pump.bot.api.postgresql import PostgreSQL
+from telegram.pump.bot.api.technical_analysis_factory import TechnicalAnalysisFactory
+
+# Inicjalizacja bazy danych
+db = PostgreSQL("postgresql://user:pass@localhost/dbname")
+await db.init_db()
+factory = db.get_factory()
+
+# Pobierz asset_id dla konkretnego symbolu
+assets_table = factory.get_assets_table()
+asset = await assets_table.get_by_asset_quote("BTC", "USDT")
+asset_id = asset['id'] if asset else None
+
+# Utwórz HarmonicPatterns z integracją bazy danych
+ta_factory = TechnicalAnalysisFactory()
+harmonic_patterns = ta_factory.get_harmonic_patterns(
+    use_database=True,
+    database_factory=factory,
+    asset_id=asset_id
+)
+
+# Oblicz wzorce harmoniczne (automatycznie zapisze do bazy i usunie stare)
+harmonic_patterns.calculate(klines, symbol="BTCUSDT", interval="1h")
+
 ## Zalety wzorca strategia
 
 1. **Modularność** - każda tabela ma swoją własną klasę
@@ -255,6 +280,7 @@ Każda klasa tabeli ma dodatkowe metody specyficzne dla swojej domeny:
 ### TechnicalAnalysisTable
 - `get_by_asset_id(asset_id)`
 - `get_by_timestamp_range(start, end)` - używa x_point_timestamp
+- `get_by_timestamp_range_and_asset_id(start, end, asset_id)` - zakres czasowy dla konkretnego asset
 - `get_latest_by_asset_id(asset_id)`
 - `search_by_json_pattern(pattern)`
 - `get_by_point_timestamp(point_type, timestamp)` - point_type: 'x', 'a', 'b', 'c', 'd'
