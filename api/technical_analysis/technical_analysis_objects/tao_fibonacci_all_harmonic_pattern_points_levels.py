@@ -36,26 +36,14 @@ class FibonacciAllHarmonicPatternPointsLevels(TechnicalAnalysisObject):
     def __init__(self):
         super().__init__("FibonacciAllHarmonicPatternPointsLevels")
     
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
-        """Oblicza wszystkie poziomy Fibonacciego dla kombinacji punktów"""
-        fibonacci_data = []
+    def calculate(self, *args, **kwargs) -> None:
+        """
+        Oblicza wszystkie poziomy Fibonacciego dla kombinacji punktów
         
-        # Przeiteruj przez wszystkie klines i znajdź wzorce do obliczenia poziomów Fibonacciego
-        for kline_idx, kline in enumerate(klines):
-            if 'patterns' in kline:
-                for pattern_id, pattern_data in kline['patterns'].items():
-                    if 'type' in pattern_data and 'points' in pattern_data:
-                        # Oblicz poziomy Fibonacciego dla każdego wzorca
-                        all_fibos = self.__calculate_all_points_fibonacci(pattern_data['points'])
-                        
-                        fibonacci_data.append({
-                            'kline_idx': kline_idx,
-                            'pattern_id': pattern_id,
-                            'pattern_type': pattern_data['type'],
-                            'all_fibos': all_fibos
-                        })
-        
-        self.calculated_data = fibonacci_data
+        Args:
+            pattern_points: Słownik punktów wzorca w formacie {point_name: {'index': int, 'price': float}}
+        """
+        self.calculated_data = self.__calculate_all_points_fibonacci(kwargs.get('pattern_points'))
 
     def __calculate_all_points_fibonacci(
         self,
