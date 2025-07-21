@@ -116,6 +116,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             return 0
         
         if len(klines) < min_points:
+            logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_points}")
             return 0
 
         try:
