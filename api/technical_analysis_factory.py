@@ -78,13 +78,27 @@ class TechnicalAnalysisFactory:
         """Zwraca obiekt FibonacciAllHarmonicPatternPointsLevels"""
         return FibonacciAllHarmonicPatternPointsLevels()
     
-    def get_harmonic_patterns(self) -> HarmonicPatterns:
-        """Zwraca obiekt HarmonicPatterns"""
-        return HarmonicPatterns()
+    def get_harmonic_patterns(self, 
+                             general_fibonacci_levels: dict[str, bool] = None,
+                             all_points_fibonacci_levels: dict[str, bool] = None,
+                             all_fibonacci_targets: dict[str, bool] = None) -> HarmonicPatterns:
+        """Zwraca obiekt HarmonicPatterns z opcjonalnymi parametrami konfiguracyjnymi"""
+        return HarmonicPatterns(
+            general_fibonacci_levels=general_fibonacci_levels,
+            all_points_fibonacci_levels=all_points_fibonacci_levels,
+            all_fibonacci_targets=all_fibonacci_targets
+        )
     
-    def get_harmonic_patterns_forming(self) -> HarmonicPatternsForming:
-        """Zwraca obiekt HarmonicPatternsForming"""
-        return HarmonicPatternsForming()
+    def get_harmonic_patterns_forming(self,
+                                     general_fibonacci_levels: dict[str, bool] = None,
+                                     all_points_fibonacci_levels: dict[str, bool] = None,
+                                     all_fibonacci_targets: dict[str, bool] = None) -> HarmonicPatternsForming:
+        """Zwraca obiekt HarmonicPatternsForming z opcjonalnymi parametrami konfiguracyjnymi"""
+        return HarmonicPatternsForming(
+            general_fibonacci_levels=general_fibonacci_levels,
+            all_points_fibonacci_levels=all_points_fibonacci_levels,
+            all_fibonacci_targets=all_fibonacci_targets
+        )
     
     def get_all_median_line_andrews_pitchfork(self) -> AllMedianLineAndrewsPitchfork:
         """Zwraca obiekt AllMedianLineAndrewsPitchfork"""
@@ -140,14 +154,32 @@ class TechnicalAnalysisFactory:
             'IndicatorOBV': self.get_indicator_obv_class()
         }
     
-    def get_all_technical_analysis_objects(self) -> Dict[str, object]:
-        """Zwraca słownik wszystkich obiektów analizy technicznej"""
+    def get_all_technical_analysis_objects(self, 
+                                          harmonic_patterns_config: dict = None,
+                                          harmonic_patterns_forming_config: dict = None) -> Dict[str, object]:
+        """Zwraca słownik wszystkich obiektów analizy technicznej z opcjonalną konfiguracją"""
+        # Domyślna konfiguracja dla HarmonicPatterns
+        if harmonic_patterns_config is None:
+            harmonic_patterns_config = {
+                'general_fibonacci_levels': {'show': False, 'retracement': False, 'extension': False},
+                'all_points_fibonacci_levels': {'show': False, 'retracement': False, 'extension': False},
+                'all_fibonacci_targets': {'show': False}
+            }
+        
+        # Domyślna konfiguracja dla HarmonicPatternsForming
+        if harmonic_patterns_forming_config is None:
+            harmonic_patterns_forming_config = {
+                'general_fibonacci_levels': {'show': False, 'retracement': False, 'extension': False},
+                'all_points_fibonacci_levels': {'show': False, 'retracement': False, 'extension': False},
+                'all_fibonacci_targets': {'show': False}
+            }
+        
         return {
             'Fibonacci': self.get_fibonacci(),
             'FibonacciTargets': self.get_fibonacci_targets(),
             'FibonacciAllHarmonicPatternPointsLevels': self.get_fibonacci_all_harmonic_pattern_points_levels(),
-            'HarmonicPatterns': self.get_harmonic_patterns(),
-            'HarmonicPatternsForming': self.get_harmonic_patterns_forming(),
+            'HarmonicPatterns': self.get_harmonic_patterns(**harmonic_patterns_config),
+            'HarmonicPatternsForming': self.get_harmonic_patterns_forming(**harmonic_patterns_forming_config),
             'AllMedianLineAndrewsPitchfork': self.get_all_median_line_andrews_pitchfork(),
             'AllAlternatePriceProjection': self.get_all_alternate_price_projection()
         }

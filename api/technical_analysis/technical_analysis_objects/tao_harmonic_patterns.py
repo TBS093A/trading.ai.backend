@@ -36,8 +36,26 @@ from .tao_fibonacci_targets import FibonacciTargets
 class HarmonicPatterns(TechnicalAnalysisObject):
     """Wzorce harmoniczne XABCD"""
     
-    def __init__(self):
+    def __init__(
+        self, 
+        general_fibonacci_levels: dict[str, bool] = {
+            'show': False,
+            'retracement': False,
+            'extension': False
+        },
+        all_points_fibonacci_levels: dict[str, bool] = {
+            'show': False,
+            'retracement': False,
+            'extension': False
+        },
+        all_fibonacci_targets: dict[str, bool] = {
+            'show': False
+        }
+    ):
         super().__init__("HarmonicPatterns")
+        self.general_fibonacci_levels = general_fibonacci_levels
+        self.all_points_fibonacci_levels = all_points_fibonacci_levels
+        self.all_fibonacci_targets = all_fibonacci_targets
         # Inicjalizuj obiekty Fibonacci do współpracy
         self.fibonacci = Fibonacci()
         self.fibonacci_all_levels = FibonacciAllHarmonicPatternPointsLevels()
@@ -129,6 +147,9 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             # Konwertuj dane na DataFrame wymagany przez pyharmonics
             df = self._convert_klines_to_dataframe(klines)
             
+            # Słownik do śledzenia już dodanych wzorców (dla deduplikacji)
+            added_patterns = {}  # Klucz: (pattern_type, points_hash), Wartość: pattern_id
+            
             # Inicjalizuj Technicals z pyharmonics
             for peak_spacing_strategy_name, peak_spacing in peak_spacing_strategy.items():
                 technicals = Technicals(
@@ -216,6 +237,16 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 # Nanieś punkty na odpowiednie świece
                                 pattern_points = {}  # Zbieranie punktów dla obliczenia proporcji i fibonacci
                                 
+                                # Generuj unikalny hash dla wzorca (dla deduplikacji)
+                                points_hash = self._generate_pattern_hash(x_points, y_points, pattern.name)
+                                
+                                # Sprawdź czy wzorzec już istnieje
+                                pattern_key = (str(pattern.name), points_hash)
+                                if pattern_key in added_patterns:
+                                    existing_pattern_id = added_patterns[pattern_key]
+                                    logger.debug(f"Pominięto zduplikowany wzorzec {pattern.name} (już istnieje jako ID: {existing_pattern_id})")
+                                    continue
+                                
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
                                     if i >= len(point_names):
                                         break
@@ -264,29 +295,35 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                     is_uptrend = bool(pattern.bullish)
 
                                     # Użyj klasy Fibonacci do obliczenia podstawowych poziomów
-                                    self.fibonacci.calculate(
-                                        klines, 
-                                        start_price=max_price if is_uptrend else min_price,
-                                        end_price=min_price if is_uptrend else max_price,
-                                        is_uptrend=is_uptrend
-                                    )
-                                    fib_levels = self.fibonacci.calculated_data
+                                    fib_levels = None
+                                    if self.general_fibonacci_levels['show']:
+                                        self.fibonacci.calculate(
+                                            klines, 
+                                            start_price=max_price if is_uptrend else min_price,
+                                            end_price=min_price if is_uptrend else max_price,
+                                            is_uptrend=is_uptrend
+                                        )
+                                        fib_levels = self.fibonacci.calculated_data
 
                                     # Użyj klasy FibonacciAllHarmonicPatternPointsLevels do obliczenia wszystkich kombinacji
-                                    self.fibonacci_all_levels.calculate(
-                                        klines,
-                                        pattern_points=pattern_points
-                                    )
-                                    all_points_fibonacci = self.fibonacci_all_levels.calculated_data
+                                    all_points_fibonacci = None
+                                    if self.all_points_fibonacci_levels['show']:
+                                        self.fibonacci_all_levels.calculate(
+                                            klines,
+                                            pattern_points=pattern_points
+                                        )
+                                        all_points_fibonacci = self.fibonacci_all_levels.calculated_data
                                     
                                     # Użyj klasy FibonacciTargets do obliczenia targetów
-                                    self.fibonacci_targets.calculate(
-                                        klines,
-                                        pattern_points=pattern_points,
-                                        pattern_type=str(pattern.name),
-                                        is_bullish=bool(pattern.bullish)
-                                    )
-                                    all_targets = self.fibonacci_targets.calculated_data
+                                    all_targets = None
+                                    if self.all_fibonacci_targets['show']:
+                                        self.fibonacci_targets.calculate(
+                                            klines,
+                                            pattern_points=pattern_points,
+                                            pattern_type=str(pattern.name),
+                                            is_bullish=bool(pattern.bullish)
+                                        )
+                                        all_targets = self.fibonacci_targets.calculated_data
                                     
                                     # Loguj przykłady obliczonych kombinacji i targetów
                                     if all_points_fibonacci:
@@ -304,13 +341,15 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                         klines[first_kline_idx]['patterns'][f'{patterns_count}'] = {}
 
                                     # Dodaj poziomy Fibonacciego do wzorca w zagnieżdżonej strukturze
-                                    fibonacci_levels = {
-                                        'retracement': fib_levels.retracement,
-                                        'extension': fib_levels.extension, 
-                                        'targets': fib_levels.targets,
-                                        'all_fibos': all_points_fibonacci,  # Nowe pole z wszystkimi kombinacjami
-                                        'all_targets': all_targets  # Nowe pole z PRZ, TP, SL
-                                    }
+                                    fibonacci_levels = {}
+                                    if self.general_fibonacci_levels['show']:
+                                        fibonacci_levels['retracement'] = fib_levels.retracement
+                                        fibonacci_levels['extension'] = fib_levels.extension
+                                        fibonacci_levels['targets'] = fib_levels.targets
+                                    if self.all_points_fibonacci_levels['show']:
+                                        fibonacci_levels['all_fibos'] = all_points_fibonacci # poziomy fibo dla wszystkich kombinacji punktów XABCD
+                                    if self.all_fibonacci_targets['show']:
+                                        fibonacci_levels['all_targets'] = all_targets # targety wyznaczone przez fibonacci wszystkich kombinacji punktów XABCD
 
                                 # Teraz dodaj fibonacci do każdego punktu tego wzorca
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
@@ -330,6 +369,9 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
                                 logger.debug(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
 
+                                # Zarejestruj wzorzec jako dodany
+                                added_patterns[pattern_key] = patterns_count
+                                
                                 patterns_count += 1
 
                             except Exception as e:
@@ -338,12 +380,46 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 continue
 
             logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
+            logger.info(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
             return patterns_count
 
         except Exception as e:
             logger.error(f"Błąd podczas wykrywania wzorców harmonicznych: {e}")
             logger.error(traceback.format_exc())
             return 0
+    
+    def _generate_pattern_hash(self, x_points, y_points, pattern_name):
+        """
+        Generuje unikalny hash dla wzorca na podstawie jego punktów i nazwy.
+        
+        Args:
+            x_points: Lista współrzędnych X punktów wzorca
+            y_points: Lista współrzędnych Y punktów wzorca
+            pattern_name: Nazwa wzorca
+            
+        Returns:
+            str: Unikalny hash wzorca
+        """
+        try:
+            # Konwertuj punkty na string z zaokrągleniem do 6 miejsc po przecinku
+            # (żeby uniknąć problemów z precyzją liczb zmiennoprzecinkowych)
+            x_str = ','.join([f"{x:.6f}" for x in x_points])
+            y_str = ','.join([f"{y:.6f}" for y in y_points])
+            
+            # Połącz nazwę wzorca z punktami
+            pattern_string = f"{pattern_name}|{x_str}|{y_str}"
+            
+            # Generuj hash (można użyć prostego hash lub bardziej zaawansowanego)
+            import hashlib
+            pattern_hash = hashlib.md5(pattern_string.encode()).hexdigest()
+            
+            logger.debug(f"Wygenerowano hash dla wzorca {pattern_name}: {pattern_hash[:8]}...")
+            return pattern_hash
+            
+        except Exception as e:
+            logger.warning(f"Błąd podczas generowania hasha wzorca: {e}")
+            # Fallback - użyj prostego hash
+            return str(hash(str(x_points) + str(y_points) + str(pattern_name)))
     
     def _convert_klines_to_dataframe(self, klines):
         """Konwertuje dane klines na DataFrame wymagany przez pyharmonics"""
@@ -761,18 +837,54 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
             
             # Rysuj poziomy Fibonacciego i/lub targety jeśli włączone
-            show_fibonacci = kwargs.get('show_fibonacci', False)
-            show_all_fibo_targets = kwargs.get('show_all_fibo_targets', False)
-            show_all_fibonacci_levels = kwargs.get('show_all_fibonacci_levels', True)
-            show_all_retracement_levels = kwargs.get('show_all_retracement_levels', True)
-            show_all_extension_levels = kwargs.get('show_all_extension_levels', True)
+            # show_fibonacci = kwargs.get('show_fibonacci', False)
+            # show_all_fibo_targets = kwargs.get('show_all_fibo_targets', False)
+            # show_all_fibonacci_levels = kwargs.get('show_all_fibonacci_levels', True)
+            # show_all_retracement_levels = kwargs.get('show_all_retracement_levels', True)
+            # show_all_extension_levels = kwargs.get('show_all_extension_levels', True)
             
-            if (show_fibonacci or show_all_fibo_targets or show_all_fibonacci_levels) and fibonacci_data:
+            # if self.general_fibonacci_levels['show'] and fibonacci_data:
+            #     DrawUtils.draw_fibonacci_lines_with_labels(
+            #         main_ax, fibonacci_data, pattern_groups, klines, 
+            #         dynamic_font_size_fibo_labels, df, False, self.general_fibonacci_levels['show'], False,
+            #         self.general_fibonacci_levels['retracement'], self.general_fibonacci_levels['extension'], chart_config
+            #     )
+            # 
+            # if self.all_points_fibonacci_levels['show'] and fibonacci_data:
+            #     DrawUtils.draw_fibonacci_lines_with_labels(
+            #         main_ax, fibonacci_data, pattern_groups, klines, 
+            #         dynamic_font_size_fibo_labels, df, False, False, self.all_points_fibonacci_levels['show'],
+            #         self.all_points_fibonacci_levels['retracement'], self.all_points_fibonacci_levels['extension'], chart_config
+            #     )
+            # 
+            # if self.all_fibonacci_targets['show'] and fibonacci_data:
+            #     DrawUtils.draw_fibonacci_lines_with_labels(
+            #         main_ax, fibonacci_data, pattern_groups, klines, 
+            #         dynamic_font_size_fibo_labels, df, self.all_fibonacci_targets['show'], False, False,
+            #         True, True, chart_config
+            #     )
+
+            if (self.general_fibonacci_levels['show'] or self.all_fibonacci_targets['show'] or self.all_points_fibonacci_levels['show']) and fibonacci_data:
+                retracement_levels = False
+                extension_levels = False
+                if self.general_fibonacci_levels['show'] == True and self.all_points_fibonacci_levels['show'] == False:
+                    retracement_levels = self.general_fibonacci_levels['retracement']
+                    extension_levels = self.general_fibonacci_levels['extension']
+                if self.general_fibonacci_levels['show'] == False and self.all_points_fibonacci_levels['show'] == True:
+                    retracement_levels = self.all_points_fibonacci_levels['retracement']
+                    extension_levels = self.all_points_fibonacci_levels['extension']
                 DrawUtils.draw_fibonacci_lines_with_labels(
                     main_ax, fibonacci_data, pattern_groups, klines, 
-                    dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
-                    show_all_retracement_levels, show_all_extension_levels, chart_config
+                    dynamic_font_size_fibo_labels, df, self.all_fibonacci_targets['show'], self.general_fibonacci_levels['show'], self.all_points_fibonacci_levels['show'],
+                    retracement_levels, extension_levels, chart_config
                 )
+
+            # if (show_fibonacci or show_all_fibo_targets or show_all_fibonacci_levels) and fibonacci_data:
+            #     DrawUtils.draw_fibonacci_lines_with_labels(
+            #         main_ax, fibonacci_data, pattern_groups, klines, 
+            #         dynamic_font_size_fibo_labels, df, show_all_fibo_targets, show_fibonacci, show_all_fibonacci_levels,
+            #         show_all_retracement_levels, show_all_extension_levels, chart_config
+            #     )
             
             # Rysuj etykiety wzorców in paddingu po zakończeniu wszystkich wzorców
             if pattern_labels_for_padding:

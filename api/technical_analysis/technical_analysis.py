@@ -87,15 +87,15 @@ class TechnicalAnalysis:
         self.technical_analysis_objects = []
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
-                  enabled_indicators: List[str] = None, 
-                  enabled_objects: List[str] = None, **kwargs) -> None:
+                  enabled_indicators: Dict[str, Union[Type, object]] = None, 
+                  enabled_objects: Dict[str, Union[Type, object]] = None, **kwargs) -> None:
         """
         Oblicza wszystkie enabled indicators i technical analysis objects.
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
-            enabled_indicators: Lista nazw wskaźników do obliczenia (None = nie obliczaj żadnych)
-            enabled_objects: Lista nazw obiektów analizy technicznej do obliczenia (None = nie obliczaj żadnych)
+            enabled_indicators: Słownik z nazwami wskaźników jako kluczami i klasami/obiektami jako wartościami
+            enabled_objects: Słownik z nazwami obiektów jako kluczami i klasami/obiektami jako wartościami
             **kwargs: Dodatkowe parametry przekazywane do poszczególnych metod calculate
         """
         # Wyczyść poprzednie obliczenia
@@ -104,28 +104,42 @@ class TechnicalAnalysis:
         
         # Oblicz wskaźniki tylko jeśli podano enabled_indicators
         if enabled_indicators is not None:
-            for indicator_name in enabled_indicators:
-                if indicator_name in self.INDICATORS:
-                    indicator_class = self.INDICATORS[indicator_name]
-                    indicator_instance = indicator_class()
+            for indicator_key, indicator_value in enabled_indicators.items():
+                # Sprawdź czy to klasa czy gotowy obiekt
+                if isinstance(indicator_value, type):
+                    # To klasa - utwórz instancję
+                    indicator_instance = indicator_value()
                     indicator_instance.calculate(klines, **kwargs)
                     self.indicators.append(indicator_instance)
-                    logger.info(f"Obliczono wskaźnik: {indicator_name}")
+                    logger.info(f"Obliczono wskaźnik z klasy: {indicator_key}")
+                else:
+                    # To gotowy obiekt - użyj bezpośrednio
+                    indicator_instance = indicator_value
+                    indicator_instance.calculate(klines, **kwargs)
+                    self.indicators.append(indicator_instance)
+                    logger.info(f"Obliczono wskaźnik z gotowego obiektu: {indicator_key}")
         
         # Oblicz obiekty analizy technicznej tylko jeśli podano enabled_objects
         if enabled_objects is not None:
-            for object_name in enabled_objects:
-                if object_name in self.TECHNICAL_ANALYSIS_OBJECTS:
-                    object_class = self.TECHNICAL_ANALYSIS_OBJECTS[object_name]
-                    object_instance = object_class()
+            for object_key, object_value in enabled_objects.items():
+                # Sprawdź czy to klasa czy gotowy obiekt
+                if isinstance(object_value, type):
+                    # To klasa - utwórz instancję
+                    object_instance = object_value()
                     object_instance.calculate(klines, **kwargs)
                     self.technical_analysis_objects.append(object_instance)
-                    logger.info(f"Obliczono obiekt analizy technicznej: {object_name}")
+                    logger.info(f"Obliczono obiekt analizy technicznej z klasy: {object_key}")
+                else:
+                    # To gotowy obiekt - użyj bezpośrednio
+                    object_instance = object_value
+                    object_instance.calculate(klines, **kwargs)
+                    self.technical_analysis_objects.append(object_instance)
+                    logger.info(f"Obliczono obiekt analizy technicznej z gotowego obiektu: {object_key}")
     
     def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
                               save_path: Optional[str] = None, title: str = "Wykres świecowy",
-                              enabled_indicators: Dict[str, Type] = None,
-                              enabled_objects: Dict[str, Type] = None,
+                              enabled_indicators: Dict[str, Union[Type, object]] = None,
+                              enabled_objects: Dict[str, Union[Type, object]] = None,
                               **kwargs) -> str:
         """
         Tworzy wykres świecowy używając obliczonych indicators i technical analysis objects.
@@ -134,8 +148,8 @@ class TechnicalAnalysis:
             klines: Lista świeczek zawierająca dane OHLCV oraz obliczone wskaźniki i wzorce
             save_path: Opcjonalna ścieżka do zapisu wykresu
             title: Tytuł wykresu
-            enabled_indicators: Słownik z nazwami wskaźników jako kluczami i klasami jako wartościami
-            enabled_objects: Słownik z nazwami obiektów jako kluczami i klasami jako wartościami
+            enabled_indicators: Słownik z nazwami wskaźników jako kluczami i klasami/obiektami jako wartościami
+            enabled_objects: Słownik z nazwami obiektów jako kluczami i klasami/obiektami jako wartościami
             **kwargs: Dodatkowe parametry konfiguracji wykresu
             
         Returns:
