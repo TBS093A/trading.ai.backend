@@ -36,31 +36,23 @@ class FibonacciTargets(TechnicalAnalysisObject):
     def __init__(self):
         super().__init__("FibonacciTargets")
     
-    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
-        """Oblicza wszystkie targety Fibonacciego z wzorców harmonicznych"""
-        targets_data = []
+    def calculate(self, *args, **kwargs) -> None:
+        """
+        Oblicza wszystkie targety Fibonacciego z wzorców harmonicznych
         
-        # Przeiteruj przez wszystkie klines i znajdź wzorce do obliczenia targetów
-        for kline_idx, kline in enumerate(klines):
-            if 'patterns' in kline:
-                for pattern_id, pattern_data in kline['patterns'].items():
-                    if 'type' in pattern_data and 'points' in pattern_data and 'all_fibos' in pattern_data:
-                        # Oblicz targety dla każdego wzorca
-                        targets = self.__calculate_all_targets(
-                            pattern_type=pattern_data['type'],
-                            pattern_points=pattern_data['points'],
-                            all_fibos=pattern_data['all_fibos'],
-                            is_bullish=pattern_data.get('is_bullish', True)
-                        )
-                        
-                        targets_data.append({
-                            'kline_idx': kline_idx,
-                            'pattern_id': pattern_id,
-                            'pattern_type': pattern_data['type'],
-                            'targets': targets
-                        })
-        
-        self.calculated_data = targets_data
+        Args:
+            pattern_type: Typ wzorca (np. "Gartley", "Butterfly", "Bat")
+            pattern_points: Słownik punktów wzorca
+            all_fibos: Obliczone poziomy Fibonacci dla wszystkich kombinacji
+            is_bullish: Czy wzorzec jest bullish
+            
+        """
+        self.calculated_data = self.__calculate_all_targets(
+            pattern_type=kwargs.get('pattern_type'),
+            pattern_points=kwargs.get('pattern_points'),
+            all_fibos=kwargs.get('all_fibos'),
+            is_bullish=kwargs.get('is_bullish')
+        )
 
     def __calculate_all_targets(
         self,

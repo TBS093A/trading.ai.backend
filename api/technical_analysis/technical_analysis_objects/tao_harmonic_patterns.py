@@ -317,10 +317,19 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                     # Użyj klasy FibonacciTargets do obliczenia targetów
                                     all_targets = None
                                     if self.all_fibonacci_targets['show']:
+                                        all_points_fibonacci_for_targets = all_points_fibonacci
+                                        if all_points_fibonacci_for_targets is None:
+                                            self.fibonacci_all_levels.calculate(
+                                                klines,
+                                                pattern_points=pattern_points
+                                            )
+                                            all_points_fibonacci_for_targets = self.fibonacci_all_levels.calculated_data
+
                                         self.fibonacci_targets.calculate(
                                             klines,
                                             pattern_points=pattern_points,
                                             pattern_type=str(pattern.name),
+                                            all_fibos=all_points_fibonacci_for_targets,
                                             is_bullish=bool(pattern.bullish)
                                         )
                                         all_targets = self.fibonacci_targets.calculated_data
