@@ -29,19 +29,19 @@ class TechnicalAnalysisTable(AbstractTable):
         CREATE TABLE IF NOT EXISTS technical_analysis (
             id SERIAL PRIMARY KEY,
             asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-            x_point_timestamp TEXT,
-            a_point_timestamp TEXT,
-            b_point_timestamp TEXT,
-            c_point_timestamp TEXT,
-            d_point_timestamp TEXT,
+            x_point_timestamp BIGINT,
+            a_point_timestamp BIGINT,
+            b_point_timestamp BIGINT,
+            c_point_timestamp BIGINT,
+            d_point_timestamp BIGINT,
             ta_object_json JSONB NOT NULL
         );
         """
     
     async def create(self, asset_id: int, ta_object_json: Dict[str, Any], 
-                    x_point_timestamp: str = None, a_point_timestamp: str = None, 
-                    b_point_timestamp: str = None, c_point_timestamp: str = None, 
-                    d_point_timestamp: str = None) -> Optional[int]:
+                    x_point_timestamp: int = None, a_point_timestamp: int = None, 
+                    b_point_timestamp: int = None, c_point_timestamp: int = None, 
+                    d_point_timestamp: int = None) -> Optional[int]:
         """Tworzy nową analizę techniczną i zwraca jej ID."""
         try:
             # Konwertuj NumPy typy przed serializacją JSON
@@ -175,7 +175,7 @@ class TechnicalAnalysisTable(AbstractTable):
         
         return results
     
-    async def get_by_timestamp_range(self, start_timestamp: str, end_timestamp: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    async def get_by_timestamp_range(self, start_timestamp: int, end_timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne z określonego zakresu czasowego (używa x_point_timestamp)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
@@ -227,7 +227,7 @@ class TechnicalAnalysisTable(AbstractTable):
         
         return results
     
-    async def get_by_point_timestamp(self, point_type: str, timestamp: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    async def get_by_point_timestamp(self, point_type: str, timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne według konkretnego punktu czasowego."""
         if point_type not in ['x', 'a', 'b', 'c', 'd']:
             raise ValueError("point_type musi być jednym z: 'x', 'a', 'b', 'c', 'd'")
@@ -248,7 +248,7 @@ class TechnicalAnalysisTable(AbstractTable):
         
         return results
     
-    async def get_by_point_timestamp_range(self, point_type: str, start_timestamp: str, end_timestamp: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    async def get_by_point_timestamp_range(self, point_type: str, start_timestamp: int, end_timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne według zakresu czasowego konkretnego punktu."""
         if point_type not in ['x', 'a', 'b', 'c', 'd']:
             raise ValueError("point_type musi być jednym z: 'x', 'a', 'b', 'c', 'd'")
@@ -313,7 +313,7 @@ class TechnicalAnalysisTable(AbstractTable):
         
         return results 
 
-    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: str, end_timestamp: str, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: int, end_timestamp: int, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne z określonego zakresu czasowego i asset."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
@@ -330,8 +330,8 @@ class TechnicalAnalysisTable(AbstractTable):
         
         return results 
     
-    async def check_pattern_exists(self, asset_id: int, x_point_timestamp: str, a_point_timestamp: str, 
-                                 b_point_timestamp: str, c_point_timestamp: str, d_point_timestamp: str) -> bool:
+    async def check_pattern_exists(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
+                                 b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> bool:
         """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
         result = await self.fetch_one("""
         SELECT COUNT(*) as count
@@ -344,4 +344,27 @@ class TechnicalAnalysisTable(AbstractTable):
         AND d_point_timestamp = $6
         """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
         
-        return result['count'] > 0 if result else False 
+        return result['count'] > 0 if result else False
+    
+    async def get_by_point_timestamps(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
+                                     b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> Optional[Dict[str, Any]]:
+        """Pobiera wzorzec o podanych timestampach dla danego asset."""
+        result = await self.fetch_one("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote
+        FROM technical_analysis ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.asset_id = $1 
+        AND ta.x_point_timestamp = $2 
+        AND ta.a_point_timestamp = $3 
+        AND ta.b_point_timestamp = $4 
+        AND ta.c_point_timestamp = $5 
+        AND ta.d_point_timestamp = $6
+        LIMIT 1
+        """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
+        
+        if result:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return result 

@@ -44,6 +44,7 @@ class Config:
         
         # Database konfiguracja
         self.database_url = os.getenv("DATABASE_URL")
+        self.test_database_url = os.getenv("TEST_DATABASE_URL")
         
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
@@ -84,6 +85,9 @@ class Config:
         
         if not self.telethon_bot_id:
             logger.warning("Nie znaleziono TELETHON_BOT_ID w zmiennych środowiskowych.")
+        
+        if not self.test_database_url:
+            logger.warning("Nie znaleziono TEST_DATABASE_URL w zmiennych środowiskowych.")
     
     @property
     def telethon_config(self) -> dict:
@@ -140,6 +144,12 @@ class Config:
     def get_database_url(self) -> str:
         """Pobierz URL bazy danych"""
         return self.database_url
+    
+    def get_test_database_url(self) -> str:
+        """Pobierz URL testowej bazy danych"""
+        if not self.test_database_url:
+            logger.warning("TEST_DATABASE_URL nie jest ustawiony! Testy mogą działać niestabilnie.")
+        return self.test_database_url
 
 # Instancja globalna konfiguracji
 config = Config()
