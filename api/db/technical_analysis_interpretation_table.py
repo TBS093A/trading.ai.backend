@@ -12,7 +12,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
         CREATE TABLE IF NOT EXISTS technical_analysis_interpretation (
             id SERIAL PRIMARY KEY,
             asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-            technical_analysis_id INTEGER NOT NULL REFERENCES technical_analysis(id) ON DELETE CASCADE,
+            technical_analysis_id INTEGER NOT NULL REFERENCES technical_analysis_harmonic_patterns(id) ON DELETE CASCADE,
             timestamp TEXT NOT NULL,
             content TEXT NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -39,7 +39,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.id = $1
         """, record_id)
     
@@ -100,7 +100,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         ORDER BY tai.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
     
@@ -111,7 +111,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.asset_id = $1
         ORDER BY tai.id DESC LIMIT $2 OFFSET $3
         """, asset_id, limit, offset)
@@ -123,7 +123,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.technical_analysis_id = $1
         ORDER BY tai.id DESC
         """, technical_analysis_id)
@@ -135,7 +135,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.timestamp >= $1 AND tai.timestamp <= $2
         ORDER BY tai.id DESC LIMIT $3 OFFSET $4
         """, start_timestamp, end_timestamp, limit, offset)
@@ -147,7 +147,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.content ILIKE $1
         ORDER BY tai.id DESC LIMIT $2 OFFSET $3
         """, f"%{content}%", limit, offset)
@@ -159,7 +159,7 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
                a.asset, a.quote, ta.x_point_timestamp
         FROM technical_analysis_interpretation tai
         JOIN assets a ON tai.asset_id = a.id
-        JOIN technical_analysis ta ON tai.technical_analysis_id = ta.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
         WHERE tai.asset_id = $1
         ORDER BY tai.id DESC
         LIMIT 1

@@ -6,7 +6,7 @@ from .user_secrets_table import UserSecretsTable
 from .transactions_table import TransactionsTable
 from .fundamental_analysis_table import FundamentalAnalysisTable
 from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
-from .technical_analysis_table import TechnicalAnalysisTable
+from .technical_analysis_table import TechnicalAnalysisHarmonicPatternsTable
 from .technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
 from .general_interpretation_table import GeneralInterpretationTable
 from .telegram_signal_channels_table import TelegramSignalChannelsTable
@@ -27,7 +27,7 @@ class DatabaseFactory:
         'transactions': TransactionsTable,
         'fundamental_analysis': FundamentalAnalysisTable,
         'fundamental_analysis_interpretation': FundamentalAnalysisInterpretationTable,
-        'technical_analysis': TechnicalAnalysisTable,
+        'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
         'technical_analysis_interpretation': TechnicalAnalysisInterpretationTable,
         'general_interpretation': GeneralInterpretationTable,
         'telegram_signal_channels': TelegramSignalChannelsTable,
@@ -75,9 +75,9 @@ class DatabaseFactory:
         """Zwraca tabelę FundamentalAnalysisInterpretation."""
         return self.get_table('fundamental_analysis_interpretation')
     
-    def get_technical_analysis_table(self) -> TechnicalAnalysisTable:
-        """Zwraca tabelę TechnicalAnalysis."""
-        return self.get_table('technical_analysis')
+    def get_technical_analysis_table(self) -> TechnicalAnalysisHarmonicPatternsTable:
+        """Zwraca tabelę TechnicalAnalysisHarmonicPatterns."""
+        return self.get_table('technical_analysis_harmonic_patterns')
     
     def get_technical_analysis_interpretation_table(self) -> TechnicalAnalysisInterpretationTable:
         """Zwraca tabelę TechnicalAnalysisInterpretation."""
