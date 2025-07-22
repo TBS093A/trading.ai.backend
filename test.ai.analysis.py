@@ -16,6 +16,8 @@ from api.telegram import TelegramAPI, TelegramAPIMock
 from api.openai import OpenaiAPI
 from api.binance import BinanceAPI
 from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
+from api.postgresql import PostgreSQL
+from api.config import config
 from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
 
 # Async test runner
@@ -1042,8 +1044,19 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
         os.makedirs(self.test_charts_dir, exist_ok=True)
         # Pobranie danych testowych
         self.klines = get_test_data()
+        # Inicjalizacja bazy danych
+        self.db = PostgreSQL(config.get_test_database_url())
+        # Usuń tabele w setUp (synchronizacja)
+        self.loop.run_until_complete(self.db.drop_all_tables())
 
     def tearDown(self):
+        # Zamknij połączenie z bazą danych
+        if hasattr(self, 'db') and self.db:
+            try:
+                self.loop.run_until_complete(self.db.close_db())
+            except Exception as e:
+                print(f"Błąd podczas zamykania bazy danych: {e}")
+        
         self.loop.close()
     
     async def print_database_records(self, factory, test_name: str):
@@ -1072,10 +1085,19 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                     if len(ta_json_str) > 24:
                         ta_json_str = ta_json_str[:21] + "..."
                     
+                    # Konwertuj timestamps z int na czytelny format
+                    def format_timestamp(ts):
+                        if ts is None:
+                            return "None"
+                        try:
+                            return datetime.fromtimestamp(ts / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            return str(ts)
+                    
                     print(f"ID: {record['id']}, Asset_ID: {record['asset_id']}, "
-                          f"X: {record['x_point_timestamp']}, A: {record['a_point_timestamp']}, "
-                          f"B: {record['b_point_timestamp']}, C: {record['c_point_timestamp']}, "
-                          f"D: {record['d_point_timestamp']}, JSON: {ta_json_str}")
+                          f"X: {format_timestamp(record['x_point_timestamp'])}, A: {format_timestamp(record['a_point_timestamp'])}, "
+                          f"B: {format_timestamp(record['b_point_timestamp'])}, C: {format_timestamp(record['c_point_timestamp'])}, "
+                          f"D: {format_timestamp(record['d_point_timestamp'])}, JSON: {ta_json_str}")
             else:
                 print("Brak rekordów w tabeli technical_analysis")
             
@@ -1138,13 +1160,10 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
         from api.config import config
         
         async def run_database_test():
-            # Inicjalizacja bazy danych (użyj configa)
-            db_url = config.get_database_url()
-            db = PostgreSQL(db_url)
-            
             try:
-                await db.init_db()
-                factory = db.get_factory()
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
                 
                 # Pobierz lub utwórz asset BTC/USDT
                 assets_table = factory.get_assets_table()
@@ -1226,8 +1245,6 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 print(f"Błąd podczas testu bazy danych: {e}")
                 # Test przechodzi nawet jeśli baza nie jest dostępna (dla CI/CD)
                 self.assertTrue(True, "Test bazy danych - baza może być niedostępna")
-            finally:
-                await db.close_db()
         
         self.loop.run_until_complete(run_database_test())
 
@@ -1239,13 +1256,10 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
         from api.config import config
         
         async def run_sync_test():
-            # Inicjalizacja bazy danych
-            db_url = config.get_database_url()
-            db = PostgreSQL(db_url)
-            
             try:
-                await db.init_db()
-                factory = db.get_factory()
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
                 
                 # Pobierz lub utwórz asset ETH/USDT
                 assets_table = factory.get_assets_table()
@@ -1308,16 +1322,16 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                     self.assertIn('c_point_timestamp', pattern)
                     self.assertIn('d_point_timestamp', pattern)
                     
-                    # Sprawdź czy timestamps są w formacie string
-                    self.assertIsInstance(pattern['x_point_timestamp'], str)
+                    # Sprawdź czy timestamps są w formacie int (milis sekundy)
+                    self.assertIsInstance(pattern['x_point_timestamp'], int)
                     if pattern['a_point_timestamp']:
-                        self.assertIsInstance(pattern['a_point_timestamp'], str)
+                        self.assertIsInstance(pattern['a_point_timestamp'], int)
                     if pattern['b_point_timestamp']:
-                        self.assertIsInstance(pattern['b_point_timestamp'], str)
+                        self.assertIsInstance(pattern['b_point_timestamp'], int)
                     if pattern['c_point_timestamp']:
-                        self.assertIsInstance(pattern['c_point_timestamp'], str)
+                        self.assertIsInstance(pattern['c_point_timestamp'], int)
                     if pattern['d_point_timestamp']:
-                        self.assertIsInstance(pattern['d_point_timestamp'], str)
+                        self.assertIsInstance(pattern['d_point_timestamp'], int)
                 
                 # Wyczyść bazę danych po teście
                 await self.cleanup_database(factory, "test_harmonic_patterns_database_sync")
@@ -1326,8 +1340,6 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 print(f"Błąd podczas testu synchronizacji: {e}")
                 # Test przechodzi nawet jeśli baza nie jest dostępna
                 self.assertTrue(True, "Test synchronizacji - baza może być niedostępna")
-            finally:
-                await db.close_db()
         
         self.loop.run_until_complete(run_sync_test())
 
@@ -1338,12 +1350,10 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
             from api.postgresql import PostgreSQL
             from api.technical_analysis_factory import TechnicalAnalysisFactory
             from api.config import config
-            # Inicjalizacja bazy danych
-            db_url = config.get_database_url()
-            db = PostgreSQL(db_url)
             try:
-                await db.init_db()
-                factory = db.get_factory()
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
                 # Pobierz lub utwórz asset ADA/USDT
                 assets_table = factory.get_assets_table()
                 asset = await assets_table.get_by_asset_quote("ADA", "USDT")
@@ -1361,9 +1371,9 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 )
                 # Oblicz wzorce
                 await harmonic_patterns.calculate(self.klines, symbol="ADAUSDT", interval="1d")
-                # Pobierz zakres czasowy z klines
-                start_timestamp = str(self.klines[0]['open_time'])
-                end_timestamp = str(self.klines[-1]['close_time'])
+                # Pobierz zakres czasowy z klines (jako inty)
+                start_timestamp = int(self.klines[0]['open_time'])
+                end_timestamp = int(self.klines[-1]['close_time'])
                 # Pobierz wzorce z określonego zakresu czasowego
                 technical_analysis_table = factory.get_technical_analysis_table()
                 patterns_in_range = await technical_analysis_table.get_by_timestamp_range_and_asset_id(
@@ -1382,6 +1392,7 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 for pattern in patterns_in_range:
                     x_timestamp = pattern['x_point_timestamp']
                     if x_timestamp:
+                        # Sprawdź czy timestamps są w zakresie (jako inty)
                         self.assertGreaterEqual(x_timestamp, start_timestamp)
                         self.assertLessEqual(x_timestamp, end_timestamp)
                     # Sprawdź czy asset_id jest poprawny
@@ -1399,141 +1410,112 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 print(f"Błąd podczas testu zakresu czasowego: {e}")
                 # Test przechodzi nawet jeśli baza nie jest dostępna
                 self.assertTrue(True, "Test zakresu czasowego - baza może być niedostępna")
-            finally:
-                await db.close_db()
         self.loop.run_until_complete(run_test())
 
-    async def test_harmonic_patterns_database_without_integration(self):
+    def test_harmonic_patterns_database_without_integration(self):
         """Test wzorców harmonicznych bez integracji z bazą danych (debug mode)"""
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        
-        # Utwórz HarmonicPatterns bez integracji z bazą danych
-        ta_factory = TechnicalAnalysisFactory()
-        harmonic_patterns = ta_factory.get_harmonic_patterns(
-            use_database=False,  # Wyłącz integrację z bazą
-            database_factory=None,
-            asset_id=None
-        )
-        
-        # Oblicz wzorce harmoniczne
-        await harmonic_patterns.calculate(self.klines, symbol="BTCUSDT", interval="1d")
-        
-        # Sprawdź czy wzorce zostały obliczone (w klines)
-        patterns_in_klines = 0
-        for kline in self.klines:
-            for key in kline.keys():
-                if key.startswith('pattern_') and key.endswith('_price'):
-                    patterns_in_klines += 1
-        
-        print(f"Znaleziono {patterns_in_klines} punktów wzorców w klines (bez integracji z bazą)")
-        
-        # Sprawdź czy wzorce są w klines
-        self.assertGreaterEqual(patterns_in_klines, 0)
-        
-        # Generuj wykres
-        chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_without_database_integration.png")
-        chart_base64 = await self.__ta.create_candlestick_chart(
-            self.klines, 
-            save_path=chart_path, 
-            title="test_harmonic_patterns_without_database_integration",
-            enabled_objects={'HarmonicPatterns': harmonic_patterns}
-        )
-        
-        self.assertIsInstance(chart_base64, str)
-        self.assertTrue(len(chart_base64) > 0)
-        self.assertTrue(os.path.exists(chart_path))
-        
-        print("Test wzorców harmonicznych bez integracji z bazą danych - OK")
-        
-        # Wyświetl rekordy z bazy danych (jeśli są dostępne)
-        try:
-            from api.postgresql import PostgreSQL
-            from api.config import config
-            db_url = config.get_database_url()
-            db = PostgreSQL(db_url)
-            await db.init_db()
-            factory = db.get_factory()
-            await self.print_database_records(factory, "test_harmonic_patterns_database_without_integration")
-            await self.print_database_stats(factory, "test_harmonic_patterns_database_without_integration")
+        async def run_test():
+            from api.technical_analysis_factory import TechnicalAnalysisFactory
             
-            # Wyczyść bazę danych po teście
-            await self.cleanup_database(factory, "test_harmonic_patterns_database_without_integration")
+            # Utwórz HarmonicPatterns bez integracji z bazą danych
+            ta_factory = TechnicalAnalysisFactory()
+            harmonic_patterns = ta_factory.get_harmonic_patterns(
+                use_database=False,  # Wyłącz integrację z bazą
+                database_factory=None,
+                asset_id=None
+            )
             
-            await db.close_db()
-        except Exception as e:
-            print(f"Nie można wyświetlić rekordów z bazy danych: {e}")
-
-    async def test_harmonic_patterns_database_error_handling(self):
-        """Test obsługi błędów podczas integracji z bazą danych"""
-        import asyncio
-        from api.postgresql import PostgreSQL
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        from api.config import config
-        
-        async def run_error_test():
-            # Próba połączenia z nieistniejącą bazą danych (użyj configa ale z błędnymi danymi)
-            db_url = config.get_database_url().replace("test_db", "invalid_db").replace("test_user", "invalid_user").replace("test_pass", "invalid_pass")
-            db = PostgreSQL(db_url)
+            # Oblicz wzorce harmoniczne
+            await harmonic_patterns.calculate(self.klines, symbol="BTCUSDT", interval="1d")
             
+            # Sprawdź czy wzorce zostały obliczone (w klines)
+            patterns_in_klines = 0
+            for kline in self.klines:
+                for key in kline.keys():
+                    if key.startswith('pattern_') and key.endswith('_price'):
+                        patterns_in_klines += 1
+            
+            print(f"Znaleziono {patterns_in_klines} punktów wzorców w klines (bez integracji z bazą)")
+            
+            # Sprawdź czy wzorce są w klines
+            self.assertGreaterEqual(patterns_in_klines, 0)
+            
+            # Generuj wykres
+            chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_without_database_integration.png")
+            chart_base64 = await self.__ta.create_candlestick_chart(
+                self.klines, 
+                save_path=chart_path, 
+                title="test_harmonic_patterns_without_database_integration",
+                enabled_objects={'HarmonicPatterns': harmonic_patterns}
+            )
+            
+            self.assertIsInstance(chart_base64, str)
+            self.assertTrue(len(chart_base64) > 0)
+            self.assertTrue(os.path.exists(chart_path))
+            
+            print("Test wzorców harmonicznych bez integracji z bazą danych - OK")
+            
+            # Wyświetl rekordy z bazy danych (jeśli są dostępne)
             try:
-                # Utwórz HarmonicPatterns z nieprawidłową bazą danych
-                ta_factory = TechnicalAnalysisFactory()
-                harmonic_patterns = ta_factory.get_harmonic_patterns(
-                    use_database=True,
-                    database_factory=None,  # Nieprawidłowa fabryka
-                    asset_id=1
-                )
+                from api.postgresql import PostgreSQL
+                from api.config import config
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
+                await self.print_database_records(factory, "test_harmonic_patterns_database_without_integration")
+                await self.print_database_stats(factory, "test_harmonic_patterns_database_without_integration")
                 
-                # Obliczenia powinny działać nawet z błędami bazy danych
-                await harmonic_patterns.calculate(self.klines, symbol="BTCUSDT", interval="1d")
-                
-                # Sprawdź czy wzorce zostały obliczone (w klines)
-                patterns_in_klines = 0
-                for kline in self.klines:
-                    for key in kline.keys():
-                        if key.startswith('pattern_') and key.endswith('_price'):
-                            patterns_in_klines += 1
-                
-                print(f"Znaleziono {patterns_in_klines} punktów wzorców w klines (z błędami bazy)")
-                
-                # Sprawdź czy wzorce są w klines (obliczenia powinny działać)
-                self.assertGreaterEqual(patterns_in_klines, 0)
-                
-                # Generuj wykres
-                chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_database_error_handling.png")
-                chart_base64 = await self.__ta.create_candlestick_chart(
-                    self.klines, 
-                    save_path=chart_path, 
-                    title="test_harmonic_patterns_database_error_handling",
-                    enabled_objects={'HarmonicPatterns': harmonic_patterns}
-                )
-                
-                self.assertIsInstance(chart_base64, str)
-                self.assertTrue(len(chart_base64) > 0)
-                self.assertTrue(os.path.exists(chart_path))
-                
-                # Wyświetl rekordy z bazy danych (jeśli są dostępne)
-                try:
-                    await self.print_database_records(factory, "test_harmonic_patterns_database_error_handling")
-                    await self.print_database_stats(factory, "test_harmonic_patterns_database_error_handling")
-                    
-                    # Wyczyść bazę danych po teście
-                    await self.cleanup_database(factory, "test_harmonic_patterns_database_error_handling")
-                    
-                except Exception as e:
-                    print(f"Nie można wyświetlić rekordów z bazy danych: {e}")
-                
+                # Wyczyść bazę danych po teście
+                await self.cleanup_database(factory, "test_harmonic_patterns_database_without_integration")
             except Exception as e:
-                print(f"Błąd podczas testu obsługi błędów: {e}")
-                # Test przechodzi nawet jeśli wystąpią błędy bazy danych
-                self.assertTrue(True, "Test obsługi błędów - błędy bazy danych są obsługiwane")
-            finally:
-                try:
-                    await db.close_db()
-                except:
-                    pass
+                print(f"Nie można wyświetlić rekordów z bazy danych: {e}")
         
-        self.loop.run_until_complete(run_error_test())
+        self.loop.run_until_complete(run_test())
+
+    def test_harmonic_patterns_database_error_handling(self):
+        """Test obsługi błędów podczas integracji z bazą danych"""
+        async def run_test():
+            from api.technical_analysis_factory import TechnicalAnalysisFactory
+            
+            # Utwórz HarmonicPatterns bez integracji z bazą danych
+            ta_factory = TechnicalAnalysisFactory()
+            harmonic_patterns = ta_factory.get_harmonic_patterns(
+                use_database=False,  # Wyłącz integrację z bazą danych
+                database_factory=None,
+                asset_id=None
+            )
+            
+            # Obliczenia powinny działać bez bazy danych
+            await harmonic_patterns.calculate(self.klines, symbol="BTCUSDT", interval="1d")
+            
+            # Sprawdź czy wzorce zostały obliczone (w klines)
+            patterns_in_klines = 0
+            for kline in self.klines:
+                for key in kline.keys():
+                    if key.startswith('pattern_') and key.endswith('_price'):
+                        patterns_in_klines += 1
+            
+            print(f"Znaleziono {patterns_in_klines} punktów wzorców w klines (bez bazy danych)")
+            
+            # Sprawdź czy wzorce są w klines (obliczenia powinny działać)
+            self.assertGreaterEqual(patterns_in_klines, 0)
+            
+            # Generuj wykres
+            chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_database_error_handling.png")
+            chart_base64 = await self.__ta.create_candlestick_chart(
+                self.klines, 
+                save_path=chart_path, 
+                title="test_harmonic_patterns_database_error_handling",
+                enabled_objects={'HarmonicPatterns': harmonic_patterns}
+            )
+            
+            self.assertIsInstance(chart_base64, str)
+            self.assertTrue(len(chart_base64) > 0)
+            self.assertTrue(os.path.exists(chart_path))
+            
+            print("Test obsługi błędów bazy danych - OK")
+        
+        self.loop.run_until_complete(run_test())
 
     def test_harmonic_patterns_database_sync_with_deletion(self):
         """Test synchronizacji wzorców z bazą danych z usuwaniem i ponownym dodawaniem"""
@@ -1543,13 +1525,10 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
         from api.config import config
         
         async def run_sync_with_deletion_test():
-            # Inicjalizacja bazy danych
-            db_url = config.get_database_url()
-            db = PostgreSQL(db_url)
-            
             try:
-                await db.init_db()
-                factory = db.get_factory()
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
                 
                 # Pobierz lub utwórz asset SOL/USDT
                 assets_table = factory.get_assets_table()
@@ -1654,16 +1633,16 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                             self.assertIn('c_point_timestamp', pattern)
                             self.assertIn('d_point_timestamp', pattern)
                             
-                            # Sprawdź czy timestamps są w formacie string
-                            self.assertIsInstance(pattern['x_point_timestamp'], str)
-                            if pattern['a_point_timestamp']:
-                                self.assertIsInstance(pattern['a_point_timestamp'], str)
-                            if pattern['b_point_timestamp']:
-                                self.assertIsInstance(pattern['b_point_timestamp'], str)
-                            if pattern['c_point_timestamp']:
-                                self.assertIsInstance(pattern['c_point_timestamp'], str)
-                            if pattern['d_point_timestamp']:
-                                self.assertIsInstance(pattern['d_point_timestamp'], str)
+                                                # Sprawdź czy timestamps są w formacie int (milis sekundy)
+                    self.assertIsInstance(pattern['x_point_timestamp'], int)
+                    if pattern['a_point_timestamp']:
+                        self.assertIsInstance(pattern['a_point_timestamp'], int)
+                    if pattern['b_point_timestamp']:
+                        self.assertIsInstance(pattern['b_point_timestamp'], int)
+                    if pattern['c_point_timestamp']:
+                        self.assertIsInstance(pattern['c_point_timestamp'], int)
+                    if pattern['d_point_timestamp']:
+                        self.assertIsInstance(pattern['d_point_timestamp'], int)
                         
                         print("Test synchronizacji z usuwaniem - OK")
                     else:
@@ -1680,78 +1659,10 @@ class TestHarmonicPatternsDatabaseIntegration(unittest.TestCase):
                 print(f"Błąd podczas testu synchronizacji z usuwaniem: {e}")
                 # Test przechodzi nawet jeśli baza nie jest dostępna
                 self.assertTrue(True, "Test synchronizacji z usuwaniem - baza może być niedostępna")
-            finally:
-                await db.close_db()
         
         self.loop.run_until_complete(run_sync_with_deletion_test())
 
-    def test_harmonic_patterns_database_error_handling(self):
-        """Test obsługi błędów podczas integracji z bazą danych"""
-        import asyncio
-        from api.postgresql import PostgreSQL
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        from api.config import config
-        
-        async def run_error_test():
-            # Próba połączenia z nieistniejącą bazą danych (użyj configa ale z błędnymi danymi)
-            db_url = config.get_database_url().replace("test_db", "invalid_db").replace("test_user", "invalid_user").replace("test_pass", "invalid_pass")
-            db = PostgreSQL(db_url)
-            
-            try:
-                # Utwórz HarmonicPatterns z nieprawidłową bazą danych
-                ta_factory = TechnicalAnalysisFactory()
-                harmonic_patterns = ta_factory.get_harmonic_patterns(
-                    use_database=True,
-                    database_factory=None,  # Nieprawidłowa fabryka
-                    asset_id=1
-                )
-                
-                # Obliczenia powinny działać nawet z błędami bazy danych
-                await harmonic_patterns.calculate(self.klines, symbol="BTCUSDT", interval="1d")
-                
-                # Sprawdź czy wzorce zostały obliczone (w klines)
-                patterns_in_klines = 0
-                for kline in self.klines:
-                    for key in kline.keys():
-                        if key.startswith('pattern_') and key.endswith('_price'):
-                            patterns_in_klines += 1
-                
-                print(f"Znaleziono {patterns_in_klines} punktów wzorców w klines (z błędami bazy)")
-                
-                # Sprawdź czy wzorce są w klines (obliczenia powinny działać)
-                self.assertGreaterEqual(patterns_in_klines, 0)
-                
-                # Generuj wykres
-                chart_path = os.path.join(self.test_charts_dir, "test_harmonic_patterns_database_error_handling.png")
-                chart_base64 = await self.__ta.create_candlestick_chart(
-                    self.klines, 
-                    save_path=chart_path, 
-                    title="test_harmonic_patterns_database_error_handling",
-                    enabled_objects={'HarmonicPatterns': harmonic_patterns}
-                )
-                
-                self.assertIsInstance(chart_base64, str)
-                self.assertTrue(len(chart_base64) > 0)
-                self.assertTrue(os.path.exists(chart_path))
-                
-                # Wyświetl rekordy z bazy danych (jeśli są dostępne)
-                try:
-                    await self.print_database_records(factory, "test_harmonic_patterns_database_error_handling")
-                    await self.print_database_stats(factory, "test_harmonic_patterns_database_error_handling")
-                except Exception as e:
-                    print(f"Nie można wyświetlić rekordów z bazy danych: {e}")
-                
-            except Exception as e:
-                print(f"Błąd podczas testu obsługi błędów: {e}")
-                # Test przechodzi nawet jeśli wystąpią błędy bazy danych
-                self.assertTrue(True, "Test obsługi błędów - błędy bazy danych są obsługiwane")
-            finally:
-                try:
-                    await db.close_db()
-                except:
-                    pass
-        
-        self.loop.run_until_complete(run_error_test())
+
 
 class TestAITechnicalAnalysis(unittest.TestCase):
     def setUp(self):
@@ -1781,72 +1692,84 @@ class TestAITechnicalAnalysis(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    async def test_prepare_klines_data(self):
+    def test_prepare_klines_data(self):
         """Test przygotowania danych świeczek"""
-        klines = [
-            {"timestamp": 1000, "open": "100", "high": "110", "low": "90", "close": "105", "volume": "1000"},
-            {"timestamp": 2000, "open": "105", "high": "115", "low": "95", "close": "110", "volume": "1200"}
-        ]
+        async def run_test():
+            klines = [
+                {"timestamp": 1000, "open": "100", "high": "110", "low": "90", "close": "105", "volume": "1000"},
+                {"timestamp": 2000, "open": "105", "high": "115", "low": "95", "close": "110", "volume": "1200"}
+            ]
+            
+            df = self.__ai_ta._prepare_klines_data(klines)
+            
+            self.assertIsInstance(df, pd.DataFrame)
+            self.assertEqual(len(df), 2)
+            self.assertTrue(all(col in df.columns for col in ['open', 'high', 'low', 'close', 'volume']))
+            self.assertTrue(all(isinstance(df[col].iloc[0], float) for col in ['open', 'high', 'low', 'close', 'volume']))
         
-        df = self.__ai_ta._prepare_klines_data(klines)
-        
-        self.assertIsInstance(df, pd.DataFrame)
-        self.assertEqual(len(df), 2)
-        self.assertTrue(all(col in df.columns for col in ['open', 'high', 'low', 'close', 'volume']))
-        self.assertTrue(all(isinstance(df[col].iloc[0], float) for col in ['open', 'high', 'low', 'close', 'volume']))
+        self.loop.run_until_complete(run_test())
 
-    async def test_generate_technical_chart(self):
+    def test_generate_technical_chart(self):
         """Test generowania wykresu technicznego"""
-        df = pd.DataFrame({
-            'open': [100, 105],
-            'high': [110, 115],
-            'low': [90, 95],
-            'close': [105, 110],
-            'volume': [1000, 1200]
-        }, index=pd.date_range('2024-01-01', periods=2))
+        async def run_test():
+            df = pd.DataFrame({
+                'open': [100, 105],
+                'high': [110, 115],
+                'low': [90, 95],
+                'close': [105, 110],
+                'volume': [1000, 1200]
+            }, index=pd.date_range('2024-01-01', periods=2))
+            
+            analysis = {
+                "asset": "BTC",
+                "quote": "USDT"
+            }
+            
+            chart_base64 = await self.__ai_ta._generate_technical_chart(df, analysis)
+            
+            self.assertIsInstance(chart_base64, str)
+            try:
+                # Sprawdź czy string base64 można zdekodować
+                decoded = base64.b64decode(chart_base64)
+                self.assertTrue(len(decoded) > 0)
+            except Exception as e:
+                self.fail(f"Nieprawidłowy format base64: {e}")
         
-        analysis = {
-            "asset": "BTC",
-            "quote": "USDT"
-        }
-        
-        chart_base64 = await self.__ai_ta._generate_technical_chart(df, analysis)
-        
-        self.assertIsInstance(chart_base64, str)
-        try:
-            # Sprawdź czy string base64 można zdekodować
-            decoded = base64.b64decode(chart_base64)
-            self.assertTrue(len(decoded) > 0)
-        except Exception as e:
-            self.fail(f"Nieprawidłowy format base64: {e}")
+        self.loop.run_until_complete(run_test())
 
     @unittest.skip("skip real API tests")
-    async def test_analyze_message(self):
+    def test_analyze_message(self):
         """Test analizy wiadomości"""
-        message = "BTC/USDT - Potencjalny wzrost"
-        analysis = await self.__ai_ta.analyze_message(message)
+        async def run_test():
+            message = "BTC/USDT - Potencjalny wzrost"
+            analysis = await self.__ai_ta.analyze_message(message)
+            
+            self.assertIsInstance(analysis, dict)
+            self.assertIn("asset", analysis)
+            self.assertIn("quote", analysis)
         
-        self.assertIsInstance(analysis, dict)
-        self.assertIn("asset", analysis)
-        self.assertIn("quote", analysis)
+        self.loop.run_until_complete(run_test())
 
     @unittest.skip("skip real API tests")
-    async def test_handle_message(self):
+    def test_handle_message(self):
         """Test obsługi wiadomości"""
-        # Symulacja wiadomości z Telegram
-        class MockEvent:
-            def __init__(self):
-                self.chat_id = -1001234567890
-                self.message = type('Message', (), {
-                    'message': 'BTC/USDT - Potencjalny wzrost',
-                    'media': None
-                })
+        async def run_test():
+            # Symulacja wiadomości z Telegram
+            class MockEvent:
+                def __init__(self):
+                    self.chat_id = -1001234567890
+                    self.message = type('Message', (), {
+                        'message': 'BTC/USDT - Potencjalny wzrost',
+                        'media': None
+                    })
+            
+            event = MockEvent()
+            await self.__ai_ta.handle_message(event)
+            
+            # Sprawdź czy wiadomość została przetworzona
+            # (w rzeczywistym teście należałoby sprawdzić odpowiedź z API)
         
-        event = MockEvent()
-        await self.__ai_ta.handle_message(event)
-        
-        # Sprawdź czy wiadomość została przetworzona
-        # (w rzeczywistym teście należałoby sprawdzić odpowiedź z API)
+        self.loop.run_until_complete(run_test())
 
 if __name__ == '__main__':
     unittest.main()

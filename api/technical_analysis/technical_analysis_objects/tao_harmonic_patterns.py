@@ -152,21 +152,39 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         
         if self.use_database and self.database_factory and self.asset_id is not None:
             try:
-                # Pobierz zakres czasowy z klines
+                # Pobierz zakres czasowy z klines (jako inty)
                 if klines:
-                    start_timestamp = str(klines[0]['open_time'])
-                    end_timestamp = str(klines[-1]['close_time'])
+                    start_timestamp = int(klines[0]['open_time'])
+                    end_timestamp = int(klines[-1]['close_time'])
                     
-                    # Pobierz istniejące wzorce z bazy dla tego zakresu czasowego
-                    technical_analysis_table = self.database_factory.get_technical_analysis_table()
-                    existing_patterns = await technical_analysis_table.get_by_timestamp_range_and_asset_id(
-                        start_timestamp, end_timestamp, self.asset_id
-                    )
-                    
-                    logger.info(f"Pobrano {len(existing_patterns)} istniejących wzorców z bazy danych")
+                                    # Pobierz istniejące wzorce z bazy dla tego zakresu czasowego
+                technical_analysis_table = self.database_factory.get_technical_analysis_table()
+                
+                # Debug: sprawdź wartości przed zapytaniem
+                logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
+                
+                existing_patterns = await technical_analysis_table.get_by_timestamp_range_and_asset_id(
+                    start_timestamp, end_timestamp, self.asset_id
+                )
+                
+                logger.info(f"Pobrano {len(existing_patterns)} istniejących wzorców z bazy danych")
+                
+                # Debug: sprawdź wszystkie wzorce dla tego asset_id (bez filtrowania czasowego)
+                all_patterns_for_asset = await technical_analysis_table.get_by_asset_id(self.asset_id)
+                logger.info(f"DEBUG: Wszystkie wzorce dla asset_id {self.asset_id}: {len(all_patterns_for_asset)}")
+                
+                if all_patterns_for_asset:
+                    logger.info(f"DEBUG: Przykładowe wzorce w bazie:")
+                    for i, pattern in enumerate(all_patterns_for_asset[:3]):  # Pierwsze 3
+                        logger.info(f"  Wzorzec {i+1}: ID={pattern['id']}, X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
+                        # Debug: sprawdź typy danych
+                        logger.info(f"    Typy: X={type(pattern['x_point_timestamp'])}, A={type(pattern['a_point_timestamp'])}")
+                        logger.info(f"    Wartości: X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
                     
                     # Przygotuj listę wzorców do usunięcia (wszystkie istniejące)
                     patterns_to_delete = [pattern['id'] for pattern in existing_patterns]
+                    # Lista wzorców, które zostały ponownie wygenerowane (nie będą usunięte)
+                    regenerated_patterns = set()
                     
             except Exception as e:
                 logger.error(f"Błąd podczas pobierania wzorców z bazy danych: {e}")
@@ -419,11 +437,31 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 if self.use_database and self.database_factory and self.asset_id is not None:
                                     try:
                                         # Przygotuj dane wzorca do zapisania
-                                        x_timestamp = str(x_points[0]) if len(x_points) > 0 else None
-                                        a_timestamp = str(x_points[1]) if len(x_points) > 1 else None
-                                        b_timestamp = str(x_points[2]) if len(x_points) > 2 else None
-                                        c_timestamp = str(x_points[3]) if len(x_points) > 3 else None
-                                        d_timestamp = str(x_points[4]) if len(x_points) > 4 else None
+                                        # Konwertuj timestamps z pandas na milisekundy
+                                        def convert_timestamp_to_ms(ts):
+                                            if ts is None:
+                                                return None
+                                            try:
+                                                # Jeśli to pandas Timestamp, konwertuj na milisekundy
+                                                if hasattr(ts, 'timestamp'):
+                                                    return int(ts.timestamp() * 1000)
+                                                # Jeśli to już int, zwróć bez zmian
+                                                elif isinstance(ts, int):
+                                                    return ts
+                                                # Jeśli to string, spróbuj sparsować
+                                                elif isinstance(ts, str):
+                                                    return int(ts)
+                                                else:
+                                                    return int(ts)
+                                            except Exception as e:
+                                                logger.error(f"Błąd konwersji timestamp {ts} (typ: {type(ts)}): {e}")
+                                                return None
+                                        
+                                        x_timestamp = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                                        a_timestamp = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                                        b_timestamp = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                                        c_timestamp = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
+                                        d_timestamp = convert_timestamp_to_ms(x_points[4]) if len(x_points) > 4 else None
                                         
                                         pattern_data = {
                                             'asset_id': self.asset_id,
@@ -457,15 +495,18 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                         
                                         if pattern_exists:
                                             logger.info(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
+                                            # Znajdź ID istniejącego wzorca i dodaj do regenerated_patterns
+                                            existing_pattern = await technical_analysis_table.get_by_point_timestamps(
+                                                self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
+                                            )
+                                            if existing_pattern:
+                                                regenerated_patterns.add(existing_pattern['id'])
                                         else:
                                             # Zapisz do bazy danych
                                             new_pattern_id = await technical_analysis_table.create(**pattern_data)
                                             
                                             if new_pattern_id:
                                                 logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
-                                                # Usuń z listy wzorców do usunięcia (jeśli był tam)
-                                                if new_pattern_id in patterns_to_delete:
-                                                    patterns_to_delete.remove(new_pattern_id)
                                             else:
                                                 logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
                                             
@@ -489,11 +530,15 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                     deleted_count = 0
                     
                     for pattern_id in patterns_to_delete:
-                        if await technical_analysis_table.delete(pattern_id):
-                            deleted_count += 1
-                            logger.info(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
+                        # Usuń tylko wzorce, które nie zostały ponownie wygenerowane
+                        if pattern_id not in regenerated_patterns:
+                            if await technical_analysis_table.delete(pattern_id):
+                                deleted_count += 1
+                                logger.info(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
+                            else:
+                                logger.warning(f"Nie udało się usunąć wzorca z bazy danych o ID: {pattern_id}")
                         else:
-                            logger.warning(f"Nie udało się usunąć wzorca z bazy danych o ID: {pattern_id}")
+                            logger.info(f"Wzorzec o ID: {pattern_id} został ponownie wygenerowany - zachowuję w bazie")
                     
                     logger.info(f"Usunięto {deleted_count} wzorców z bazy danych, które nie zostały ponownie wygenerowane")
                     

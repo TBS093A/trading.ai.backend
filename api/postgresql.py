@@ -85,3 +85,41 @@ class PostgreSQL:
             self.pool = None
             self.factory = None
             logger.info("Zamknięto pulę połączeń z bazą danych.")
+
+    async def drop_all_tables(self):
+        """Usuwa wszystkie tabele z bazy danych."""
+        if self.pool is None:
+            await self.init_db()
+        
+        async with self.pool.acquire() as connection:
+            # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
+            table_order = [
+                'telegram_signal_interpretation',
+                'telegram_signals',
+                'telegram_signal_channels',
+                'general_interpretation',
+                'technical_analysis_interpretation',
+                'fundamental_analysis_interpretation',
+                'technical_analysis',
+                'fundamental_analysis',
+                'transactions',
+                'user_secrets',
+                'users',
+                'assets'
+            ]
+            
+            for table_name in table_order:
+                try:
+                    await connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+                    logger.info(f"Usunięto tabelę: {table_name}")
+                except Exception as e:
+                    logger.warning(f"Nie udało się usunąć tabeli {table_name}: {e}")
+            
+            logger.info("Usunięto wszystkie tabele z bazy danych.")
+    
+    async def reset_database(self):
+        """Usuwa wszystkie tabele i tworzy je na nowo."""
+        logger.info("Rozpoczynam reset bazy danych...")
+        await self.drop_all_tables()
+        await self._create_all_tables()
+        logger.info("Reset bazy danych zakończony.")
