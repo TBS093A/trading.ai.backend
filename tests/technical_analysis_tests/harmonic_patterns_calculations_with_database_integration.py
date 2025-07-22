@@ -62,9 +62,9 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
             else:
                 print("Brak rekordów w tabeli assets")
             
-            # Lista technical_analysis
+            # Lista technical_analysis_harmonic_patterns
             technical_analysis = await technical_analysis_table.get_all()
-            print(f"\n=== {test_name} - TECHNICAL_ANALYSIS TABLE ===")
+            print(f"\n=== {test_name} - TECHNICAL_ANALYSIS_HARMONIC_PATTERNS TABLE ===")
             if technical_analysis:
                 for record in technical_analysis:
                     # Skróć JSON do max 24 znaków
@@ -86,7 +86,7 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
                           f"B: {format_timestamp(record['b_point_timestamp'])}, C: {format_timestamp(record['c_point_timestamp'])}, "
                           f"D: {format_timestamp(record['d_point_timestamp'])}, JSON: {ta_json_str}")
             else:
-                print("Brak rekordów w tabeli technical_analysis")
+                print("Brak rekordów w tabeli technical_analysis_harmonic_patterns")
             
             print(f"=== KONIEC {test_name} ===\n")
             
@@ -105,7 +105,7 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
             
             print(f"\n=== {test_name} - STATYSTYKI BAZY DANYCH ===")
             print(f"Liczba assets: {assets_count}")
-            print(f"Liczba technical_analysis: {technical_analysis_count}")
+            print(f"Liczba technical_analysis_harmonic_patterns: {technical_analysis_count}")
             print(f"=== KONIEC STATYSTYK {test_name} ===\n")
             
         except Exception as e:
@@ -117,7 +117,7 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
             technical_analysis_table = factory.get_technical_analysis_table()
             assets_table = factory.get_assets_table()
             
-            # Usuń wszystkie rekordy z technical_analysis
+            # Usuń wszystkie rekordy z technical_analysis_harmonic_patterns
             all_technical_analysis = await technical_analysis_table.get_all(limit=1000, offset=0)
             deleted_ta_count = 0
             for record in all_technical_analysis:
@@ -132,7 +132,7 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
                     deleted_assets_count += 1
             
             print(f"\n=== {test_name} - CZYSZCZENIE BAZY DANYCH ===")
-            print(f"Usunięto {deleted_ta_count} rekordów z technical_analysis")
+            print(f"Usunięto {deleted_ta_count} rekordów z technical_analysis_harmonic_patterns")
             print(f"Usunięto {deleted_assets_count} rekordów z assets")
             print(f"=== KONIEC CZYSZCZENIA {test_name} ===\n")
             

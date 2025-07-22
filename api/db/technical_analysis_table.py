@@ -21,12 +21,12 @@ def convert_numpy_types(obj):
     else:
         return obj
 
-class TechnicalAnalysisTable(AbstractTable):
-    """Klasa do zarządzania tabelą TechnicalAnalysis."""
+class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
+    """Klasa do zarządzania tabelą TechnicalAnalysisHarmonicPatterns."""
     
     def create_table(self) -> str:
         return """
-        CREATE TABLE IF NOT EXISTS technical_analysis (
+        CREATE TABLE IF NOT EXISTS technical_analysis_harmonic_patterns (
             id SERIAL PRIMARY KEY,
             asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
             x_point_timestamp BIGINT,
@@ -48,7 +48,7 @@ class TechnicalAnalysisTable(AbstractTable):
             converted_ta_object_json = convert_numpy_types(ta_object_json)
             
             analysis_id = await self.fetch_val(
-                """INSERT INTO technical_analysis 
+                """INSERT INTO technical_analysis_harmonic_patterns 
                 (asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id""",
                 asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json)
@@ -65,7 +65,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.id = $1
         """, record_id)
@@ -123,7 +123,7 @@ class TechnicalAnalysisTable(AbstractTable):
                 return False
             
             values.append(record_id)
-            query = f"UPDATE technical_analysis SET {', '.join(update_fields)} WHERE id = ${param_count}"
+            query = f"UPDATE technical_analysis_harmonic_patterns SET {', '.join(update_fields)} WHERE id = ${param_count}"
             
             await self.execute_query(query, *values)
             logger.info(f"Zaktualizowano analizę techniczną z ID: {record_id}")
@@ -135,7 +135,7 @@ class TechnicalAnalysisTable(AbstractTable):
     async def delete(self, record_id: int) -> bool:
         """Usuwa analizę techniczną o podanym ID."""
         try:
-            await self.execute_query("DELETE FROM technical_analysis WHERE id = $1", record_id)
+            await self.execute_query("DELETE FROM technical_analysis_harmonic_patterns WHERE id = $1", record_id)
             logger.info(f"Usunięto analizę techniczną z ID: {record_id}")
             return True
         except Exception as e:
@@ -148,7 +148,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         ORDER BY ta.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
@@ -164,7 +164,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.asset_id = $1
         ORDER BY ta.id DESC LIMIT $2 OFFSET $3
@@ -181,7 +181,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.x_point_timestamp >= $1 AND ta.x_point_timestamp <= $2
         ORDER BY ta.id DESC LIMIT $3 OFFSET $4
@@ -198,7 +198,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.asset_id = $1
         ORDER BY ta.id DESC
@@ -216,7 +216,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.ta_object_json::text ILIKE $1
         ORDER BY ta.id DESC LIMIT $2 OFFSET $3
@@ -237,7 +237,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.{column_name} = $1
         ORDER BY ta.id DESC LIMIT $2 OFFSET $3
@@ -258,7 +258,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.{column_name} >= $1 AND ta.{column_name} <= $2
         ORDER BY ta.id DESC LIMIT $3 OFFSET $4
@@ -275,7 +275,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.asset_id = $1 
         AND ta.x_point_timestamp IS NOT NULL 
@@ -297,7 +297,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.asset_id = $1 
         AND (ta.x_point_timestamp IS NULL 
@@ -319,7 +319,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.x_point_timestamp >= $1 AND ta.x_point_timestamp <= $2 AND ta.asset_id = $3
         ORDER BY ta.id DESC LIMIT $4 OFFSET $5
@@ -335,7 +335,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
         result = await self.fetch_one("""
         SELECT COUNT(*) as count
-        FROM technical_analysis 
+        FROM technical_analysis_harmonic_patterns 
         WHERE asset_id = $1 
         AND x_point_timestamp = $2 
         AND a_point_timestamp = $3 
@@ -353,7 +353,7 @@ class TechnicalAnalysisTable(AbstractTable):
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
-        FROM technical_analysis ta
+        FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
         WHERE ta.asset_id = $1 
         AND ta.x_point_timestamp = $2 
