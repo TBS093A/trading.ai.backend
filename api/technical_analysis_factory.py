@@ -86,6 +86,24 @@ class TechnicalAnalysisFactory:
                              database_factory = None,
                              asset_id: int = None) -> HarmonicPatterns:
         """Zwraca obiekt HarmonicPatterns z opcjonalnymi parametrami konfiguracyjnymi"""
+        # Użyj domyślnych wartości jeśli parametry są None
+        if general_fibonacci_levels is None:
+            general_fibonacci_levels = {
+                'show': False,
+                'retracement': False,
+                'extension': False
+            }
+        if all_points_fibonacci_levels is None:
+            all_points_fibonacci_levels = {
+                'show': False,
+                'retracement': False,
+                'extension': False
+            }
+        if all_fibonacci_targets is None:
+            all_fibonacci_targets = {
+                'show': False
+            }
+        
         return HarmonicPatterns(
             general_fibonacci_levels=general_fibonacci_levels,
             all_points_fibonacci_levels=all_points_fibonacci_levels,
@@ -100,6 +118,24 @@ class TechnicalAnalysisFactory:
                                      all_points_fibonacci_levels: dict[str, bool] = None,
                                      all_fibonacci_targets: dict[str, bool] = None) -> HarmonicPatternsForming:
         """Zwraca obiekt HarmonicPatternsForming z opcjonalnymi parametrami konfiguracyjnymi"""
+        # Użyj domyślnych wartości jeśli parametry są None
+        if general_fibonacci_levels is None:
+            general_fibonacci_levels = {
+                'show': False,
+                'retracement': False,
+                'extension': False
+            }
+        if all_points_fibonacci_levels is None:
+            all_points_fibonacci_levels = {
+                'show': False,
+                'retracement': False,
+                'extension': False
+            }
+        if all_fibonacci_targets is None:
+            all_fibonacci_targets = {
+                'show': False
+            }
+        
         return HarmonicPatternsForming(
             general_fibonacci_levels=general_fibonacci_levels,
             all_points_fibonacci_levels=all_points_fibonacci_levels,

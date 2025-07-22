@@ -419,6 +419,12 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 if self.use_database and self.database_factory and self.asset_id is not None:
                                     try:
                                         # Przygotuj dane wzorca do zapisania
+                                        x_timestamp = str(x_points[0]) if len(x_points) > 0 else None
+                                        a_timestamp = str(x_points[1]) if len(x_points) > 1 else None
+                                        b_timestamp = str(x_points[2]) if len(x_points) > 2 else None
+                                        c_timestamp = str(x_points[3]) if len(x_points) > 3 else None
+                                        d_timestamp = str(x_points[4]) if len(x_points) > 4 else None
+                                        
                                         pattern_data = {
                                             'asset_id': self.asset_id,
                                             'ta_object_json': {
@@ -436,24 +442,32 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                                 'points': pattern_points,
                                                 'fibonacci_levels': fibonacci_levels
                                             },
-                                            'x_point_timestamp': str(x_points[0]) if len(x_points) > 0 else None,
-                                            'a_point_timestamp': str(x_points[1]) if len(x_points) > 1 else None,
-                                            'b_point_timestamp': str(x_points[2]) if len(x_points) > 2 else None,
-                                            'c_point_timestamp': str(x_points[3]) if len(x_points) > 3 else None,
-                                            'd_point_timestamp': str(x_points[4]) if len(x_points) > 4 else None
+                                            'x_point_timestamp': x_timestamp,
+                                            'a_point_timestamp': a_timestamp,
+                                            'b_point_timestamp': b_timestamp,
+                                            'c_point_timestamp': c_timestamp,
+                                            'd_point_timestamp': d_timestamp
                                         }
                                         
-                                        # Zapisz do bazy danych
+                                        # Sprawdź czy wzorzec już istnieje w bazie danych
                                         technical_analysis_table = self.database_factory.get_technical_analysis_table()
-                                        new_pattern_id = await technical_analysis_table.create(**pattern_data)
+                                        pattern_exists = await technical_analysis_table.check_pattern_exists(
+                                            self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
+                                        )
                                         
-                                        if new_pattern_id:
-                                            logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
-                                            # Usuń z listy wzorców do usunięcia (jeśli był tam)
-                                            if new_pattern_id in patterns_to_delete:
-                                                patterns_to_delete.remove(new_pattern_id)
+                                        if pattern_exists:
+                                            logger.info(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
                                         else:
-                                            logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
+                                            # Zapisz do bazy danych
+                                            new_pattern_id = await technical_analysis_table.create(**pattern_data)
+                                            
+                                            if new_pattern_id:
+                                                logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
+                                                # Usuń z listy wzorców do usunięcia (jeśli był tam)
+                                                if new_pattern_id in patterns_to_delete:
+                                                    patterns_to_delete.remove(new_pattern_id)
+                                            else:
+                                                logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
                                             
                                     except Exception as e:
                                         logger.error(f"Błąd podczas zapisywania wzorca {pattern_name} do bazy danych: {e}")

@@ -2,8 +2,24 @@ from typing import Optional, Dict, Any, List
 from .abstract_table import AbstractTable
 import json
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+def convert_numpy_types(obj):
+    """Konwertuje NumPy typy na standardowe typy Python dla serializacji JSON."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 class TechnicalAnalysisTable(AbstractTable):
     """Klasa do zarządzania tabelą TechnicalAnalysis."""
@@ -18,8 +34,7 @@ class TechnicalAnalysisTable(AbstractTable):
             b_point_timestamp TEXT,
             c_point_timestamp TEXT,
             d_point_timestamp TEXT,
-            ta_object_json JSONB NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            ta_object_json JSONB NOT NULL
         );
         """
     
@@ -29,11 +44,14 @@ class TechnicalAnalysisTable(AbstractTable):
                     d_point_timestamp: str = None) -> Optional[int]:
         """Tworzy nową analizę techniczną i zwraca jej ID."""
         try:
+            # Konwertuj NumPy typy przed serializacją JSON
+            converted_ta_object_json = convert_numpy_types(ta_object_json)
+            
             analysis_id = await self.fetch_val(
                 """INSERT INTO technical_analysis 
                 (asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id""",
-                asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(ta_object_json)
+                asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json)
             )
             logger.info(f"Utworzono analizę techniczną z ID: {analysis_id}")
             return analysis_id
@@ -45,7 +63,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera analizę techniczną po ID."""
         result = await self.fetch_one("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -96,7 +114,9 @@ class TechnicalAnalysisTable(AbstractTable):
             
             if 'ta_object_json' in kwargs:
                 update_fields.append(f"ta_object_json = ${param_count}")
-                values.append(json.dumps(kwargs['ta_object_json']))
+                # Konwertuj NumPy typy przed serializacją JSON
+                converted_ta_object_json = convert_numpy_types(kwargs['ta_object_json'])
+                values.append(json.dumps(converted_ta_object_json))
                 param_count += 1
             
             if not update_fields:
@@ -126,7 +146,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera wszystkie analizy techniczne z limitem i offsetem."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -142,7 +162,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera analizy techniczne dla asset."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -159,7 +179,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera analizy techniczne z określonego zakresu czasowego (używa x_point_timestamp)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -176,7 +196,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera najnowszą analizę techniczną dla asset."""
         result = await self.fetch_one("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -194,7 +214,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Wyszukuje analizy techniczne po wzorcu w JSON."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -215,7 +235,7 @@ class TechnicalAnalysisTable(AbstractTable):
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -236,7 +256,7 @@ class TechnicalAnalysisTable(AbstractTable):
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -253,7 +273,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera kompletne wzorce harmoniczne (wszystkie punkty wypełnione)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -275,7 +295,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera niekompletne wzorce harmoniczne (przynajmniej jeden punkt jest NULL)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -297,7 +317,7 @@ class TechnicalAnalysisTable(AbstractTable):
         """Pobiera analizy techniczne z określonego zakresu czasowego i asset."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.created_at,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis ta
         JOIN assets a ON ta.asset_id = a.id
@@ -309,3 +329,19 @@ class TechnicalAnalysisTable(AbstractTable):
             result['ta_object_json'] = json.loads(result['ta_object_json'])
         
         return results 
+    
+    async def check_pattern_exists(self, asset_id: int, x_point_timestamp: str, a_point_timestamp: str, 
+                                 b_point_timestamp: str, c_point_timestamp: str, d_point_timestamp: str) -> bool:
+        """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
+        result = await self.fetch_one("""
+        SELECT COUNT(*) as count
+        FROM technical_analysis 
+        WHERE asset_id = $1 
+        AND x_point_timestamp = $2 
+        AND a_point_timestamp = $3 
+        AND b_point_timestamp = $4 
+        AND c_point_timestamp = $5 
+        AND d_point_timestamp = $6
+        """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
+        
+        return result['count'] > 0 if result else False 
