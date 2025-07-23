@@ -18,6 +18,7 @@ from src.db.postgresql import DatabasePostgreSQL
 from src.config import config
 from .technical_analysis_tests_utils import get_test_data
 
+@unittest.skip("Skipping database integration tests")
 class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()

@@ -78,21 +78,15 @@ class ImageProcessingError(OpenAIError):
     """Wyjątek rzucany przy błędach przetwarzania obrazka."""
     pass
 
-# Inicjalizacja klienta OpenAI
-client = None
-try:
-    api_key = os.environ.get("OPENAI_API_KEY", default="")
-    if not api_key:
-        logger.error("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
-        raise APIKeyMissingError("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
-    client = AsyncOpenAI(api_key=api_key)
-except Exception as e:
-    logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
-
 class OpenaiAPI:
-    def __init__(self):
-        if not client:
-            raise APIKeyMissingError("Klient OpenAI nie został zainicjalizowany. Sprawdź klucz API.")
+    def __init__(self, api_key: str):
+        try:
+            if not api_key:
+                logger.error("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
+                raise APIKeyMissingError("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
+            self.__client = AsyncOpenAI(api_key=api_key)
+        except Exception as e:
+            logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
 
     async def check_api_status(self) -> Dict[str, Any]:
         """
@@ -108,7 +102,7 @@ class OpenaiAPI:
         try:
             logger.info("Sprawdzanie statusu API OpenAI")
             
-            response = await client.chat.completions.create(
+            response = await self.__client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "This is a test message to check API status."},
@@ -209,7 +203,7 @@ class OpenaiAPI:
                     # Kontynuuj bez obrazka
             
             logger.info("Wysyłanie zapytania do OpenAI API")
-            response = await client.chat.completions.create(
+            response = await self.__client.chat.completions.create(
                 model="gpt-4-vision-preview",  # Model z obsługą wizji
                 messages=[
                     {

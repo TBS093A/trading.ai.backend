@@ -133,6 +133,13 @@ class Config:
             'api_key': self.binance_api_key,
             'api_secret': self.binance_api_secret
         }
+
+    @property
+    def openai_config(self) -> dict:
+        """Konfiguracja OpenAI API jako słownik"""
+        return {
+            'api_key': self.openai_api_key
+        }
     
     @property
     def crypto_panic_config(self) -> dict:
