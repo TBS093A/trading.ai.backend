@@ -182,6 +182,64 @@ class AbstractAPI:
             "price": ""
         }
 
+    def _get_symbols(
+        self,
+        symbol: Optional[str] = None,
+        symbols: Optional[List[str]] = None,
+        permissions: Optional[Union[str, List[str]]] = None,
+        show_permission_sets: bool = True,
+        symbol_status: Optional[str] = None
+    ) -> Dict[str, any]:
+        """
+        Pobiera informacje o symbolach giełdy (exchange info).
+        
+        Args:
+            symbol: Pojedynczy symbol (np. "BTCUSDT")
+            symbols: Lista symboli (np. ["BTCUSDT", "ETHUSDT"])
+            permissions: Uprawnienia do filtrowania (np. "SPOT", ["MARGIN", "LEVERAGED"])
+            show_permission_sets: Czy pokazywać zestawy uprawnień (domyślnie True)
+            symbol_status: Status symbolu do filtrowania ("TRADING", "HALT", "BREAK")
+            
+        Returns:
+            Dict zawierający informacje o giełdzie i symbolach:
+            {
+                "timezone": "UTC",
+                "serverTime": 1565246363776,
+                "rateLimits": [...],
+                "exchangeFilters": [...],
+                "symbols": [
+                    {
+                        "symbol": "ETHBTC",
+                        "status": "TRADING",
+                        "baseAsset": "ETH",
+                        "baseAssetPrecision": 8,
+                        "quoteAsset": "BTC",
+                        "quotePrecision": 8,
+                        "quoteAssetPrecision": 8,
+                        "baseCommissionPrecision": 8,
+                        "quoteCommissionPrecision": 8,
+                        "orderTypes": ["LIMIT", "MARKET", ...],
+                        "icebergAllowed": true,
+                        "ocoAllowed": true,
+                        "otoAllowed": true,
+                        "quoteOrderQtyMarketAllowed": true,
+                        "allowTrailingStop": false,
+                        "cancelReplaceAllowed": false,
+                        "amendAllowed": false,
+                        "isSpotTradingAllowed": true,
+                        "isMarginTradingAllowed": true,
+                        "filters": [...],
+                        "permissions": [],
+                        "permissionSets": [["SPOT", "MARGIN"]],
+                        "defaultSelfTradePreventionMode": "NONE",
+                        "allowedSelfTradePreventionModes": ["NONE"]
+                    }
+                ],
+                "sors": [...]
+            }
+        """
+        pass
+
     def __prepare_coin_price_to_buy(self, price_buy_balance_percent: float, coin_ask_price: dict) -> float:
 
         price_one_houndred_percent = float(coin_ask_price)
