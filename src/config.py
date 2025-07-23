@@ -43,6 +43,9 @@ class Config:
         self.binance_api_key = os.getenv("BINANCE_API_KEY")
         self.binance_api_secret = os.getenv("BINANCE_API_SECRET")
         
+        # CryptoPanic API konfiguracja
+        self.crypto_panic_api_key = os.getenv("CRYPTO_PANIC_API_KEY")
+        
         # OpenAI API konfiguracja
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         
@@ -129,6 +132,13 @@ class Config:
         return {
             'api_key': self.binance_api_key,
             'api_secret': self.binance_api_secret
+        }
+    
+    @property
+    def crypto_panic_config(self) -> dict:
+        """Konfiguracja CryptoPanic API jako słownik"""
+        return {
+            'api_key': self.crypto_panic_api_key
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
