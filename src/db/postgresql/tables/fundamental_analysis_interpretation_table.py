@@ -203,7 +203,7 @@ class FundamentalAnalysisInterpretationTable(AbstractTable):
         GROUP BY fai.id, fai.timestamp, fai.content, fai.created_at
         ORDER BY fai.id DESC
         """, fundamental_analysis_id)
-        
+    
         for result in results:
             result['content'] = json.loads(result['content'])
         
