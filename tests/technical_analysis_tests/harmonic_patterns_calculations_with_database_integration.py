@@ -12,13 +12,10 @@ import pandas as pd
 import numpy as np
 import mplfinance as mpf
 
-from api.telegram import TelegramAPI, TelegramAPIMock
-from api.openai import OpenaiAPI
-from api.binance import BinanceAPI
-from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
-from api.postgresql import PostgreSQL
-from api.config import config
-from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
+from src.technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade as TA
+from src.technical_analysis.technical_analysis_factory import TechnicalAnalysisFactory
+from src.db.postgresql import DatabasePostgreSQL
+from src.config import config
 from .technical_analysis_tests_utils import get_test_data
 
 class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
@@ -32,7 +29,7 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
         # Pobranie danych testowych
         self.klines = get_test_data()
         # Inicjalizacja bazy danych
-        self.db = PostgreSQL(config.get_test_database_url())
+        self.db = DatabasePostgreSQL(config.get_test_database_url())
         # Usuń tabele w setUp (synchronizacja)
         self.loop.run_until_complete(self.db.drop_all_tables())
 
@@ -141,10 +138,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
 
     def test_harmonic_patterns_with_database_integration(self):
         """Test wzorców harmonicznych z integracją bazy danych"""
-        import asyncio
-        from api.postgresql import PostgreSQL
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        from api.config import config
         
         async def run_database_test():
             try:
@@ -237,10 +230,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
 
     def test_harmonic_patterns_database_sync(self):
         """Test synchronizacji wzorców harmonicznych z bazą danych"""
-        import asyncio
-        from api.postgresql import PostgreSQL
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        from api.config import config
         
         async def run_sync_test():
             try:
@@ -333,10 +322,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
     def test_harmonic_patterns_database_timestamp_range(self):
         """Test pobierania wzorców z określonego zakresu czasowego"""
         async def run_test():
-            import asyncio
-            from api.postgresql import PostgreSQL
-            from api.technical_analysis_factory import TechnicalAnalysisFactory
-            from api.config import config
             try:
                 # Reset bazy danych przed testem
                 await self.db.reset_database()
@@ -402,8 +387,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
     def test_harmonic_patterns_database_without_integration(self):
         """Test wzorców harmonicznych bez integracji z bazą danych (debug mode)"""
         async def run_test():
-            from api.technical_analysis_factory import TechnicalAnalysisFactory
-            
             # Utwórz HarmonicPatterns bez integracji z bazą danych
             ta_factory = TechnicalAnalysisFactory()
             harmonic_patterns = ta_factory.get_harmonic_patterns(
@@ -444,8 +427,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
             
             # Wyświetl rekordy z bazy danych (jeśli są dostępne)
             try:
-                from api.postgresql import PostgreSQL
-                from api.config import config
                 # Reset bazy danych przed testem
                 await self.db.reset_database()
                 factory = self.db.get_factory()
@@ -462,8 +443,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
     def test_harmonic_patterns_database_error_handling(self):
         """Test obsługi błędów podczas integracji z bazą danych"""
         async def run_test():
-            from api.technical_analysis_factory import TechnicalAnalysisFactory
-            
             # Utwórz HarmonicPatterns bez integracji z bazą danych
             ta_factory = TechnicalAnalysisFactory()
             harmonic_patterns = ta_factory.get_harmonic_patterns(
@@ -506,11 +485,6 @@ class TestHarmonicPatternsCalculationWithDatabaseIntegration(unittest.TestCase):
 
     def test_harmonic_patterns_database_sync_with_deletion(self):
         """Test synchronizacji wzorców z bazą danych z usuwaniem i ponownym dodawaniem"""
-        import asyncio
-        from api.postgresql import PostgreSQL
-        from api.technical_analysis_factory import TechnicalAnalysisFactory
-        from api.config import config
-        
         async def run_sync_with_deletion_test():
             try:
                 # Reset bazy danych przed testem

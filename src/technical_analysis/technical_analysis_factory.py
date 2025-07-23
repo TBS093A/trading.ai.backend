@@ -26,10 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from .technical_analysis.indicators import IndicatorRSI, IndicatorMACD, IndicatorOBV
-from .technical_analysis.technical_analysis_objects import (
-    Fibonacci, FibonacciTargets, FibonacciAllHarmonicPatternPointsLevels,
-    HarmonicPatterns, HarmonicPatternsForming, AllMedianLineAndrewsPitchfork,
+from .indicators import IndicatorRSI, IndicatorMACD, IndicatorOBV
+from .technical_analysis_objects import (
+    Fibonacci, 
+    FibonacciTargets, 
+    FibonacciAllHarmonicPatternPointsLevels,
+    HarmonicPatterns, 
+    HarmonicPatternsForming, 
+    AllMedianLineAndrewsPitchfork,
     AllAlternatePriceProjection
 )
 

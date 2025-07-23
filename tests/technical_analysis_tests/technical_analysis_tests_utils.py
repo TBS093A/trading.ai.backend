@@ -12,13 +12,8 @@ import pandas as pd
 import numpy as np
 import mplfinance as mpf
 
-from api.telegram import TelegramAPI, TelegramAPIMock
-from api.openai import OpenaiAPI
-from api.binance import BinanceAPI
-from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
-from api.postgresql import PostgreSQL
-from api.config import config
-from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
+from src.api.exchanges.binance import BinanceAPI
+from src.config import config
 
 # Async test runner
 class AsyncTestCase(unittest.TestCase):
@@ -63,11 +58,13 @@ def get_test_data() -> List[Dict[str, Union[int, float, str]]]:
     if os.path.exists(data_file):
         with open(data_file, 'r') as f:
             return json.load(f)
+
+    binance_config = config.binance_config
     
     # Inicjalizacja Binance API
     binance_api = BinanceAPI(
-        api_key=os.environ.get("BINANCE_API_KEY", default=""),
-        api_secret=os.environ.get("BINANCE_API_SECRET", default="")
+        api_key=binance_config['api_key'],
+        api_secret=binance_config['api_secret']
     )
     
     # Pobranie danych

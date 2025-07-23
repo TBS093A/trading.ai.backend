@@ -38,6 +38,10 @@ class Config:
         # MEXC API konfiguracja
         self.mexc_api_key = os.getenv("MEXC_API_KEY")
         self.mexc_api_secret = os.getenv("MEXC_API_SECRET")
+
+        # Binance API konfiguracja
+        self.binance_api_key = os.getenv("BINANCE_API_KEY")
+        self.binance_api_secret = os.getenv("BINANCE_API_SECRET")
         
         # OpenAI API konfiguracja
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -117,6 +121,14 @@ class Config:
         return {
             'api_key': self.mexc_api_key,
             'api_secret': self.mexc_api_secret
+        }
+    
+    @property
+    def binance_config(self) -> dict:
+        """Konfiguracja Binance API jako słownik"""
+        return {
+            'api_key': self.binance_api_key,
+            'api_secret': self.binance_api_secret
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
