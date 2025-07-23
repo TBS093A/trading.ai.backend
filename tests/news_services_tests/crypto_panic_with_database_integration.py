@@ -11,7 +11,7 @@ from src.api.exchanges.binance import BinanceAPI
 from src.db.postgresql import DatabasePostgreSQL
 from src.config import config
 
-@unittest.skip("Skipping database integration tests")
+
 class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
@@ -22,16 +22,20 @@ class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
         
         # Usuń tabele w setUp (synchronizacja)
         self.loop.run_until_complete(self.db.drop_all_tables())
+
+        # pobierz konfigurację API
+        self.binance_config = config.binance_config
+        self.crypto_panic_config = config.crypto_panic_config
         
         # Inicjalizacja Binance API (test mode)
         self.binance_api = BinanceAPI(
-            api_key=config.get_binance_api_key(),
-            api_secret=config.get_binance_api_secret()
+            api_key=self.binance_config['api_key'],
+            api_secret=self.binance_config['api_secret']
         )
         
         # Inicjalizacja CryptoPanic Service
         self.crypto_panic_service = CryptoPanicService(
-            api_key=config.get_crypto_panic_api_key(),
+            api_key=self.crypto_panic_config['api_key'],
             used_exchange=self.binance_api,
             test_mode=True
         )
@@ -338,7 +342,7 @@ class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
                 
                 # Test z filtrem "hot"
                 hot_service = CryptoPanicService(
-                    api_key=config.get_crypto_panic_api_key(),
+                    api_key=self.crypto_panic_config['api_key'],
                     filter="hot",
                     used_exchange=self.binance_api,
                     test_mode=True
@@ -352,7 +356,7 @@ class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
                 
                 # Test z filtrem "bullish"
                 bullish_service = CryptoPanicService(
-                    api_key=config.get_crypto_panic_api_key(),
+                    api_key=self.crypto_panic_config['api_key'],
                     filter="bullish",
                     used_exchange=self.binance_api,
                     test_mode=True
@@ -366,7 +370,7 @@ class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
                 
                 # Test z filtrem "bearish"
                 bearish_service = CryptoPanicService(
-                    api_key=config.get_crypto_panic_api_key(),
+                    api_key=self.crypto_panic_config['api_key'],
                     filter="bearish",
                     used_exchange=self.binance_api,
                     test_mode=True
@@ -443,7 +447,7 @@ class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
                 
                 # Utwórz service bez giełdy
                 service_without_exchange = CryptoPanicService(
-                    api_key=config.get_crypto_panic_api_key(),
+                    api_key=self.crypto_panic_config['api_key'],
                     used_exchange=None,  # Bez giełdy
                     test_mode=True
                 )

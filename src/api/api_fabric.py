@@ -1,7 +1,7 @@
 from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
-from .news_services import CryptoPanicAPI
+from .news_services import CryptoPanicService
 
 from ..config import config
 
@@ -36,7 +36,7 @@ class ApiFabric:
         )
     
     def get_crypto_panic_api(self):
-        return CryptoPanicAPI(
+        return CryptoPanicService(
             *self.config.crypto_panic_config()
         )
 

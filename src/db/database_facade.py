@@ -12,7 +12,7 @@ class DatabaseFacade:
     """Klasa do fasady do obsługi bazy danych"""
 
     def get_database_postgresql(self) -> DatabasePostgreSQL:
-        return DatabasePostgreSQL(config.get_database_url())
+        return DatabasePostgreSQL(config.database_url)
 
     def get_test_database_postgresql(self) -> DatabasePostgreSQL:
-        return DatabasePostgreSQL(config.get_test_database_url())
+        return DatabasePostgreSQL(config.test_database_url)

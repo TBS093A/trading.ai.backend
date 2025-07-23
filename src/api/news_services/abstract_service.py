@@ -4,8 +4,8 @@ from typing import Dict, Any, List
 class AbstractService(ABC):
     
     @abstractmethod
-    def __get_news_request(self) -> Dict[str, Any]:
-        """Prywatna metoda do pobierania wiadomości z API."""
+    def _get_news_request(self) -> Dict[str, Any]:
+        """Metoda do pobierania wiadomości z API."""
         pass
     
     @abstractmethod
