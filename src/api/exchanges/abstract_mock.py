@@ -117,6 +117,59 @@ class AbstractAPI:
             "price": f"{self.coin_price_at_sell}"
         }
 
+    def _get_symbols(
+        self,
+        asset_codes: Optional[List[str]] = None,
+        permissions: Optional[Union[str, List[str]]] = None,
+        show_permission_sets: bool = True,
+        symbol_status: Optional[str] = None
+    ) -> Dict[str, any]:
+        """
+        Pobiera informacje o symbolach giełdy Binance (exchange info).
+        
+        Args:
+            symbol: Pojedynczy symbol (np. "BTCUSDT")
+            symbols: Lista symboli (np. ["BTCUSDT", "ETHUSDT"])
+            permissions: Uprawnienia do filtrowania (np. "SPOT", ["MARGIN", "LEVERAGED"])
+            show_permission_sets: Czy pokazywać zestawy uprawnień (domyślnie True)
+            symbol_status: Status symbolu do filtrowania ("TRADING", "HALT", "BREAK")
+            
+        Returns:
+            Dict zawierający informacje o giełdzie i symbolach zgodnie z dokumentacją Binance API v3:
+
+                {
+                    "symbol": "BTCUSDT",
+                    "status": "TRADING",
+                    "base_asset": "BTC",
+                    "quote_asset": "USDT",
+                    "base_asset_precision": 8,
+                    "quote_asset_precision": 8,
+                    "base_commission_precision": 8,
+                    "quote_commission_precision": 8,
+                    "quote_amount_precision": 8,
+                    "quote_max_amount": 1000000000,
+                    "is_spot_trading_allowed": True,
+                    "is_margin_trading_allowed": True
+                }
+            
+        Raises:
+            Exception: Gdy wystąpi błąd podczas pobierania danych z API
+        """
+        return {
+            "symbol": "",
+            "status": "",
+            "base_asset": "",
+            "quote_asset": "",
+            "base_asset_precision": 0,
+            "quote_asset_precision": 0,
+            "base_commission_precision": 0,
+            "quote_commission_precision": 0,
+            "quote_amount_precision": 0,
+            "quote_max_amount": 0,
+            "is_spot_trading_allowed": True,
+            "is_margin_trading_allowed": True
+        }
+
     def buy(self, coin: str, currency_size_to_buy: float, used_currency: str = "USDT", price_buy_balance_percent: float = 0.1):
 
         bought_assets_price: float = self.__pop_available_currency(
