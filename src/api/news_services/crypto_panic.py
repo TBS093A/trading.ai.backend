@@ -89,6 +89,8 @@ class CryptoPanicService(AbstractService):
         """
         Prywatna metoda do pobierania wiadomości kryptowalutowych z CryptoPanic API
         
+        https://cryptopanic.com/developers/api/
+
         Returns:
             Dict[str, Any]: Słownik zawierający:
                 - next (str | None): URL następnej strony wyników (lub None)

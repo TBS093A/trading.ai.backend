@@ -51,8 +51,10 @@ class DatabasePostgreSQL:
                 'transactions',
                 'fundamental_analysis',
                 'fundamental_analysis_assets',  # Tabela pośrednia
-                'technical_analysis_harmonic_patterns',
                 'fundamental_analysis_interpretation',
+                'fundamental_analysis_interpretation_assets',  # Tabela pośrednia
+                'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
+                'technical_analysis_harmonic_patterns',
                 'technical_analysis_interpretation',
                 'general_interpretation',
                 'telegram_signal_channels',
@@ -100,6 +102,8 @@ class DatabasePostgreSQL:
                 'telegram_signal_channels',
                 'general_interpretation',
                 'technical_analysis_interpretation',
+                'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
+                'fundamental_analysis_interpretation_assets',  # Tabela pośrednia
                 'fundamental_analysis_interpretation',
                 'technical_analysis_harmonic_patterns',
                 'fundamental_analysis_assets',  # Tabela pośrednia
