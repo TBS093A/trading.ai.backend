@@ -9,12 +9,11 @@ class AbstractService(ABC):
         pass
     
     @abstractmethod
-    async def sync_db(self, asset_id: int, limit: int = 100) -> List[int]:
+    async def sync_db(self, limit: int = 100) -> List[int]:
         """
         Synchronizuje wiadomości z bazą danych.
         
         Args:
-            asset_id: ID asset w bazie danych
             limit: Maksymalna liczba wiadomości do pobrania
             
         Returns:
