@@ -1,17 +1,5 @@
 from typing import Dict, Type
-from .tables.abstract_table import AbstractTable
-from .tables.assets_table import AssetsTable
-from .tables.users_table import UsersTable
-from .tables.user_secrets_table import UserSecretsTable
-from .tables.transactions_table import TransactionsTable
-from .tables.fundamental_analysis_table import FundamentalAnalysisTable
-from .tables.fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
-from .tables.technical_analysis_table import TechnicalAnalysisHarmonicPatternsTable
-from .tables.technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
-from .tables.general_interpretation_table import GeneralInterpretationTable
-from .tables.telegram_signal_channels_table import TelegramSignalChannelsTable
-from .tables.telegram_signals_table import TelegramSignalsTable
-from .tables.telegram_signal_interpretation_table import TelegramSignalInterpretationTable
+from .tables import *
 import asyncpg
 import logging
 
