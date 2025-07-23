@@ -10,6 +10,7 @@ class CryptoPanicService(AbstractService):
     """
     
     BASE_URL = "https://cryptopanic.com/api/developer/v2"
+    SERVICE_NAME = "CRYPTO_PANIC"
     
     def __init__(self,
                  api_key: str,
