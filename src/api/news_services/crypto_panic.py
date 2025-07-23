@@ -23,7 +23,7 @@ class CryptoPanicService(AbstractService):
         api_key: str,
         # public
         currencies: Optional[List[str]] = None,
-        public: bool = True,
+        public: bool = False,
         filter: Optional[str] = None,
         regions: Optional[List[str]] = None,
         kind: str = "all",
@@ -89,11 +89,11 @@ class CryptoPanicService(AbstractService):
         self.test_mode = test_mode
         # Inicjalizacja bazy danych
         if not self.test_mode:
-            self.db = self.db_facade.get_database_postgresql()
+            self.db = DatabaseFacade().get_database_postgresql()
         if self.test_mode:
-            self.db = DatabaseFacade.get_test_database_postgresql()
+            self.db = DatabaseFacade().get_test_database_postgresql()
     
-    def __get_news_request(self) -> Dict[str, Any]:
+    def _get_news_request(self) -> Dict[str, Any]:
         """
         Prywatna metoda do pobierania wiadomości kryptowalutowych z CryptoPanic API
         
@@ -154,6 +154,7 @@ class CryptoPanicService(AbstractService):
             Exception: Gdy wystąpi nieoczekiwany błąd
         """
         try:
+            logger.info(f"Pobieram wiadomości z CryptoPanic API")
             # Budowanie parametrów zapytania
             params = {}
             
@@ -212,7 +213,11 @@ class CryptoPanicService(AbstractService):
             response = requests.get(endpoint, params=params, timeout=30)
             response.raise_for_status()
             
-            return response.json()
+            result = response.json()
+            logger.info(f"Pobrano {len(result.get('results', []))} wiadomości z CryptoPanic API")
+            logger.info(f"Wynik: {result}")
+            
+            return result
             
         except requests.exceptions.RequestException as e:
             # Obsługa specyficznych kodów błędów HTTP
@@ -257,6 +262,8 @@ class CryptoPanicService(AbstractService):
         # Usuń białe znaki
         cleaned = cleaned.strip()
         
+        logger.debug(f"Wyczyszczono asset_code: '{asset_code}' -> '{cleaned}'")
+        
         return cleaned
     
     async def _find_and_add_missing_assets(self, asset_codes: List[str]) -> Dict[str, int]:
@@ -274,12 +281,16 @@ class CryptoPanicService(AbstractService):
             return {}
         
         try:
+            logger.info(f"Rozpoczynam wyszukiwanie {len(asset_codes)} assetów z giełdy")
+            
             # Pobierz wszystkie symbole z giełdy
             exchange_symbols = self.used_exchange._get_symbols()
             
             if 'symbols' not in exchange_symbols:
                 logger.warning("Nieprawidłowa odpowiedź z giełdy - brak pola 'symbols'")
                 return {}
+            
+            logger.info(f"Pobrano {len(exchange_symbols['symbols'])} symboli z giełdy")
             
             # Znajdź brakujące assety
             found_assets = {}
@@ -288,17 +299,23 @@ class CryptoPanicService(AbstractService):
             for asset_code in asset_codes:
                 # Wyczyść asset_code z niepożądanych znaków
                 cleaned_asset_code = self._clean_asset_code(asset_code)
+                logger.debug(f"Szukam assetu: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
                 
                 # Sprawdź czy asset już istnieje w bazie (używając wyczyszczonego kodu)
                 existing_asset = await assets_table.get_by_asset(cleaned_asset_code)
                 if existing_asset:
                     found_assets[asset_code] = existing_asset['id']
+                    logger.debug(f"Asset {cleaned_asset_code} już istnieje w bazie (ID: {existing_asset['id']})")
                     continue
                 
                 # Szukaj w symbolach giełdy (używając wyczyszczonego kodu)
                 asset_found_in_exchange = False
+                logger.debug(f"Szukam assetu {cleaned_asset_code} w {len(exchange_symbols['symbols'])} symbolach giełdy")
+                
                 for symbol_info in exchange_symbols['symbols']:
                     if symbol_info.get('baseAsset') == cleaned_asset_code:
+                        logger.debug(f"Znaleziono asset {cleaned_asset_code} w symbolu {symbol_info.get('symbol')}")
+                        
                         # Znajdź odpowiedni quote asset (najlepiej USDT, USDC, BTC)
                         quote_asset = symbol_info.get('quoteAsset', 'USDT')
                         
@@ -310,6 +327,7 @@ class CryptoPanicService(AbstractService):
                                 if (other_symbol.get('baseAsset') == cleaned_asset_code and 
                                     other_symbol.get('quoteAsset') in popular_quotes):
                                     quote_asset = other_symbol.get('quoteAsset')
+                                    logger.debug(f"Znaleziono lepszy quote asset: {quote_asset}")
                                     break
                         
                         # Dodaj asset do bazy danych
@@ -333,6 +351,7 @@ class CryptoPanicService(AbstractService):
                 
                 # Jeśli nie znaleziono w giełdzie, dodaj z domyślnym quote USDT
                 if not asset_found_in_exchange:
+                    logger.debug(f"Asset {cleaned_asset_code} nie został znaleziony w giełdzie - dodaję z domyślnym quote USDT")
                     try:
                         asset_id = await assets_table.create(
                             asset=cleaned_asset_code,
@@ -348,22 +367,31 @@ class CryptoPanicService(AbstractService):
                     except Exception as e:
                         logger.error(f"Błąd podczas dodawania assetu z domyślnym quote {cleaned_asset_code}: {e}")
             
+            logger.info(f"Zakończono wyszukiwanie assetów. Znaleziono {len(found_assets)} assetów: {found_assets}")
             return found_assets
             
         except Exception as e:
             logger.error(f"Błąd podczas wyszukiwania assetów z giełdy: {e}")
             return {}
     
-    async def sync_db(self) -> List[int]:
+    async def sync_db(self, limit: int = 100) -> List[int]:
         """
         Synchronizuje wiadomości z CryptoPanic API z bazą danych.
+        
+        Args:
+            limit: Maksymalna liczba wiadomości do pobrania (nie używane w CryptoPanic)
             
         Returns:
             List[int]: Lista ID zapisanych wiadomości
         """
+        logger.info(f"Rozpoczynam synchronizację CryptoPanic (limit: {limit})")
         try:
+            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+            
             # Pobierz wiadomości z API
-            news_data = self.__get_news_request()
+            news_data = self._get_news_request()
             
             if 'results' not in news_data:
                 logger.warning("Brak wyników w odpowiedzi API")
@@ -377,16 +405,29 @@ class CryptoPanicService(AbstractService):
             missing_assets = set()  # Zbierz wszystkie brakujące assety
             
             # Pierwszy przebieg - zbierz wszystkie brakujące assety
+            logger.info(f"Rozpoczynam przetwarzanie {len(news_data['results'])} wiadomości")
+            
             for news_item in news_data['results']:
                 instruments = news_item.get('instruments', [])
+                logger.debug(f"Przetwarzam wiadomość '{news_item.get('title', 'Unknown')}' z {len(instruments)} instrumentami")
+                
                 for instrument in instruments:
                     asset_code = instrument.get('code')
                     if asset_code:
                         # Wyczyść asset_code i sprawdź czy asset istnieje w bazie
                         cleaned_asset_code = self._clean_asset_code(asset_code)
+                        logger.debug(f"Sprawdzam asset: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
+                        
                         asset_result = await self.db.get_factory().get_assets_table().get_by_asset(cleaned_asset_code)
                         if not asset_result:
                             missing_assets.add(asset_code)  # Zachowaj oryginalny kod do mapowania
+                            logger.debug(f"Asset {cleaned_asset_code} nie istnieje w bazie - dodaję do brakujących")
+                        else:
+                            logger.debug(f"Asset {cleaned_asset_code} istnieje w bazie (ID: {asset_result['id']})")
+                    else:
+                        logger.debug(f"Brak kodu assetu w instrumencie: {instrument}")
+            
+            logger.info(f"Znaleziono {len(missing_assets)} brakujących assetów: {list(missing_assets)}")
             
             # Dodaj brakujące assety z giełdy
             if missing_assets and self.used_exchange:
@@ -395,6 +436,8 @@ class CryptoPanicService(AbstractService):
                 logger.info(f"Dodano {len(found_assets)} nowych assetów z giełdy")
             
             # Drugi przebieg - przetwórz wiadomości
+            logger.info(f"Rozpoczynam drugi przebieg - przetwarzanie wiadomości")
+            
             for news_item in news_data['results']:
                 try:
                     # Konwertuj published_at na timestamp
@@ -411,14 +454,25 @@ class CryptoPanicService(AbstractService):
                     instruments = news_item.get('instruments', [])
                     asset_ids = []
                     
+                    logger.debug(f"Przetwarzam wiadomość '{news_item.get('title', 'Unknown')}' z {len(instruments)} instrumentami")
+                    
                     for instrument in instruments:
                         asset_code = instrument.get('code')
                         if asset_code:
                             # Wyczyść asset_code i znajdź asset_id na podstawie wyczyszczonego kodu
                             cleaned_asset_code = self._clean_asset_code(asset_code)
+                            logger.debug(f"Szukam assetu: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
+                            
                             asset_result = await self.db.get_factory().get_assets_table().get_by_asset(cleaned_asset_code)
                             if asset_result:
                                 asset_ids.append(asset_result['id'])
+                                logger.debug(f"Znaleziono asset {cleaned_asset_code} (ID: {asset_result['id']})")
+                            else:
+                                logger.warning(f"Nie znaleziono assetu {cleaned_asset_code} w bazie danych")
+                        else:
+                            logger.debug(f"Brak kodu assetu w instrumencie: {instrument}")
+                    
+                    logger.debug(f"Wiadomość '{news_item.get('title', 'Unknown')}' ma {len(asset_ids)} powiązanych assetów: {asset_ids}")
                     
                     # Sprawdź czy wiadomość już istnieje
                     exists = await fundamental_analysis_table.check_analysis_exists(
@@ -450,6 +504,7 @@ class CryptoPanicService(AbstractService):
                     continue
             
             logger.info(f"Zapisano {len(saved_ids)} nowych wiadomości")
+            logger.info(f"Zakończono synchronizację CryptoPanic")
             return saved_ids
             
         except Exception as e:

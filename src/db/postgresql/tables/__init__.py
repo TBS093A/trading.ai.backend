@@ -14,7 +14,6 @@ from .telegram_signal_interpretation_table import TelegramSignalInterpretationTa
 
 __all__ = [
     'AbstractTable',
-    'DatabaseFactory',
     'AssetsTable',
     'UsersTable',
     'UserSecretsTable',
