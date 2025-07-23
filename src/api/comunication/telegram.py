@@ -60,16 +60,24 @@ class TelegramAPI:
         "in_seconds": 2.5
     }
 
-    def __init__(self):
+    def __init__(self,
+        bot_name: str,
+        bot_token: str,
+        api_phone: str,
+        api_id: str,
+        api_hash: str,
+        user_id: str,
+        bot_id: str
+    ):
 
-        self.__telethon_bot_name = os.environ.get("TELETHON_BOT_NAME", default="")
-        self.__telethon_bot_token = os.environ.get("TELETHON_BOT_TOKEN", default="")
-        self.__telethon_api_phone = os.environ.get("TELETHON_API_PHONE", default="")
-        self.__telethon_api_id = os.environ.get("TELETHON_API_ID", default="")
-        self.__telethon_api_hash = os.environ.get("TELETHON_API_HASH", default="")
+        self.__telethon_bot_name = bot_name
+        self.__telethon_bot_token = bot_token
+        self.__telethon_api_phone = api_phone
+        self.__telethon_api_id = api_id
+        self.__telethon_api_hash = api_hash
 
-        self.__user_id = int(os.environ.get("TELETHON_USER_ID", default=""))
-        self.__bot_id = int(os.environ.get("TELETHON_BOT_ID", default=""))
+        self.__user_id = user_id
+        self.__bot_id = bot_id
 
         self.__user_client = TelegramClient(
             "user_session",
