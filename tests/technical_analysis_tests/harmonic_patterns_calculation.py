@@ -12,13 +12,8 @@ import pandas as pd
 import numpy as np
 import mplfinance as mpf
 
-from api.telegram import TelegramAPI, TelegramAPIMock
-from api.openai import OpenaiAPI
-from api.binance import BinanceAPI
-from api.technical_analysis_facade import TechnicalAnalysisFacade as TA
-from api.postgresql import PostgreSQL
-from api.config import config
-from ai_analysis import TechnicalAnalysis as AITechnicalAnalysis
+from src import TechnicalAnalysisFacade as TA
+from src.config import config
 from .technical_analysis_tests_utils import get_test_data
 
 @unittest.skip("Skipping technical analysis tests")

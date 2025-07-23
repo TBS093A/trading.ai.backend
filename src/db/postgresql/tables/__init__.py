@@ -1,5 +1,4 @@
 from .abstract_table import AbstractTable
-from .database_factory import DatabaseFactory
 from .assets_table import AssetsTable
 from .users_table import UsersTable
 from .user_secrets_table import UserSecretsTable

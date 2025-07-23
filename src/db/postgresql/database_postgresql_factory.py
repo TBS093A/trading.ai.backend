@@ -1,23 +1,23 @@
 from typing import Dict, Type
-from .abstract_table import AbstractTable
-from .assets_table import AssetsTable
-from .users_table import UsersTable
-from .user_secrets_table import UserSecretsTable
-from .transactions_table import TransactionsTable
-from .fundamental_analysis_table import FundamentalAnalysisTable
-from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
-from .technical_analysis_table import TechnicalAnalysisHarmonicPatternsTable
-from .technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
-from .general_interpretation_table import GeneralInterpretationTable
-from .telegram_signal_channels_table import TelegramSignalChannelsTable
-from .telegram_signals_table import TelegramSignalsTable
-from .telegram_signal_interpretation_table import TelegramSignalInterpretationTable
+from .tables.abstract_table import AbstractTable
+from .tables.assets_table import AssetsTable
+from .tables.users_table import UsersTable
+from .tables.user_secrets_table import UserSecretsTable
+from .tables.transactions_table import TransactionsTable
+from .tables.fundamental_analysis_table import FundamentalAnalysisTable
+from .tables.fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
+from .tables.technical_analysis_table import TechnicalAnalysisHarmonicPatternsTable
+from .tables.technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
+from .tables.general_interpretation_table import GeneralInterpretationTable
+from .tables.telegram_signal_channels_table import TelegramSignalChannelsTable
+from .tables.telegram_signals_table import TelegramSignalsTable
+from .tables.telegram_signal_interpretation_table import TelegramSignalInterpretationTable
 import asyncpg
 import logging
 
 logger = logging.getLogger(__name__)
 
-class DatabaseFactory:
+class DatabasePostgreSQLFactory:
     """Fabryka do tworzenia obiektów tabel."""
     
     _table_classes: Dict[str, Type[AbstractTable]] = {

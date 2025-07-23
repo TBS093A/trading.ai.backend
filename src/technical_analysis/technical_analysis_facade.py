@@ -26,9 +26,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from .technical_analysis.technical_analysis import TechnicalAnalysis
-from .technical_analysis.draw_utils import DrawUtils
+from .technical_analysis import TechnicalAnalysis
 from .technical_analysis_factory import TechnicalAnalysisFactory
+from .draw_utils import DrawUtils
+
 
 class TechnicalAnalysisFacade:
 

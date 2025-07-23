@@ -3,11 +3,11 @@ import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
-from .db import DatabaseFactory
+from .database_postgresql_factory import DatabasePostgreSQLFactory
 
 logger = logging.getLogger(__name__)
 
-class PostgreSQL:
+class DatabasePostgreSQL:
     """Klasa do obsługi połączenia z bazą danych PostgreSQL."""
     
     def __init__(self, database_url: str):
@@ -23,7 +23,7 @@ class PostgreSQL:
                 logger.info("Utworzono pulę połączeń z bazą danych.")
                 
                 # Inicjalizuj fabrykę
-                self.factory = DatabaseFactory(self.pool)
+                self.factory = DatabasePostgreSQLFactory(self.pool)
                 
                 # Utwórz wszystkie tabele
                 await self._create_all_tables()
@@ -72,7 +72,7 @@ class PostgreSQL:
             raise ConnectionError("Pula połączeń z bazą danych jest niedostępna.")
         return self.pool
     
-    def get_factory(self) -> DatabaseFactory:
+    def get_factory(self) -> DatabasePostgreSQLFactory:
         """Zwraca fabrykę tabel."""
         if self.factory is None:
             raise RuntimeError("Fabryka nie została zainicjalizowana. Wywołaj init_db() najpierw.")
