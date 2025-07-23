@@ -50,6 +50,7 @@ class DatabasePostgreSQL:
                 'user_secrets',
                 'transactions',
                 'fundamental_analysis',
+                'fundamental_analysis_assets',  # Tabela pośrednia
                 'technical_analysis_harmonic_patterns',
                 'fundamental_analysis_interpretation',
                 'technical_analysis_interpretation',
@@ -101,6 +102,7 @@ class DatabasePostgreSQL:
                 'technical_analysis_interpretation',
                 'fundamental_analysis_interpretation',
                 'technical_analysis_harmonic_patterns',
+                'fundamental_analysis_assets',  # Tabela pośrednia
                 'fundamental_analysis',
                 'transactions',
                 'user_secrets',

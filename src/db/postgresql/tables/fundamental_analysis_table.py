@@ -25,26 +25,41 @@ class FundamentalAnalysisTable(AbstractTable):
         return """
         CREATE TABLE IF NOT EXISTS fundamental_analysis (
             id SERIAL PRIMARY KEY,
-            asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
             timestamp BIGINT NOT NULL,
             content JSONB NOT NULL,
             link TEXT,
             service TEXT NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+        
+        CREATE TABLE IF NOT EXISTS fundamental_analysis_assets (
+            id SERIAL PRIMARY KEY,
+            fundamental_analysis_id INTEGER NOT NULL REFERENCES fundamental_analysis(id) ON DELETE CASCADE,
+            asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            UNIQUE(fundamental_analysis_id, asset_id)
+        );
         """
     
-    async def create(self, asset_id: int, timestamp: int, content: Dict[str, Any], link: str = None, service: str = None) -> Optional[int]:
+    async def create(self, asset_ids: List[int], timestamp: int, content: Dict[str, Any], link: str = None, service: str = None) -> Optional[int]:
         """Tworzy nową analizę fundamentalną i zwraca jej ID."""
         try:
             # Konwertuj NumPy typy przed serializacją JSON
             converted_content = convert_numpy_types(content)
             
+            # Utwórz analizę fundamentalną
             analysis_id = await self.fetch_val(
-                "INSERT INTO fundamental_analysis (asset_id, timestamp, content, link, service) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                asset_id, timestamp, json.dumps(converted_content), link, service
+                "INSERT INTO fundamental_analysis (timestamp, content, link, service) VALUES ($1, $2, $3, $4) RETURNING id",
+                timestamp, json.dumps(converted_content), link, service
             )
-            logger.info(f"Utworzono analizę fundamentalną z ID: {analysis_id}")
+            
+            # Utwórz powiązania z assetami
+            for asset_id in asset_ids:
+                await self.execute_query(
+                    "INSERT INTO fundamental_analysis_assets (fundamental_analysis_id, asset_id) VALUES ($1, $2)",
+                    analysis_id, asset_id
+                )
+            
+            logger.info(f"Utworzono analizę fundamentalną z ID: {analysis_id} dla {len(asset_ids)} assetów")
             return analysis_id
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia analizy fundamentalnej: {e}", exc_info=True)
@@ -53,11 +68,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera analizę fundamentalną po ID."""
         result = await self.fetch_one("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.id = $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         """, record_id)
         
         if result:
@@ -71,11 +88,6 @@ class FundamentalAnalysisTable(AbstractTable):
             update_fields = []
             values = []
             param_count = 1
-            
-            if 'asset_id' in kwargs:
-                update_fields.append(f"asset_id = ${param_count}")
-                values.append(kwargs['asset_id'])
-                param_count += 1
             
             if 'timestamp' in kwargs:
                 update_fields.append(f"timestamp = ${param_count}")
@@ -125,10 +137,12 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie analizy fundamentalne z limitem i offsetem."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
         
@@ -140,11 +154,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne dla asset."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
-        WHERE fa.asset_id = $1
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        WHERE faa.asset_id = $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $2 OFFSET $3
         """, asset_id, limit, offset)
         
@@ -156,11 +172,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_service(self, service: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne z określonego serwisu."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.service = $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $2 OFFSET $3
         """, service, limit, offset)
         
@@ -172,11 +190,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_timestamp_range(self, start_timestamp: int, end_timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne z określonego zakresu czasowego."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.timestamp >= $1 AND fa.timestamp <= $2
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $3 OFFSET $4
         """, start_timestamp, end_timestamp, limit, offset)
         
@@ -188,11 +208,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_timestamp(self, timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne dla konkretnego timestamp."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.timestamp = $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $2 OFFSET $3
         """, timestamp, limit, offset)
         
@@ -204,11 +226,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_latest_by_asset_id(self, asset_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera najnowszą analizę fundamentalną dla asset."""
         result = await self.fetch_one("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
-        WHERE fa.asset_id = $1
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        WHERE faa.asset_id = $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.timestamp DESC
         LIMIT 1
         """, asset_id)
@@ -221,11 +245,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_timestamp_range_and_asset_id(self, start_timestamp: int, end_timestamp: int, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne z określonego zakresu czasowego i asset."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
-        WHERE fa.timestamp >= $1 AND fa.timestamp <= $2 AND fa.asset_id = $3
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        WHERE fa.timestamp >= $1 AND fa.timestamp <= $2 AND faa.asset_id = $3
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $4 OFFSET $5
         """, start_timestamp, end_timestamp, asset_id, limit, offset)
         
@@ -237,11 +263,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def get_by_timestamp_range_and_service(self, start_timestamp: int, end_timestamp: int, service: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne z określonego zakresu czasowego i serwisu."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.timestamp >= $1 AND fa.timestamp <= $2 AND fa.service = $3
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $4 OFFSET $5
         """, start_timestamp, end_timestamp, service, limit, offset)
         
@@ -253,11 +281,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def search_by_json_pattern(self, pattern: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje analizy fundamentalne po wzorcu w JSON."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.content::text ILIKE $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $2 OFFSET $3
         """, f"%{pattern}%", limit, offset)
         
@@ -269,11 +299,13 @@ class FundamentalAnalysisTable(AbstractTable):
     async def search_by_content(self, content: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje analizy fundamentalne po zawartości (w JSON)."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.content::text ILIKE $1
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $2 OFFSET $3
         """, f"%{content}%", limit, offset)
         
@@ -282,28 +314,68 @@ class FundamentalAnalysisTable(AbstractTable):
         
         return results
     
-    async def check_analysis_exists(self, asset_id: int, timestamp: int, service: str) -> bool:
+    async def check_analysis_exists(self, asset_ids: List[int], timestamp: int, service: str) -> bool:
         """Sprawdza czy analiza o podanych parametrach już istnieje."""
+        # Sprawdź czy istnieje analiza z tym samym timestamp i service
         result = await self.fetch_one("""
-        SELECT COUNT(*) as count
-        FROM fundamental_analysis 
-        WHERE asset_id = $1 AND timestamp = $2 AND service = $3
-        """, asset_id, timestamp, service)
+        SELECT fa.id
+        FROM fundamental_analysis fa
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        WHERE fa.timestamp = $1 AND fa.service = $2 AND faa.asset_id = ANY($3)
+        LIMIT 1
+        """, timestamp, service, asset_ids)
         
-        return result['count'] > 0 if result else False
+        return result is not None
     
     async def get_by_timestamp_and_service(self, timestamp: int, service: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne dla konkretnego timestamp i serwisu."""
         results = await self.fetch_all("""
-        SELECT fa.id, fa.asset_id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
-               a.asset, a.quote
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
         FROM fundamental_analysis fa
-        JOIN assets a ON fa.asset_id = a.id
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
         WHERE fa.timestamp = $1 AND fa.service = $2
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
         ORDER BY fa.id DESC LIMIT $3 OFFSET $4
         """, timestamp, service, limit, offset)
         
         for result in results:
             result['content'] = json.loads(result['content'])
         
-        return results 
+        return results
+    
+    async def add_asset_to_analysis(self, analysis_id: int, asset_id: int) -> bool:
+        """Dodaje asset do istniejącej analizy fundamentalnej."""
+        try:
+            await self.execute_query(
+                "INSERT INTO fundamental_analysis_assets (fundamental_analysis_id, asset_id) VALUES ($1, $2)",
+                analysis_id, asset_id
+            )
+            logger.info(f"Dodano asset {asset_id} do analizy {analysis_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas dodawania asset do analizy: {e}", exc_info=True)
+            return False
+    
+    async def remove_asset_from_analysis(self, analysis_id: int, asset_id: int) -> bool:
+        """Usuwa asset z analizy fundamentalnej."""
+        try:
+            await self.execute_query(
+                "DELETE FROM fundamental_analysis_assets WHERE fundamental_analysis_id = $1 AND asset_id = $2",
+                analysis_id, asset_id
+            )
+            logger.info(f"Usunięto asset {asset_id} z analizy {analysis_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas usuwania asset z analizy: {e}", exc_info=True)
+            return False
+    
+    async def get_analysis_assets(self, analysis_id: int) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie assety powiązane z analizą fundamentalną."""
+        return await self.fetch_all("""
+        SELECT a.id, a.asset, a.quote
+        FROM assets a
+        JOIN fundamental_analysis_assets faa ON a.id = faa.asset_id
+        WHERE faa.fundamental_analysis_id = $1
+        """, analysis_id) 

@@ -223,12 +223,9 @@ class CryptoPanicService(AbstractService):
         except Exception as e:
             raise Exception(f'Nieoczekiwany błąd: {str(e)}')
     
-    async def sync_db(self, asset_id: int) -> List[int]:
+    async def sync_db(self) -> List[int]:
         """
         Synchronizuje wiadomości z CryptoPanic API z bazą danych.
-        
-        Args:
-            asset_id: ID asset w bazie danych
             
         Returns:
             List[int]: Lista ID zapisanych wiadomości
@@ -259,9 +256,26 @@ class CryptoPanicService(AbstractService):
                         # Użyj aktualnego czasu jeśli brak published_at
                         timestamp = int(datetime.now().timestamp())
                     
+                    # Pobierz asset_id z instruments
+                    instruments = news_item.get('instruments', [])
+                    asset_ids = []
+                    
+                    for instrument in instruments:
+                        asset_code = instrument.get('code')
+                        if asset_code:
+                            # Znajdź asset_id na podstawie kodu
+                            asset_result = await self.db.get_factory().get_assets_table().get_by_asset(asset_code)
+                            if asset_result:
+                                asset_ids.append(asset_result['id'])
+                    
+                    # Jeśli nie znaleziono assetów, użyj domyślnego
+                    if not asset_ids:
+                        logger.warning(f"Nie znaleziono assetów dla wiadomości: {news_item.get('title', 'Unknown')}")
+                        continue
+                    
                     # Sprawdź czy wiadomość już istnieje
                     exists = await fundamental_analysis_table.check_analysis_exists(
-                        asset_id=asset_id,
+                        asset_ids=asset_ids,
                         timestamp=timestamp,
                         service=self.SERVICE_NAME
                     )
@@ -269,7 +283,7 @@ class CryptoPanicService(AbstractService):
                     if not exists:
                         # Zapisz wiadomość do bazy danych
                         analysis_id = await fundamental_analysis_table.create(
-                            asset_id=asset_id,
+                            asset_ids=asset_ids,
                             timestamp=timestamp,
                             content=news_item,  # Cały JSON jako content
                             link=news_item.get('url'),  # URL z results
