@@ -2,6 +2,12 @@ import requests
 from typing import Optional, Dict, Any, List
 from .abstract_service import AbstractService
 from ...config import config
+from ...db.database_facade import DatabaseFacade
+import json
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class CryptoPanicService(AbstractService):
@@ -13,22 +19,27 @@ class CryptoPanicService(AbstractService):
     SERVICE_NAME = "CRYPTO_PANIC"
     
     def __init__(self,
-                 api_key: str,
-                 currencies: Optional[List[str]] = None,
-                 public: bool = True,
-                 filter: Optional[str] = None,
-                 regions: Optional[List[str]] = None,
-                 kind: str = "all",
-                 following: bool = False,
-                 last_pull: Optional[str] = None,
-                 panic_period: Optional[str] = None,
-                 panic_sort: Optional[str] = None,
-                 size: int = 20,
-                 with_content: bool = False):
+        api_key: str,
+        # public
+        currencies: Optional[List[str]] = None,
+        public: bool = True,
+        filter: Optional[str] = None,
+        regions: Optional[List[str]] = None,
+        kind: str = "all",
+        # private
+        following: bool = False,
+        last_pull: Optional[str] = None,
+        panic_period: Optional[str] = None,
+        panic_sort: Optional[str] = None,
+        size: int = 20,
+        with_content: bool = False,
+        test_mode: bool = False
+    ):
         """
         Inicjalizacja serwisu CryptoPanic
         
         Args:
+            api_key (str): Klucz API (wymagany)
             public:
                 currencies: (opcjonalnie) Lista kodów walut do filtrowania:
                     (np. ['BTC', 'ETH'])
@@ -67,10 +78,16 @@ class CryptoPanicService(AbstractService):
         self.panic_sort = panic_sort
         self.size = min(max(size, 1), 500)  # Ograniczenie do 1-500
         self.with_content = with_content
+        self.test_mode = test_mode
+        # Inicjalizacja bazy danych
+        if not self.test_mode:
+            self.db = self.db_facade.get_database_postgresql()
+        if self.test_mode:
+            self.db = DatabaseFacade.get_test_database_postgresql()
     
-    def get_news(self) -> Dict[str, Any]:
+    def __get_news_request(self) -> Dict[str, Any]:
         """
-        Pobiera wiadomości kryptowalutowe z CryptoPanic API
+        Prywatna metoda do pobierania wiadomości kryptowalutowych z CryptoPanic API
         
         Returns:
             Dict[str, Any]: Słownik zawierający:
@@ -206,6 +223,78 @@ class CryptoPanicService(AbstractService):
         except Exception as e:
             raise Exception(f'Nieoczekiwany błąd: {str(e)}')
     
+    async def sync_db(self, asset_id: int) -> List[int]:
+        """
+        Synchronizuje wiadomości z CryptoPanic API z bazą danych.
+        
+        Args:
+            asset_id: ID asset w bazie danych
+            
+        Returns:
+            List[int]: Lista ID zapisanych wiadomości
+        """
+        try:
+            # Pobierz wiadomości z API
+            news_data = self.__get_news_request()
+            
+            if 'results' not in news_data:
+                logger.warning("Brak wyników w odpowiedzi API")
+                return []
+            
+            # Pobierz tabelę fundamental_analysis
+            factory = self.db.get_factory()
+            fundamental_analysis_table = factory.get_fundamental_analysis_table()
+            
+            saved_ids = []
+            
+            for news_item in news_data['results']
+                try:
+                    # Konwertuj published_at na timestamp
+                    published_at = news_item.get('published_at')
+                    if published_at:
+                        # Konwertuj ISO 8601 na Unix timestamp
+                        dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                        timestamp = int(dt.timestamp())
+                    else:
+                        # Użyj aktualnego czasu jeśli brak published_at
+                        timestamp = int(datetime.now().timestamp())
+                    
+                    # Sprawdź czy wiadomość już istnieje
+                    exists = await fundamental_analysis_table.check_analysis_exists(
+                        asset_id=asset_id,
+                        timestamp=timestamp,
+                        service=self.SERVICE_NAME
+                    )
+                    
+                    if not exists:
+                        # Zapisz wiadomość do bazy danych
+                        analysis_id = await fundamental_analysis_table.create(
+                            asset_id=asset_id,
+                            timestamp=timestamp,
+                            content=news_item,  # Cały JSON jako content
+                            link=news_item.get('url'),  # URL z results
+                            service=self.SERVICE_NAME
+                        )
+                        
+                        if analysis_id:
+                            saved_ids.append(analysis_id)
+                            logger.info(f"Zapisano wiadomość z ID: {analysis_id}")
+                        else:
+                            logger.error(f"Nie udało się zapisać wiadomości: {news_item.get('title', 'Unknown')}")
+                    else:
+                        logger.debug(f"Wiadomość już istnieje: {news_item.get('title', 'Unknown')}")
+                        
+                except Exception as e:
+                    logger.error(f"Błąd podczas przetwarzania wiadomości: {e}")
+                    continue
+            
+            logger.info(f"Zapisano {len(saved_ids)} nowych wiadomości")
+            return saved_ids
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas synchronizacji z bazą danych: {e}", exc_info=True)
+            return []
+    
     def get_news_by_id(self, news_id: int) -> Dict[str, Any]:
         """
         Pobiera konkretną wiadomość po ID
@@ -214,7 +303,7 @@ class CryptoPanicService(AbstractService):
             news_id (int): ID wiadomości
             
         Returns:
-            Dict[str, Any]: Obiekt wiadomości zawierający te same pola co w get_news(),
+            Dict[str, Any]: Obiekt wiadomości zawierający te same pola co w __get_news_request(),
                            ale bez paginacji (next, previous, results)
                            
         Raises:
