@@ -219,8 +219,7 @@ class BinanceAPI(
 
     def _get_symbols(
         self,
-        symbol: Optional[str] = None,
-        symbols: Optional[List[str]] = None,
+        asset_codes: Optional[List[str]] = None,
         permissions: Optional[Union[str, List[str]]] = None,
         show_permission_sets: bool = True,
         symbol_status: Optional[str] = None
@@ -238,77 +237,20 @@ class BinanceAPI(
         Returns:
             Dict zawierający informacje o giełdzie i symbolach zgodnie z dokumentacją Binance API v3:
 
-            {
-              "timezone": "UTC",
-              "serverTime": 1565246363776,
-              "rateLimits": [
                 {
-                  // These are defined in the `ENUM definitions` section under `Rate Limiters (rateLimitType)`.
-                  // All limits are optional
+                    "symbol": "BTCUSDT",
+                    "status": "TRADING",
+                    "base_asset": "BTC",
+                    "quote_asset": "USDT",
+                    "base_asset_precision": 8,
+                    "quote_asset_precision": 8,
+                    "base_commission_precision": 8,
+                    "quote_commission_precision": 8,
+                    "quote_amount_precision": 8,
+                    "quote_max_amount": 1000000000,
+                    "is_spot_trading_allowed": True,
+                    "is_margin_trading_allowed": True
                 }
-              ],
-              "exchangeFilters": [
-                // These are the defined filters in the `Filters` section.
-                // All filters are optional.
-              ],
-              "symbols": [
-                {
-                  "symbol": "ETHBTC",
-                  "status": "TRADING",
-                  "baseAsset": "ETH",
-                  "baseAssetPrecision": 8,
-                  "quoteAsset": "BTC",
-                  "quotePrecision": 8, // will be removed in future api versions (v4+)
-                  "quoteAssetPrecision": 8,
-                  "baseCommissionPrecision": 8,
-                  "quoteCommissionPrecision": 8,
-                  "orderTypes": [
-                    "LIMIT",
-                    "LIMIT_MAKER",
-                    "MARKET",
-                    "STOP_LOSS",
-                    "STOP_LOSS_LIMIT",
-                    "TAKE_PROFIT",
-                    "TAKE_PROFIT_LIMIT"
-                  ],
-                  "icebergAllowed": true,
-                  "ocoAllowed": true,
-                  "otoAllowed": true,
-                  "quoteOrderQtyMarketAllowed": true,
-                  "allowTrailingStop": false,
-                  "cancelReplaceAllowed":false,
-                  "amendAllowed":false,
-                  "isSpotTradingAllowed": true,
-                  "isMarginTradingAllowed": true,
-                  "filters": [
-                    // These are defined in the Filters section.
-                    // All filters are optional
-                  ],
-                  "permissions": [],
-                  "permissionSets": [
-                    [
-                      "SPOT",
-                      "MARGIN"
-                    ]
-                  ],
-                  "defaultSelfTradePreventionMode": "NONE",
-                  "allowedSelfTradePreventionModes": [
-                    "NONE"
-                  ]
-                }
-              ],
-              // Optional field. Present only when SOR is available.
-              // https://github.com/binance/binance-spot-api-docs/blob/master/faqs/sor_faq.md
-              "sors": [
-                {
-                  "baseAsset": "BTC",
-                  "symbols": [
-                    "BTCUSDT",
-                    "BTCUSDC"
-                  ]
-                }
-              ]
-            }
             
         Raises:
             Exception: Gdy wystąpi błąd podczas pobierania danych z API
@@ -317,12 +259,12 @@ class BinanceAPI(
             params = {}
             
             # Parametr symbol (pojedynczy)
-            if symbol:
-                params['symbol'] = symbol
+            if len(asset_codes) == 1:
+                params['symbol'] = asset_codes[0]
             
             # Parametr symbols (lista)
-            if symbols:
-                params['symbols'] = symbols
+            if len(asset_codes) > 1:
+                params['symbols'] = asset_codes
             
             # Parametr permissions (pojedynczy lub lista)
             if permissions:
@@ -338,8 +280,32 @@ class BinanceAPI(
             
             # Wywołanie API
             exchange_info = self.__spot_client.exchange_info(**params)
-            
-            return exchange_info
+
+            symbols_info = []
+    
+            for symbol_from_api in exchange_info["symbols"]:
+
+                
+                if asset_codes != None:
+                    if symbol_from_api["baseAsset"] not in asset_codes:
+                        continue
+                
+                symbols_info.append({
+                    "symbol": symbol_from_api["symbol"],
+                    "status": symbol_from_api["status"],
+                    "base_asset": symbol_from_api["baseAsset"],
+                    "quote_asset": symbol_from_api["quoteAsset"],
+                    "base_asset_precision": symbol_from_api["baseAssetPrecision"],
+                    "quote_asset_precision": symbol_from_api["quoteAssetPrecision"],
+                    "base_commission_precision": symbol_from_api["baseCommissionPrecision"],
+                    "quote_commission_precision": symbol_from_api["quoteCommissionPrecision"],
+                    "quote_amount_precision": symbol_from_api["quoteAmountPrecision"],
+                    "quote_max_amount": symbol_from_api["maxQuoteAmount"],
+                    "is_spot_trading_allowed": str(symbol_from_api["isSpotTradingAllowed"]).lower() == "true",
+                    "is_margin_trading_allowed": str(symbol_from_api["isMarginTradingAllowed"]).lower() == "true"
+                })
+                
+            return symbols_info
             
         except Exception as error:
             raise Exception(f"Błąd podczas pobierania informacji o symbolach: {error}")

@@ -6,6 +6,7 @@ from ...db.database_facade import DatabaseFacade
 import json
 import logging
 from datetime import datetime
+from ...api.exchanges.abstract_exchange import AbstractExchange
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ class CryptoPanicService(AbstractService):
         panic_sort: Optional[str] = None,
         size: int = 20,
         with_content: bool = False,
+        # additional
+        used_exchange: AbstractExchange = None,
         test_mode: bool = False
     ):
         """
@@ -65,6 +68,10 @@ class CryptoPanicService(AbstractService):
                     (1-500)
                 with_content: (opcjonalnie) Czy filtrować tylko wiadomości z pełną treścią:
                     (True, False)
+            used_exchange: (opcjonalnie) Giełda do pobierania symboli:
+                (Binance, Kucoin, etc.)
+            test_mode: (opcjonalnie) Czy uruchamiać w trybie testowym:
+                (True, False)
         """
         self.api_key = api_key
         self.currencies = currencies or []
