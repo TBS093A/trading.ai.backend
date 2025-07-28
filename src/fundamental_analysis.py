@@ -25,7 +25,7 @@ class FundamentalAnalysis:
         """
         self.test_mode = test_mode
         self.api_facade = ApiFacade()
-        self.news_services: List[AbstractService] = self.api_facade.get_news_services_apis()
+        self.news_services: List[AbstractService] = self.api_facade.get_fabric().get_news_services_apis()
         
         # Inicjalizacja bazy danych
         if not self.test_mode:

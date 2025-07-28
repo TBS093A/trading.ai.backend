@@ -241,15 +241,7 @@ class BinanceAPI(
                         "symbol": "BTCUSDT",
                         "status": "TRADING",
                         "base_asset": "BTC",
-                        "quote_asset": "USDT",
-                        "base_asset_precision": 8,
-                        "quote_asset_precision": 8,
-                        "base_commission_precision": 8,
-                        "quote_commission_precision": 8,
-                        "quote_amount_precision": 8,
-                        "quote_max_amount": 1000000000,
-                        "is_spot_trading_allowed": True,
-                        "is_margin_trading_allowed": True
+                        "quote_asset": "USDT"
                     }
                 ]
             
@@ -259,13 +251,14 @@ class BinanceAPI(
         try:
             params = {}
             
-            # Parametr symbol (pojedynczy)
-            if len(asset_codes) == 1:
-                params['symbol'] = asset_codes[0]
+            if asset_codes:
+                # Parametr symbol (pojedynczy)
+                if len(asset_codes) == 1:
+                    params['symbol'] = asset_codes[0]
             
-            # Parametr symbols (lista)
-            if len(asset_codes) > 1:
-                params['symbols'] = asset_codes
+                # Parametr symbols (lista)
+                if len(asset_codes) > 1:
+                    params['symbols'] = asset_codes
             
             # Parametr permissions (pojedynczy lub lista)
             if permissions:
@@ -295,15 +288,7 @@ class BinanceAPI(
                     "symbol": symbol_from_api["symbol"],
                     "status": symbol_from_api["status"],
                     "base_asset": symbol_from_api["baseAsset"],
-                    "quote_asset": symbol_from_api["quoteAsset"],
-                    "base_asset_precision": symbol_from_api["baseAssetPrecision"],
-                    "quote_asset_precision": symbol_from_api["quoteAssetPrecision"],
-                    "base_commission_precision": symbol_from_api["baseCommissionPrecision"],
-                    "quote_commission_precision": symbol_from_api["quoteCommissionPrecision"],
-                    "quote_amount_precision": symbol_from_api["quoteAmountPrecision"],
-                    "quote_max_amount": symbol_from_api["maxQuoteAmount"],
-                    "is_spot_trading_allowed": str(symbol_from_api["isSpotTradingAllowed"]).lower() == "true",
-                    "is_margin_trading_allowed": str(symbol_from_api["isMarginTradingAllowed"]).lower() == "true"
+                    "quote_asset": symbol_from_api["quoteAsset"]
                 })
                 
             return symbols_info

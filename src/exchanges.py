@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import List, Dict, Any, Optional
 from .api.exchanges.abstract import AbstractAPI
 from .api import ApiFacade
@@ -22,7 +23,7 @@ class Exchanges:
         """
         self.test_mode = test_mode
         self.api_facade = ApiFacade()
-        self.exchanges: List[AbstractAPI] = self.api_facade.get_exchanges_apis()
+        self.exchanges: List[AbstractAPI] = self.api_facade.get_fabric().get_exchanges_apis()
         
         # Inicjalizacja bazy danych
         if not self.test_mode:
@@ -71,16 +72,17 @@ class Exchanges:
             try:
                 logger.info(f"Pobieram symbole z giełdy: {exchange.__class__.__name__}")
                 symbols_data = exchange._get_symbols()
-                
-                if 'symbols' in symbols_data:
+
+                if len(symbols_data) > 0:
                     exchange_name = exchange.__class__.__name__
                     all_symbols[exchange_name] = symbols_data
-                    logger.info(f"Pobrano {len(symbols_data['symbols'])} symboli z {exchange_name}")
+                    logger.info(f"Pobrano {len(symbols_data)} symboli z {exchange_name}")
                 else:
                     logger.warning(f"Nieprawidłowa odpowiedź z giełdy {exchange.__class__.__name__} - brak pola 'symbols'")
                     
             except Exception as e:
                 logger.error(f"Błąd podczas pobierania symboli z giełdy {exchange.__class__.__name__}: {e}")
+                logger.error(traceback.format_exc())
         
         return all_symbols
     
@@ -104,7 +106,7 @@ class Exchanges:
             # Zbierz wszystkie unikalne assety ze wszystkich giełd
             all_assets = set()
             for exchange_name, exchange_data in all_exchange_symbols.items():
-                for symbol_info in exchange_data['symbols']:
+                for symbol_info in exchange_data:
                     base_asset = symbol_info.get('base_asset')
                     if base_asset:
                         all_assets.add(base_asset)
@@ -131,7 +133,7 @@ class Exchanges:
                 quote_asset = 'USDT'  # Domyślny quote asset
                 
                 for exchange_name, exchange_data in all_exchange_symbols.items():
-                    for symbol_info in exchange_data['symbols']:
+                    for symbol_info in exchange_data:
                         if symbol_info.get('base_asset') == cleaned_asset_code:
                             logger.debug(f"Znaleziono asset {cleaned_asset_code} w symbolu {symbol_info.get('symbol')} na giełdzie {exchange_name}")
                             
@@ -170,6 +172,7 @@ class Exchanges:
             
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji symboli z giełd: {e}")
+            logger.error(traceback.format_exc())
             return {}
     
     async def sync_assets(self) -> None:

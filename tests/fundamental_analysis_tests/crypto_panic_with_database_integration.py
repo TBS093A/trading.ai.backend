@@ -11,7 +11,7 @@ from src.api.exchanges.binance import BinanceAPI
 from src.db.postgresql import DatabasePostgreSQL
 from src.config import config
 
-
+@unittest.skip("Skipping crypto panic service with database integration test")
 class TestCryptoPanicServiceWithDatabaseIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()

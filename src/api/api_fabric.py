@@ -2,6 +2,7 @@ from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
 from .news_services import CryptoPanicService
+from typing import List
 
 from ..config import config
 
@@ -12,35 +13,35 @@ class ApiFabric:
 
     def get_telegram_api(self):
         return TelegramAPI(
-            *self.config.telethon_config()
+            **self.config.telethon_config
         )
     
     def get_openai_api(self):
         return OpenaiAPI(
-            *self.config.openai_config()
+            **self.config.openai_config
         )
     
     def get_binance_api(self):
         return BinanceAPI(
-            *self.config.binance_config()
+            **self.config.binance_config
         )
 
     def get_mexc_api(self):
         return MexcAPI(
-            *self.config.mexc_config()
+            **self.config.mexc_config
         )
 
     def get_kucoin_api(self):
         return KucoinAPI(
-            *self.config.kucoin_config()
+            **self.config.kucoin_config
         )
     
     def get_crypto_panic_api(self, currencies: List[str] = None):
-        config = self.config.crypto_panic_config()
+        config = self.config.crypto_panic_config.copy()
         if currencies is not None:
             config['currencies'] = currencies
         return CryptoPanicService(
-            *config,
+            **config,
         )
 
     def get_news_services_apis(self, currencies: List[str] = None):
