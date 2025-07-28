@@ -35,9 +35,30 @@ class ApiFabric:
             *self.config.kucoin_config()
         )
     
-    def get_crypto_panic_api(self):
+    def get_crypto_panic_api(self, currencies: List[str] = None):
+        config = self.config.crypto_panic_config()
+        if currencies is not None:
+            config['currencies'] = currencies
         return CryptoPanicService(
-            *self.config.crypto_panic_config()
+            *config,
         )
 
+    def get_news_services_apis(self, currencies: List[str] = None):
+        return [
+            self.get_crypto_panic_api(currencies)
+        ]
+
+    def get_exchanges_apis(self):
+        return [
+            self.get_binance_api(),
+            self.get_mexc_api(),
+            self.get_kucoin_api()
+        ]
+
+    def get_communication_apis(self):
+        return [
+            self.get_telegram_api()
+        ]
+    
+    
     

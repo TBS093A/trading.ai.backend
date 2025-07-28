@@ -223,7 +223,7 @@ class BinanceAPI(
         permissions: Optional[Union[str, List[str]]] = None,
         show_permission_sets: bool = True,
         symbol_status: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> List[Dict[str, any]]:
         """
         Pobiera informacje o symbolach giełdy Binance (exchange info).
         
@@ -235,22 +235,23 @@ class BinanceAPI(
             symbol_status: Status symbolu do filtrowania ("TRADING", "HALT", "BREAK")
             
         Returns:
-            Dict zawierający informacje o giełdzie i symbolach zgodnie z dokumentacją Binance API v3:
-
-                {
-                    "symbol": "BTCUSDT",
-                    "status": "TRADING",
-                    "base_asset": "BTC",
-                    "quote_asset": "USDT",
-                    "base_asset_precision": 8,
-                    "quote_asset_precision": 8,
-                    "base_commission_precision": 8,
-                    "quote_commission_precision": 8,
-                    "quote_amount_precision": 8,
-                    "quote_max_amount": 1000000000,
-                    "is_spot_trading_allowed": True,
-                    "is_margin_trading_allowed": True
-                }
+            List[dict[str, any]] zawierający informacje o giełdzie i symbolach zgodnie z dokumentacją Binance API v3:
+                [
+                    {
+                        "symbol": "BTCUSDT",
+                        "status": "TRADING",
+                        "base_asset": "BTC",
+                        "quote_asset": "USDT",
+                        "base_asset_precision": 8,
+                        "quote_asset_precision": 8,
+                        "base_commission_precision": 8,
+                        "quote_commission_precision": 8,
+                        "quote_amount_precision": 8,
+                        "quote_max_amount": 1000000000,
+                        "is_spot_trading_allowed": True,
+                        "is_margin_trading_allowed": True
+                    }
+                ]
             
         Raises:
             Exception: Gdy wystąpi błąd podczas pobierania danych z API

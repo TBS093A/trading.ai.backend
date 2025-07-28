@@ -1,22 +1,26 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class AbstractService(ABC):
     
     @abstractmethod
-    def _get_news_request(self) -> Dict[str, Any]:
-        """Metoda do pobierania wiadomości z API."""
+    def _get_news_request(self, currencies: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Metoda do pobierania wiadomości z API.
+        
+        Args:
+            currencies: Lista kodów walut do filtrowania:
+                (np. ['BTC', 'ETH'])
+        """
         pass
     
     @abstractmethod
-    async def sync_db(self, limit: int = 100) -> List[int]:
-        """
-        Synchronizuje wiadomości z bazą danych.
+    def parse_timestamp(self, item: Dict[str, Any]) -> int:
+        """Metoda do konwersji timestamp z API na timestamp w formie uznawanej przez bazę danych.
         
         Args:
-            limit: Maksymalna liczba wiadomości do pobrania
-            
+            item: Słownik zawierający wiadomość
+
         Returns:
-            List[int]: Lista ID zapisanych wiadomości
+            int: Timestamp
         """
         pass
