@@ -32,16 +32,6 @@ class FundamentalAnalysis:
             self.db = DatabaseFacade().get_database_postgresql()
         else:
             self.db = DatabaseFacade().get_test_database_postgresql()
-    
-    def add_news_service(self, service: AbstractService) -> None:
-        """
-        Dodaje serwis wiadomości do listy
-        
-        Args:
-            service: Serwis wiadomości implementujący AbstractService
-        """
-        self.news_services.append(service)
-        logger.info(f"Dodano serwis wiadomości: {service.__class__.__name__}")
 
     async def sync_news(self, limit: int = 100, offset: int = 0) -> None:
         """
@@ -87,7 +77,7 @@ class FundamentalAnalysis:
                             currencies=[asset['asset']]
                         )
 
-                        if 'results' not in news_data:
+                        if not news_data:
                             logger.warning(f"Brak wyników w odpowiedzi API dla serwisu {service_name} i assetu {asset['asset']}")
                             continue
                         
@@ -95,22 +85,15 @@ class FundamentalAnalysis:
                         saved_count = 0
                         updated_count = 0
                         skipped_count = 0
-                        logger.info(f"Rozpoczynam przetwarzanie {len(news_data['results'])} wiadomości z serwisu {service_name} dla assetu {asset['asset']}")
+                        logger.info(f"Rozpoczynam przetwarzanie {len(news_data)} wiadomości z serwisu {service_name} dla assetu {asset['asset']}")
                         
-                        for news_item in news_data['results']:
+                        for news_item in news_data:
                             try:
                                 # Sprawdź czy wiadomość już istnieje w bazie (po JSON content)
                                 fundamental_analysis_table = self.db.get_factory().get_fundamental_analysis_table()
                                 
-                                # Konwertuj published_at na timestamp
-                                published_at = news_item.get('published_at')
-                                if published_at:
-                                    # Konwertuj ISO 8601 na Unix timestamp
-                                    dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
-                                    timestamp = int(dt.timestamp())
-                                else:
-                                    # Użyj aktualnego czasu jeśli brak published_at
-                                    timestamp = int(datetime.now().timestamp())
+                                # Konwertuj timestamp z API na timestamp w formie uznawanej przez bazę danych
+                                timestamp = service.parse_timestamp(news_item)
                                 
                                 # Sprawdź czy wiadomość już istnieje dla tego timestamp i service
                                 existing_analyses = await fundamental_analysis_table.get_by_timestamp_and_service(
