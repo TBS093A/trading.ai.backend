@@ -1,6 +1,7 @@
 import unittest
-from news_services_tests import (
-    TestCryptoPanicServiceWithDatabaseIntegration
+from fundamental_analysis_tests import (
+    TestCryptoPanicServiceWithDatabaseIntegration,
+    TestFundamentalAnalysisIntegration
 )
 
 if __name__ == "__main__":

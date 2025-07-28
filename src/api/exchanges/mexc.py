@@ -266,3 +266,12 @@ class MexcAPI(
         except Exception as error:
             raise error
 
+    def _get_symbols(
+        self,
+        asset_codes: Optional[List[str]] = None,
+        permissions: Optional[Union[str, List[str]]] = None,
+        show_permission_sets: bool = True,
+        symbol_status: Optional[str] = None
+    ) -> List[Dict[str, any]]:
+        pass
+
