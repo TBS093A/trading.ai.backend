@@ -37,6 +37,13 @@ class AssetsTable(AbstractTable):
             record_id
         )
     
+    async def get_by_asset(self, asset: str) -> Optional[Dict[str, Any]]:
+        """Pobiera pierwszy asset po nazwie asset (bez względu na quote)."""
+        return await self.fetch_one(
+            "SELECT id, asset, quote FROM assets WHERE asset = $1 ORDER BY id LIMIT 1",
+            asset
+        )
+    
     async def get_by_asset_quote(self, asset: str, quote: str) -> Optional[Dict[str, Any]]:
         """Pobiera asset po asset i quote."""
         return await self.fetch_one(
