@@ -33,14 +33,14 @@ class FundamentalAnalysis:
         else:
             self.db = DatabaseFacade().get_test_database_postgresql()
 
-    async def sync_news(self, limit: int = 100, offset: int = 0) -> None:
+    async def sync_news(self, limit: int = 50, offset: int = 0) -> None:
         """
         Dodaje nowe newsy (na podstawie assetów z bazy danych) do bazy danych używając wzorca strategii na puli dostępnych serwisów.
 
         liczba limit definiuje ilość zapytań do pojedynczego serwisu. (max 100 aby nie wyczerpać darmowego limitu API)
 
         Args:
-            limit: liczba assetów z bazy - która będzie przetwarzana do pobrania newsów (domyślnie 100)
+            limit: liczba assetów z bazy - która będzie przetwarzana do pobrania newsów (domyślnie 50)
             offset: offset dla pobierania assetów z bazy (domyślnie 0)
 
         Returns:
