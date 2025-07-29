@@ -73,13 +73,15 @@ class Exchanges:
                 logger.info(f"Pobieram symbole z giełdy: {exchange.__class__.__name__}")
                 symbols_data = exchange._get_symbols()
 
-                if len(symbols_data) > 0:
-                    exchange_name = exchange.__class__.__name__
-                    all_symbols[exchange_name] = symbols_data
-                    logger.info(f"Pobrano {len(symbols_data)} symboli z {exchange_name}")
+                if symbols_data is not None:
+                    if len(symbols_data) > 0:
+                        exchange_name = exchange.__class__.__name__
+                        all_symbols[exchange_name] = symbols_data
+                        logger.info(f"Pobrano {len(symbols_data)} symboli z {exchange_name}")
+                    else:
+                        logger.warning(f"Nieprawidłowa odpowiedź z giełdy {exchange.__class__.__name__} - brak symboli")
                 else:
-                    logger.warning(f"Nieprawidłowa odpowiedź z giełdy {exchange.__class__.__name__} - brak pola 'symbols'")
-                    
+                    logger.warning(f"Nieprawidłowa odpowiedź z giełdy {exchange.__class__.__name__} - brak danych")
             except Exception as e:
                 logger.error(f"Błąd podczas pobierania symboli z giełdy {exchange.__class__.__name__}: {e}")
                 logger.error(traceback.format_exc())
@@ -113,29 +115,22 @@ class Exchanges:
             
             logger.info(f"Znaleziono {len(all_assets)} unikalnych assetów ze wszystkich giełd")
             
-            # Znajdź brakujące assety
-            found_assets = {}
-            assets_table = self.db.get_factory().get_assets_table()
+            # Przygotuj listę assetów do sprawdzenia w bazie danych
+            assets_to_check = []
+            asset_quote_mapping = {}  # Mapowanie asset_code -> quote_asset
             
             for asset_code in all_assets:
                 # Wyczyść asset_code z niepożądanych znaków
                 cleaned_asset_code = self._clean_asset_code(asset_code)
-                logger.debug(f"Sprawdzam asset: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
-                
-                # Sprawdź czy asset już istnieje w bazie (używając wyczyszczonego kodu)
-                existing_asset = await assets_table.get_by_asset(cleaned_asset_code)
-                if existing_asset:
-                    found_assets[asset_code] = existing_asset['id']
-                    logger.debug(f"Asset {cleaned_asset_code} już istnieje w bazie (ID: {existing_asset['id']})")
-                    continue
+                logger.debug(f"Przygotowuję asset: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
                 
                 # Znajdź najlepszy quote asset dla tego base assetu
                 quote_asset = 'USDT'  # Domyślny quote asset
                 
                 for exchange_name, exchange_data in all_exchange_symbols.items():
                     for symbol_info in exchange_data:
-                        if symbol_info.get('base_asset') == cleaned_asset_code:
-                            logger.debug(f"Znaleziono asset {cleaned_asset_code} w symbolu {symbol_info.get('symbol')} na giełdzie {exchange_name}")
+                        if symbol_info.get('base_asset') == asset_code:
+                            logger.debug(f"Znaleziono asset {asset_code} w symbolu {symbol_info.get('symbol')} na giełdzie {exchange_name}")
                             
                             # Znajdź odpowiedni quote asset (najlepiej USDT, USDC, BTC)
                             quote_asset = symbol_info.get('quote_asset', 'USDT')
@@ -144,30 +139,63 @@ class Exchanges:
                     if quote_asset != 'USDT':  # Znaleziono quote asset
                         break
                 
-                # Sprawdź ponownie czy asset nie został dodany w międzyczasie
-                existing_asset = await assets_table.get_by_asset(cleaned_asset_code)
-                if existing_asset:
-                    found_assets[asset_code] = existing_asset['id']
-                    logger.debug(f"Asset {cleaned_asset_code} został już dodany w międzyczasie (ID: {existing_asset['id']})")
-                    continue
+                # Dodaj do listy do sprawdzenia
+                assets_to_check.append({
+                    'asset': cleaned_asset_code,
+                    'quote': quote_asset
+                })
                 
-                # Dodaj asset do bazy danych
-                try:
-                    asset_id = await assets_table.create(
-                        asset=cleaned_asset_code,
-                        quote=quote_asset
-                    )
-                    
-                    if asset_id:
-                        found_assets[asset_code] = asset_id
-                        logger.info(f"Dodano nowy asset: {cleaned_asset_code}/{quote_asset} (ID: {asset_id})")
-                    else:
-                        logger.warning(f"Nie udało się dodać assetu: {cleaned_asset_code}")
-                        
-                except Exception as e:
-                    logger.error(f"Błąd podczas dodawania assetu {cleaned_asset_code}: {e}")
+                # Zapisz mapowanie dla późniejszego użycia
+                asset_quote_mapping[asset_code] = {
+                    'cleaned_asset': cleaned_asset_code,
+                    'quote': quote_asset
+                }
             
-            logger.info(f"Zakończono synchronizację symboli z giełd. Znaleziono {len(found_assets)} assetów: {found_assets}")
+            # Sprawdź które assety już istnieją w bazie danych
+            assets_table = self.db.get_factory().get_assets_table()
+            existing_assets = await assets_table.check_many(assets_to_check)
+            
+            logger.info(f"Sprawdzono {len(assets_to_check)} assetów, znaleziono {len(existing_assets)} istniejących")
+            
+            # Przygotuj listę assetów do utworzenia (tylko te, które nie istnieją)
+            assets_to_create = []
+            found_assets = {}
+            added_assets_to_db = 0
+            
+            for asset_code, asset_info in asset_quote_mapping.items():
+                cleaned_asset = asset_info['cleaned_asset']
+                quote_asset = asset_info['quote']
+                asset_key = f"{cleaned_asset}/{quote_asset}"
+                
+                if asset_key in existing_assets:
+                    # Asset już istnieje
+                    found_assets[asset_code] = existing_assets[asset_key]
+                    continue
+                else:
+                    # Asset nie istnieje - dodaj do listy do utworzenia
+                    assets_to_create.append({
+                        'asset': cleaned_asset,
+                        'quote': quote_asset
+                    })
+            
+            # Utwórz wszystkie brakujące assety jednym zapytaniem
+            if assets_to_create:
+                logger.info(f"Tworzę {len(assets_to_create)} nowych assetów jednym zapytaniem")
+                created_assets = await assets_table.create_many(assets_to_create)
+                
+                # Dodaj utworzone assety do słownika wyników
+                for asset_code, asset_info in asset_quote_mapping.items():
+                    cleaned_asset = asset_info['cleaned_asset']
+                    quote_asset = asset_info['quote']
+                    asset_key = f"{cleaned_asset}/{quote_asset}"
+                    
+                    if asset_key in created_assets:
+                        found_assets[asset_code] = created_assets[asset_key]
+                        added_assets_to_db += 1
+            else:
+                logger.info("Wszystkie assety już istnieją w bazie danych")
+            
+            logger.info(f"Zakończono synchronizację symboli z giełd. Znaleziono {len(found_assets)} assetów, dodano {added_assets_to_db} assetów do bazy danych")
             return found_assets
             
         except Exception as e:

@@ -1,6 +1,5 @@
 import unittest
 from fundamental_analysis_tests import (
-    TestCryptoPanicServiceWithDatabaseIntegration,
     TestFundamentalAnalysisIntegration
 )
 
