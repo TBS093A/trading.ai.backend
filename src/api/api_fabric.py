@@ -1,7 +1,7 @@
 from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
-from .news_services import CryptoPanicService, GNewsService
+from .news_services import CryptoPanicService, GNewsService, CoinDeskService
 from typing import List
 
 from ..config import config
@@ -46,10 +46,16 @@ class ApiFabric:
             **self.config.gnews_config,
         )
 
+    def get_coindesk_api(self):
+        return CoinDeskService(
+            **self.config.coindesk_config,
+        )
+
     def get_news_services_apis(self):
         return [
             self.get_crypto_panic_api(),
-            self.get_gnews_api()
+            self.get_gnews_api(),
+            self.get_coindesk_api()
         ]
 
     def get_exchanges_apis(self):

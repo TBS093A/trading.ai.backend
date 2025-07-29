@@ -35,6 +35,8 @@ class GNewsService(AbstractService):
         # Parametry dodatkowe
         expand: bool = False,
         in_: Optional[str] = None,
+        # Parametry dodatkowe
+        loop_waiting_time: int = 2
     ):
         """
         Inicjalizacja serwisu GNews
@@ -68,12 +70,12 @@ class GNewsService(AbstractService):
         self.topic = topic
         self.expand = expand
         self.in_ = in_
+        self.loop_waiting_time = loop_waiting_time
     
     def _get_news_request(
         self, 
         currencies: Optional[List[str]] = None, 
-        forex_currencies: Optional[List[str]] = None, 
-        loop_waiting_time: int = 2
+        forex_currencies: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
         Prywatna metoda do pobierania wiadomości z GNews API
@@ -189,7 +191,7 @@ class GNewsService(AbstractService):
                     params['q'] = "cryptocurrency OR bitcoin OR ethereum"
             
             # Wykonanie zapytania
-            time.sleep(loop_waiting_time)
+            time.sleep(self.loop_waiting_time)
             response = requests.get(endpoint, params=params, timeout=30)
             response.raise_for_status()
             
@@ -214,7 +216,7 @@ class GNewsService(AbstractService):
                 else:
                     raise requests.exceptions.RequestException(f'Błąd HTTP {status_code}: {str(e)}, text: {e.response.text}')
             else:
-                raise requests.exceptions.RequestException(f'Błąd połączenia z API: {str(e)}, traceback: {traceback.format_exc()}')
+                raise requests.exceptions.RequestException(f'Błąd połączenia z API: {str(e)}, text: {e.response.text}')
         except Exception as e:
             raise Exception(f'Nieoczekiwany błąd: {str(e)}, traceback: {traceback.format_exc()}')
 
