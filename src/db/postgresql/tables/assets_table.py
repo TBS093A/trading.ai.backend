@@ -30,6 +30,103 @@ class AssetsTable(AbstractTable):
             logger.error(f"Błąd podczas tworzenia asset: {e}", exc_info=True)
             return None
     
+    async def check_many(self, assets: List[Dict[str, str]]) -> Dict[str, int]:
+        """
+        Sprawdza które assety już istnieją w bazie danych.
+        
+        Args:
+            assets: Lista słowników z kluczami 'asset' i 'quote'
+            
+        Returns:
+            Dict[str, int]: Słownik mapujący asset na jego ID (tylko dla istniejących)
+        """
+        if not assets:
+            return {}
+        
+        try:
+            # Przygotuj parametry dla zapytania
+            asset_quotes = [(item['asset'], item['quote']) for item in assets]
+            
+            # Buduj zapytanie z wieloma warunkami OR
+            conditions = []
+            params = []
+            param_counter = 1
+            
+            for asset, quote in asset_quotes:
+                conditions.append(f"(asset = ${param_counter} AND quote = ${param_counter + 1})")
+                params.extend([asset, quote])
+                param_counter += 2
+            
+            query = f"""
+                SELECT id, asset, quote 
+                FROM assets 
+                WHERE {' OR '.join(conditions)}
+            """
+            
+            results = await self.fetch_all(query, *params)
+            
+            # Mapuj wyniki na słownik
+            existing_assets = {}
+            for result in results:
+                asset_key = f"{result['asset']}/{result['quote']}"
+                existing_assets[asset_key] = result['id']
+            
+            logger.info(f"Sprawdzono {len(assets)} assetów, znaleziono {len(existing_assets)} istniejących")
+            return existing_assets
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas sprawdzania wielu assetów: {e}", exc_info=True)
+            return {}
+    
+    async def create_many(self, assets: List[Dict[str, str]]) -> Dict[str, int]:
+        """
+        Tworzy wiele assetów jednym zapytaniem i zwraca ich ID.
+        
+        Args:
+            assets: Lista słowników z kluczami 'asset' i 'quote'
+            
+        Returns:
+            Dict[str, int]: Słownik mapujący asset na jego ID
+        """
+        if not assets:
+            return {}
+        
+        try:
+            # Przygotuj parametry dla zapytania
+            asset_quotes = [(item['asset'], item['quote']) for item in assets]
+            
+            # Buduj zapytanie INSERT z wieloma wartościami
+            values_list = []
+            params = []
+            param_counter = 1
+            
+            for asset, quote in asset_quotes:
+                values_list.append(f"(${param_counter}, ${param_counter + 1})")
+                params.extend([asset, quote])
+                param_counter += 2
+            
+            query = f"""
+                INSERT INTO assets (asset, quote) 
+                VALUES {', '.join(values_list)}
+                ON CONFLICT (asset, quote) DO NOTHING
+                RETURNING id, asset, quote
+            """
+            
+            results = await self.fetch_all(query, *params)
+            
+            # Mapuj wyniki na słownik
+            created_assets = {}
+            for result in results:
+                asset_key = f"{result['asset']}/{result['quote']}"
+                created_assets[asset_key] = result['id']
+            
+            logger.info(f"Utworzono {len(created_assets)} nowych assetów z {len(assets)} prób")
+            return created_assets
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas tworzenia wielu assetów: {e}", exc_info=True)
+            return {}
+    
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera asset po ID."""
         return await self.fetch_one(

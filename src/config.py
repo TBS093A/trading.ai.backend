@@ -45,6 +45,9 @@ class Config:
         
         # CryptoPanic API konfiguracja
         self.crypto_panic_api_key = os.getenv("CRYPTO_PANIC_API_KEY")
+
+        # GNews API konfiguracja
+        self.gnews_api_key = os.getenv("GNEWS_API_KEY")
         
         # OpenAI API konfiguracja
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -146,6 +149,13 @@ class Config:
         """Konfiguracja CryptoPanic API jako słownik"""
         return {
             'api_key': self.crypto_panic_api_key
+        }
+
+    @property
+    def gnews_config(self) -> dict:
+        """Konfiguracja GNews API jako słownik"""
+        return {
+            'api_key': self.gnews_api_key
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:

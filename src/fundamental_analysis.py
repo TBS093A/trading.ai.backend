@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime
 from .api.news_services.abstract_service import AbstractService
@@ -143,13 +144,13 @@ class FundamentalAnalysis:
                                         logger.error(f"Nie udało się utworzyć analizy dla assetu {asset['asset']}")
                                 
                             except Exception as e:
-                                logger.error(f"Błąd podczas przetwarzania wiadomości: {e}")
+                                logger.error(f"Błąd podczas przetwarzania wiadomości: {e}, traceback: {traceback.format_exc()}")
                                 continue
                         
                         logger.info(f"Serwis {service_name}, Asset {asset['asset']}: utworzono {saved_count} nowych analiz, zaktualizowano {updated_count}, pominięto {skipped_count}")
                     
                 except Exception as e:
-                    logger.error(f"Błąd podczas przetwarzania serwisu {service_name}: {e}")
+                    logger.error(f"Błąd podczas przetwarzania serwisu {service_name}: {e}, traceback: {traceback.format_exc()}")
                     continue
 
             logger.info("=== Synchronizacja wiadomości zakończona ===")

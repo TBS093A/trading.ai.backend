@@ -1,7 +1,7 @@
 from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
-from .news_services import CryptoPanicService
+from .news_services import CryptoPanicService, GNewsService
 from typing import List
 
 from ..config import config
@@ -36,17 +36,20 @@ class ApiFabric:
             **self.config.kucoin_config
         )
     
-    def get_crypto_panic_api(self, currencies: List[str] = None):
-        config = self.config.crypto_panic_config.copy()
-        if currencies is not None:
-            config['currencies'] = currencies
+    def get_crypto_panic_api(self):
         return CryptoPanicService(
-            **config,
+            **self.config.crypto_panic_config,
+        )
+        
+    def get_gnews_api(self):
+        return GNewsService(
+            **self.config.gnews_config,
         )
 
-    def get_news_services_apis(self, currencies: List[str] = None):
+    def get_news_services_apis(self):
         return [
-            self.get_crypto_panic_api(currencies)
+            self.get_crypto_panic_api(),
+            self.get_gnews_api()
         ]
 
     def get_exchanges_apis(self):
