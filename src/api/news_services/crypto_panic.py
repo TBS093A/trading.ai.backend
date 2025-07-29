@@ -253,17 +253,17 @@ class CryptoPanicService(AbstractService):
             if hasattr(e, 'response') and e.response is not None:
                 status_code = e.response.status_code
                 if status_code == 401:
-                    raise ValueError('Nieautoryzowany - Nieprawidłowy lub brakujący auth_token')
+                    raise ValueError(f'Nieautoryzowany - Nieprawidłowy lub brakujący auth_token: status_code: {status_code}, text: {e.response.text}')
                 elif status_code == 403:
-                    raise PermissionError('Zabroniony - Przekroczono limit zapytań lub brak dostępu do tego endpointu')
+                    raise PermissionError(f'Zabroniony - Przekroczono limit zapytań lub brak dostępu do tego endpointu: status_code: {status_code}, text: {e.response.text}')
                 elif status_code == 429:
-                    raise requests.exceptions.RequestException('Zbyt wiele zapytań - Jesteś ograniczony przez rate limiting')
+                    raise requests.exceptions.RequestException(f'Zbyt wiele zapytań - Jesteś ograniczony przez rate limiting: status_code: {status_code}, text: {e.response.text}')
                 elif status_code == 500:
-                    raise requests.exceptions.RequestException('Błąd wewnętrzny serwera - Spróbuj ponownie później')
+                    raise requests.exceptions.RequestException(f'Błąd wewnętrzny serwera - Spróbuj ponownie później: status_code: {status_code}, text: {e.response.text}')
                 else:
-                    raise requests.exceptions.RequestException(f'Błąd HTTP {status_code}: {str(e)}')
+                    raise requests.exceptions.RequestException(f'Błąd HTTP {status_code}: {str(e)}, text: {e.response.text}')
             else:
-                raise requests.exceptions.RequestException(f'Błąd połączenia z API: {str(e)}')
+                raise requests.exceptions.RequestException(f'Błąd połączenia z API: {str(e)}, text: {e.response.text}')
         except Exception as e:
             raise Exception(f'Nieoczekiwany błąd: {str(e)}')
 
