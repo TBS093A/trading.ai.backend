@@ -48,6 +48,9 @@ class Config:
 
         # GNews API konfiguracja
         self.gnews_api_key = os.getenv("GNEWS_API_KEY")
+
+        # CoinDesk API konfiguracja
+        self.coindesk_api_key = os.getenv("COINDESK_API_KEY")
         
         # OpenAI API konfiguracja
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -156,6 +159,13 @@ class Config:
         """Konfiguracja GNews API jako słownik"""
         return {
             'api_key': self.gnews_api_key
+        }
+    
+    @property
+    def coindesk_config(self) -> dict:
+        """Konfiguracja CoinDesk API jako słownik"""
+        return {
+            'api_key': self.coindesk_api_key
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
