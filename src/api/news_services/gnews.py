@@ -256,3 +256,19 @@ class GNewsService(AbstractService):
         else:
             # Użyj aktualnego czasu jeśli brak publishedAt
             return int(datetime.now().timestamp())
+    
+    def item_to_dict(self, item: str) -> Dict[str, Any]:
+        """
+        Konwertuje item z GNews API na słownik.
+        
+        Args:
+            item: String zawierający wiadomość z GNews API
+
+        Returns:
+            Dict[str, Any]: Słownik z danymi wiadomości
+        """
+        try:
+            return json.loads(item)
+        except json.JSONDecodeError:
+            logger.error(f"Błąd podczas parsowania JSON z GNews: {item}")
+            return {}

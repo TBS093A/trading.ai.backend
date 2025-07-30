@@ -24,3 +24,15 @@ class AbstractService(ABC):
             int: Timestamp
         """
         pass
+    
+    @abstractmethod
+    def item_to_dict(self, item: str) -> Dict[str, Any]:
+        """Metoda do konwersji item z API na słownik.
+        
+        Args:
+            item: String zawierający wiadomość z API
+
+        Returns:
+            Dict[str, Any]: Słownik z danymi wiadomości
+        """
+        pass
