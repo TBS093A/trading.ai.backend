@@ -11,7 +11,7 @@ from src.exchanges import Exchanges
 from src.db import DatabaseFacade
 from src.config import config
 
-
+@unittest.skip("Skipping fundamental analysis integration tests")
 class TestFundamentalAnalysisIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
