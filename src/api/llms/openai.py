@@ -11,52 +11,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Stałe
-TECHNICAL_ANALYSIS_PROMPT = """
-Przeanalizuj poniższą wiadomość i obrazek (jeśli jest dostępny) i zwróć wyniki w formacie JSON.
-Jeśli w wiadomości lub obrazku znajduje się analiza techniczna, zwróć ją w następującej strukturze:
-{
-    "asset": "NAZWA_ASSETU",
-    "quote": "WALUTA_BAZOWA",
-    "interval": "INTERWAŁ_CZASOWY",
-    "limit": "LICZBA_ŚWIECZEK",
-    "current_price": "CENA_BIEŻĄCA",
-    "spread": "SPREAD",
-    "harmonic_pattern": {
-        "name": "NAZWA_FORMACJI",
-        "historical_transactions": "LICZBA_TRANSAKCJI",
-        "targets": "TARGETY",
-        "stop_loss": "STOP_LOSS",
-        "direction": "KIERUNEK"
-    },
-    "macd": {
-        "position": "POZYCJA_LINII",
-        "histogram": "HISTOGRAM",
-        "interpretation": "INTERPRETACJA"
-    },
-    "obv": {
-        "trend": "TREND",
-        "interpretation": "INTERPRETACJA"
-    },
-    "divergences": {
-        "types": "TYPY",
-        "interpretation": "INTERPRETACJA"
-    },
-    "additional_observations": "OBSERWACJE",
-    "conclusions": {
-        "bullish_signals": "SYGNAŁY_BY CZE",
-        "bearish_signals": "SYGNAŁY_NIEDŹWIEDZIE"
-    },
-    "recommendation": {
-        "situation": "OPIS_SYTUACJI",
-        "key_levels": "POZIOMY",
-        "scenario": "SCENARIUSZ"
-    }
-}
-
-Wiadomość do analizy:
-{message}
-"""
 
 class OpenAIError(Exception):
     """Bazowa klasa wyjątków dla modułu OpenAI."""
@@ -79,7 +33,15 @@ class ImageProcessingError(OpenAIError):
     pass
 
 class OpenaiAPI:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, prompt: str):
+        """
+        Inicjalizacja klienta OpenAI.
+
+        Args:
+            api_key: Klucz API OpenAI
+            prompt: prompt do analizy - wymagane zmienne formatowane:
+                {message} - wiadomość do analizy
+        """
         try:
             if not api_key:
                 logger.error("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
@@ -87,6 +49,7 @@ class OpenaiAPI:
             self.__client = AsyncOpenAI(api_key=api_key)
         except Exception as e:
             logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
+        self.prompt = prompt
 
     async def check_api_status(self) -> Dict[str, Any]:
         """
@@ -161,10 +124,8 @@ class OpenaiAPI:
             # Konwersja bytes na base64
             base64_image = base64.b64encode(image_data).decode('utf-8')
             return {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_image}"
-                }
+                "type": "input_image",
+                "image_url": f"data:image/jpeg;base64,{base64_image}"
             }
         except Exception as e:
             logger.error(f"Błąd podczas przetwarzania obrazka: {e}", exc_info=True)
@@ -172,7 +133,7 @@ class OpenaiAPI:
 
     async def send_message(self, message: str, image: Optional[Union[str, bytes]] = None) -> Dict[str, str]:
         """
-        Wysyła wiadomość i opcjonalnie obrazek do API OpenAI w celu analizy technicznej.
+        Wysyła wiadomość i opcjonalnie obrazek do API OpenAI.
         
         Args:
             message: Wiadomość do analizy
@@ -188,10 +149,10 @@ class OpenaiAPI:
             ImageProcessingError: Gdy wystąpi błąd podczas przetwarzania obrazka
         """
         try:
-            prompt = TECHNICAL_ANALYSIS_PROMPT.format(message=message)
+            prompt = self.prompt.format(message=message)
             
             # Przygotuj zawartość wiadomości
-            content = [{"type": "text", "text": prompt}]
+            content = [{"type": "input_text", "text": prompt}]
             
             # Dodaj obrazek jeśli jest dostępny
             if image:
@@ -228,9 +189,9 @@ class OpenaiAPI:
 
         except Exception as e:
             error_message = str(e)
-            logger.error(f"Błąd API OpenAI podczas analizy: {e}", exc_info=True)
+            logger.error(f"Błąd API OpenAI podczas analizy: {e}, traceback: {traceback.format_exc()}", exc_info=True)
             
             if "429" in error_message or "quota" in error_message.lower() or "insufficient_quota" in error_message:
                 raise QuotaExceededError(f"Przekroczono limit zapytań API OpenAI: {error_message}")
             
-            raise AnalysisError(f"Błąd API OpenAI: {str(e)}")
+            raise AnalysisError(f"Błąd API OpenAI: {str(e)}, traceback: {traceback.format_exc()}")
