@@ -163,23 +163,35 @@ class OpenaiAPI:
                     logger.warning(f"Nie udało się przetworzyć obrazka: {e}")
                     # Kontynuuj bez obrazka
             
-            logger.info("Wysyłanie zapytania do OpenAI API")
-            response = await self.__client.chat.completions.create(
-                model="gpt-4-vision-preview",  # Model z obsługą wizji
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."
-                    },
-                    {
-                        "role": "user",
-                        "content": content
-                    }
-                ],
-                temperature=0.2,
-                max_tokens=4096,
-            )
-            
+                logger.info("Wysyłanie zapytania z obrazkiem do OpenAI API")
+                response = await self.__client.chat.completions.create(
+                    model="gpt-4-vision-preview",  # Model z obsługą wizji
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."
+                        },
+                        {
+                            "role": "user",
+                            "content": content
+                        }
+                    ],
+                    temperature=0.2,
+                    max_tokens=4096,
+                )
+            # Przetwarzanie bez obrazka
+            else:
+                logger.info("Wysyłanie zapytania do OpenAI API")
+                response = await self.__client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."},
+                        {"role": "user", "content": content}
+                    ],
+                    temperature=0.2,
+                    max_tokens=4096,
+                )
+
             result = {
                 "message": response.choices[0].message.content.strip()
             }
