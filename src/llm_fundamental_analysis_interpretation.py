@@ -46,7 +46,6 @@ class LlmFundamentalAnalysisInterpretation:
     ---
     
     📦 **Zwróć wynik w formacie JSON**:
-    ```json
     {{
       "asset": "{asset}",
       "quote": "{quote}",
@@ -68,9 +67,8 @@ class LlmFundamentalAnalysisInterpretation:
       "fundamental_rating": "🟡 Neutralna",
       "suggested_focus": "Obserwuj rozwój sytuacji wokół postępowania SEC. Możliwa korekta w krótkim terminie, ale fundamenty długoterminowe stabilne."
     }}
-    ```
     """
-    
+
     def __init__(self, test_mode: bool = False):
         """
         Inicjalizacja klasy LlmFundamentalAnalysisInterpretation
@@ -146,72 +144,33 @@ class LlmFundamentalAnalysisInterpretation:
         {content_str}
         """
     
-    async def _process_asset_interpretation(self, asset: Dict[str, Any], news_list: List[Dict[str, Any]], last_analysis: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _sort_news_by_timestamp(self, news_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Przetwarza interpretację LLM dla pojedynczego assetu.
+        Sortuje newsy według timestamp (od najstarszych do najnowszych).
         
         Args:
-            asset: Informacje o assecie
-            news_list: Lista newsów dla assetu
-            last_analysis: Ostatnia analiza fundamentalna dla assetu
+            news_list: Lista newsów do posortowania
             
         Returns:
-            Dict[str, Any]: Wynik interpretacji lub None w przypadku błędu
+            List[Dict[str, Any]]: Posortowana lista newsów
         """
-        try:
-            # Formatuj dane dla prompta
-            all_news = self._format_news_for_prompt(news_list)
-            last_fundamental_analysis = self._format_last_analysis_for_prompt(last_analysis)
+        return sorted(news_list, key=lambda x: x['timestamp'])
+
+    def _get_latest_timestamp_from_news(self, news_list: List[Dict[str, Any]]) -> int:
+        """
+        Pobiera najnowszy timestamp z listy newsów.
+        
+        Args:
+            news_list: Lista newsów
             
-            # Przygotuj prompt z danymi
-            analysis_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            prompt = self.CRYPTO_PROMPT.format(
-                asset=asset['asset'],
-                quote=asset['quote'],
-                analysis_date=analysis_date,
-                all_news=all_news,
-                last_fundamental_analysis=last_fundamental_analysis
-            )
-            
-            # Przetwórz przez wszystkie dostępne LLM'y
-            for llm_api in self.llm_apis:
-                try:
-                    logger.info(f"Przetwarzam interpretację LLM dla assetu {asset['asset']} przez {llm_api.__class__.__name__}")
-                    
-                    # Wyślij zapytanie do LLM'a
-                    response = await llm_api.send_message(prompt)
-                    
-                    if response and "message" in response:
-                        try:
-                            # Próbuj sparsować odpowiedź jako JSON
-                            interpretation_result = json.loads(response["message"])
-                            
-                            # Dodaj dodatkowe informacje
-                            interpretation_result['asset'] = asset['asset']
-                            interpretation_result['quote'] = asset['quote']
-                            interpretation_result['timestamp'] = int(datetime.now().timestamp())
-                            
-                            logger.info(f"Pomyślnie wygenerowano interpretację dla assetu {asset['asset']}")
-                            return interpretation_result
-                            
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Nie udało się sparsować odpowiedzi JSON dla assetu {asset['asset']}: {e}")
-                            continue
-                    else:
-                        logger.warning(f"Nieprawidłowa odpowiedź z LLM'a dla assetu {asset['asset']}")
-                        continue
-                        
-                except Exception as e:
-                    logger.error(f"Błąd podczas przetwarzania przez {llm_api.__class__.__name__} dla assetu {asset['asset']}: {e}")
-                    continue
-            
-            logger.error(f"Nie udało się wygenerować interpretacji LLM dla assetu {asset['asset']} przez żaden z dostępnych LLM'ów")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas przetwarzania interpretacji LLM dla assetu {asset['asset']}: {e}", exc_info=True)
-            return None
-    
+        Returns:
+            int: Najnowszy timestamp
+        """
+        if not news_list:
+            return int(datetime.now().timestamp())
+        
+        return max(news['timestamp'] for news in news_list)
+
     async def sync_crypto_fundamental_analysis_interpretations(self, limit: int = 50, offset: int = 0) -> None:
         """
         Synchronizuje interpretacje analiz fundamentalnych za pomocą LLM'ów.
@@ -265,34 +224,209 @@ class LlmFundamentalAnalysisInterpretation:
                     
                     logger.info(f"Znaleziono {len(news_without_interpretation)} newsów bez interpretacji LLM dla assetu {asset['asset']}")
                     
-                    # Pobierz ostatnią analizę fundamentalną dla tego assetu
-                    last_analysis = await fundamental_analysis_table.get_latest_by_asset_id(asset['id'])
+                    # Sortuj newsy według timestamp
+                    sorted_news = self._sort_news_by_timestamp(news_without_interpretation)
                     
-                    # Przetwórz interpretację
-                    interpretation_result = await self._process_asset_interpretation(
-                        asset=asset,
-                        news_list=news_without_interpretation,
-                        last_analysis=last_analysis
-                    )
+                    # Pobierz ostatnią interpretację z bazy danych dla tego assetu
+                    last_interpretation = await interpretation_table.get_latest_by_asset_id(asset['id'])
                     
-                    if interpretation_result:
-                        # Zapisz interpretację w bazie danych
-                        interpretation_id = await interpretation_table.create(
-                            asset_ids=[asset['id']],
-                            fundamental_analysis_ids=[news['id'] for news in news_without_interpretation],
-                            timestamp=interpretation_result['timestamp'],
-                            content=interpretation_result
-                        )
-                        
-                        if interpretation_id:
-                            processed_count += 1
-                            logger.info(f"Zapisano interpretację LLM {interpretation_id} dla assetu {asset['asset']}")
-                        else:
-                            error_count += 1
-                            logger.error(f"Nie udało się zapisać interpretacji LLM dla assetu {asset['asset']}")
+                    # Przetwórz przez wszystkie dostępne LLM'y
+                    for llm_api in self.llm_apis:
+                        try:
+                            logger.info(f"Przetwarzam interpretację LLM dla assetu {asset['asset']} przez {llm_api.__class__.__name__}")
+                            
+                            # Pobierz limit tokenów dla modelu
+                            tokens_limit = llm_api.MODELS.get("prompt", {}).get("limit", 30000)
+                            
+                            # Przygotuj podstawowy prompt bez newsów
+                            base_prompt = self.CRYPTO_PROMPT.format(
+                                asset=asset['asset'],
+                                quote=asset['quote'],
+                                analysis_date="{analysis_date}",
+                                all_news="{all_news}",
+                                last_fundamental_analysis="{last_fundamental_analysis}"
+                            )
+                            
+                            # Oblicz tokeny dla podstawowego promptu
+                            base_tokens = llm_api.calculate_tokens_from_prompt(base_prompt)
+                            available_tokens = tokens_limit - base_tokens
+                            
+                            if available_tokens <= 0:
+                                logger.warning(f"Podstawowy prompt przekracza limit tokenów ({base_tokens} > {tokens_limit}) dla assetu {asset['asset']}")
+                                continue
+                            
+                            # Przetwarzaj newsy w pętli, dodając kolejne do promptu
+                            current_news_batch = []
+                            current_last_analysis = last_interpretation
+                            iteration_count = 0
+                            
+                            for news in sorted_news:
+                                # Sprawdź czy można dodać ten news do aktualnej partii
+                                test_news_batch = current_news_batch + [news]
+                                test_news_content = self._format_news_for_prompt(test_news_batch)
+                                test_last_analysis = self._format_last_analysis_for_prompt(current_last_analysis)
+                                
+                                # Użyj najnowszego timestamp z tej partii newsów
+                                analysis_timestamp = self._get_latest_timestamp_from_news(test_news_batch)
+                                analysis_date = datetime.fromtimestamp(analysis_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                                
+                                # Przygotuj testowy prompt
+                                test_prompt = self.CRYPTO_PROMPT.format(
+                                    asset=asset['asset'],
+                                    quote=asset['quote'],
+                                    analysis_date=analysis_date,
+                                    all_news=test_news_content,
+                                    last_fundamental_analysis=test_last_analysis
+                                )
+                                
+                                # Sprawdź liczbę tokenów
+                                test_token_count = llm_api.calculate_tokens_from_prompt(test_prompt)
+                                
+                                if test_token_count <= tokens_limit:
+                                    # Można dodać ten news do aktualnej partii
+                                    current_news_batch = test_news_batch
+                                else:
+                                    # Nie można dodać - przetwórz aktualną partię
+                                    if current_news_batch:
+                                        iteration_count += 1
+                                        logger.info(f"Iteracja {iteration_count} dla assetu {asset['asset']}: {len(current_news_batch)} newsów, ~{llm_api.calculate_tokens_from_prompt(self._format_news_for_prompt(current_news_batch))} tokenów")
+                                        
+                                        # Formatuj dane dla prompta
+                                        all_news = self._format_news_for_prompt(current_news_batch)
+                                        last_fundamental_analysis = self._format_last_analysis_for_prompt(current_last_analysis)
+                                        
+                                        # Użyj najnowszego timestamp z tej partii newsów
+                                        analysis_timestamp = self._get_latest_timestamp_from_news(current_news_batch)
+                                        analysis_date = datetime.fromtimestamp(analysis_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                                        
+                                        # Przygotuj prompt z danymi
+                                        prompt = self.CRYPTO_PROMPT.format(
+                                            asset=asset['asset'],
+                                            quote=asset['quote'],
+                                            analysis_date=analysis_date,
+                                            all_news=all_news,
+                                            last_fundamental_analysis=last_fundamental_analysis
+                                        )
+                                        
+                                        # Sprawdź liczbę tokenów
+                                        token_count = llm_api.calculate_tokens_from_prompt(prompt)
+                                        logger.info(f"Iteracja {iteration_count}: {token_count} tokenów (limit: {tokens_limit})")
+                                        
+                                        # Wyślij zapytanie do LLM'a
+                                        response = await llm_api.send_message(prompt)
+                                        
+                                        if response and "message" in response:
+                                            try:
+                                                logger.info(f"Odpowiedź z LLM'a dla iteracji {iteration_count}: {response['message']}")
+                                                # Próbuj sparsować odpowiedź jako JSON
+                                                interpretation_result = json.loads(response["message"])
+                                                
+                                                # Dodaj dodatkowe informacje
+                                                interpretation_result['asset'] = asset['asset']
+                                                interpretation_result['quote'] = asset['quote']
+                                                interpretation_result['timestamp'] = analysis_timestamp
+                                                interpretation_result['iteration_number'] = iteration_count
+                                                
+                                                # Zapisz interpretację w bazie danych
+                                                interpretation_id = await interpretation_table.create(
+                                                    asset_ids=[asset['id']],
+                                                    fundamental_analysis_ids=[news['id'] for news in current_news_batch],
+                                                    timestamp=interpretation_result['timestamp'],
+                                                    content=interpretation_result
+                                                )
+                                                
+                                                if interpretation_id:
+                                                    processed_count += 1
+                                                    logger.info(f"Zapisano interpretację LLM {interpretation_id} dla iteracji {iteration_count} assetu {asset['asset']}")
+                                                    
+                                                    # Aktualizuj last_analysis dla następnej iteracji
+                                                    current_last_analysis = await interpretation_table.get_latest_by_asset_id(asset['id'])
+                                                else:
+                                                    error_count += 1
+                                                    logger.error(f"Nie udało się zapisać interpretacji LLM dla iteracji {iteration_count} assetu {asset['asset']}")
+                                                    break
+                                                
+                                            except json.JSONDecodeError as e:
+                                                logger.error(f"Nie udało się sparsować odpowiedzi JSON dla iteracji {iteration_count} assetu {asset['asset']}: {e}, traceback: {traceback.format_exc()}")
+                                                break
+                                        else:
+                                            logger.warning(f"Nieprawidłowa odpowiedź z LLM'a dla iteracji {iteration_count} assetu {asset['asset']}, traceback: {traceback.format_exc()}")
+                                            break
+                                    
+                                    # Rozpocznij nową partię z tym newsem
+                                    current_news_batch = [news]
+                            
+                            # Przetwórz ostatnią partię jeśli pozostała
+                            if current_news_batch:
+                                iteration_count += 1
+                                logger.info(f"Ostatnia iteracja {iteration_count} dla assetu {asset['asset']}: {len(current_news_batch)} newsów")
+                                
+                                # Formatuj dane dla prompta
+                                all_news = self._format_news_for_prompt(current_news_batch)
+                                last_fundamental_analysis = self._format_last_analysis_for_prompt(current_last_analysis)
+                                
+                                # Użyj najnowszego timestamp z tej partii newsów
+                                analysis_timestamp = self._get_latest_timestamp_from_news(current_news_batch)
+                                analysis_date = datetime.fromtimestamp(analysis_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                                
+                                # Przygotuj prompt z danymi
+                                prompt = self.CRYPTO_PROMPT.format(
+                                    asset=asset['asset'],
+                                    quote=asset['quote'],
+                                    analysis_date=analysis_date,
+                                    all_news=all_news,
+                                    last_fundamental_analysis=last_fundamental_analysis
+                                )
+                                
+                                # Sprawdź liczbę tokenów
+                                token_count = llm_api.calculate_tokens_from_prompt(prompt)
+                                logger.info(f"Ostatnia iteracja {iteration_count}: {token_count} tokenów (limit: {tokens_limit})")
+                                
+                                # Wyślij zapytanie do LLM'a
+                                response = await llm_api.send_message(prompt)
+                                
+                                if response and "message" in response:
+                                    try:
+                                        logger.info(f"Odpowiedź z LLM'a dla ostatniej iteracji {iteration_count}: {response['message']}")
+                                        # Próbuj sparsować odpowiedź jako JSON
+                                        interpretation_result = json.loads(response["message"])
+                                        
+                                        # Dodaj dodatkowe informacje
+                                        interpretation_result['asset'] = asset['asset']
+                                        interpretation_result['quote'] = asset['quote']
+                                        interpretation_result['timestamp'] = analysis_timestamp
+                                        interpretation_result['iteration_number'] = iteration_count
+                                        
+                                        # Zapisz interpretację w bazie danych
+                                        interpretation_id = await interpretation_table.create(
+                                            asset_ids=[asset['id']],
+                                            fundamental_analysis_ids=[news['id'] for news in current_news_batch],
+                                            timestamp=interpretation_result['timestamp'],
+                                            content=interpretation_result
+                                        )
+                                        
+                                        if interpretation_id:
+                                            processed_count += 1
+                                            logger.info(f"Zapisano ostatnią interpretację LLM {interpretation_id} dla iteracji {iteration_count} assetu {asset['asset']}")
+                                        else:
+                                            error_count += 1
+                                            logger.error(f"Nie udało się zapisać ostatniej interpretacji LLM dla iteracji {iteration_count} assetu {asset['asset']}")
+                                        
+                                    except json.JSONDecodeError as e:
+                                        logger.error(f"Nie udało się sparsować odpowiedzi JSON dla ostatniej iteracji {iteration_count} assetu {asset['asset']}: {e}, traceback: {traceback.format_exc()}")
+                                    else:
+                                        logger.warning(f"Nieprawidłowa odpowiedź z LLM'a dla ostatniej iteracji {iteration_count} assetu {asset['asset']}, traceback: {traceback.format_exc()}")
+                            
+                            # Jeśli dotarliśmy tutaj, oznacza to że przetworzenie się udało
+                            break
+                            
+                        except Exception as e:
+                            logger.error(f"Błąd podczas przetwarzania przez {llm_api.__class__.__name__} dla assetu {asset['asset']}: {e}, traceback: {traceback.format_exc()}")
+                            continue
                     else:
+                        # Jeśli dotarliśmy tutaj, oznacza to że żaden LLM nie przetworzył assetu
                         error_count += 1
-                        logger.error(f"Nie udało się wygenerować interpretacji LLM dla assetu {asset['asset']}")
+                        logger.error(f"Nie udało się wygenerować interpretacji LLM dla assetu {asset['asset']} przez żaden z dostępnych LLM'ów")
                 
                 except Exception as e:
                     error_count += 1
