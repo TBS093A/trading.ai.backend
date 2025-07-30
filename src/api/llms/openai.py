@@ -33,7 +33,7 @@ class ImageProcessingError(OpenAIError):
     pass
 
 class OpenaiAPI:
-    def __init__(self, api_key: str, prompt: str):
+    def __init__(self, api_key: str, prompt: str = "{message}"):
         """
         Inicjalizacja klienta OpenAI.
 
@@ -42,14 +42,16 @@ class OpenaiAPI:
             prompt: prompt do analizy - wymagane zmienne formatowane:
                 {message} - wiadomość do analizy
         """
+        if not api_key:
+            logger.error("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
+            raise APIKeyMissingError("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
+        
         try:
-            if not api_key:
-                logger.error("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
-                raise APIKeyMissingError("Brak klucza API OpenAI. Ustaw zmienną środowiskową OPENAI_API_KEY.")
             self.__client = AsyncOpenAI(api_key=api_key)
+            self.prompt = prompt
         except Exception as e:
             logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
-        self.prompt = prompt
+            raise APIKeyMissingError(f"Błąd inicjalizacji klienta OpenAI: {e}")
 
     async def check_api_status(self) -> Dict[str, Any]:
         """
@@ -151,42 +153,42 @@ class OpenaiAPI:
         try:
             prompt = self.prompt.format(message=message)
             
-            # Przygotuj zawartość wiadomości
-            content = [{"type": "input_text", "text": prompt}]
-            
             # Dodaj obrazek jeśli jest dostępny
             if image:
                 try:
-                    image_content = self.__prepare_image_content(image)
-                    content.append(image_content)
+                    # Przygotuj zawartość wiadomości z obrazkiem
+                    content = [
+                        {"type": "text", "text": prompt},
+                        self.__prepare_image_content(image)
+                    ]
+                    
+                    logger.info("Wysyłanie zapytania z obrazkiem do OpenAI API")
+                    response = await self.__client.chat.completions.create(
+                        model="gpt-4-vision-preview",  # Model z obsługą wizji
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."
+                            },
+                            {
+                                "role": "user",
+                                "content": content
+                            }
+                        ],
+                        temperature=0.2,
+                        max_tokens=4096,
+                    )
                 except ImageProcessingError as e:
-                    logger.warning(f"Nie udało się przetworzyć obrazka: {e}")
-                    # Kontynuuj bez obrazka
-            
-                logger.info("Wysyłanie zapytania z obrazkiem do OpenAI API")
-                response = await self.__client.chat.completions.create(
-                    model="gpt-4-vision-preview",  # Model z obsługą wizji
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."
-                        },
-                        {
-                            "role": "user",
-                            "content": content
-                        }
-                    ],
-                    temperature=0.2,
-                    max_tokens=4096,
-                )
+                    logger.error(f"Nie udało się przetworzyć obrazka: {e}, traceback: {traceback.format_exc()}")
+                    raise ImageProcessingError(f"Nie udało się przetworzyć obrazka: {e}, traceback: {traceback.format_exc()}")
             # Przetwarzanie bez obrazka
             else:
                 logger.info("Wysyłanie zapytania do OpenAI API")
                 response = await self.__client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",
                     messages=[
                         {"role": "system", "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."},
-                        {"role": "user", "content": content}
+                        {"role": "user", "content": prompt}
                     ],
                     temperature=0.2,
                     max_tokens=4096,
