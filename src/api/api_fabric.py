@@ -65,6 +65,11 @@ class ApiFabric:
             self.get_kucoin_api()
         ]
 
+    def get_llm_apis(self):
+        return [
+            self.get_openai_api()
+        ]
+
     def get_communication_apis(self):
         return [
             self.get_telegram_api()

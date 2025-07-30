@@ -378,4 +378,46 @@ class FundamentalAnalysisTable(AbstractTable):
         FROM assets a
         JOIN fundamental_analysis_assets faa ON a.id = faa.asset_id
         WHERE faa.fundamental_analysis_id = $1
-        """, analysis_id) 
+        """, analysis_id)
+    
+    async def get_analyses_without_interpretation(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie analizy fundamentalne, które nie mają interpretacji."""
+        results = await self.fetch_all("""
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
+        FROM fundamental_analysis fa
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        WHERE fa.id NOT IN (
+            SELECT DISTINCT faian.fundamental_analysis_id 
+            FROM fundamental_analysis_interpretation_analyses faian
+        )
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
+        ORDER BY fa.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+        
+        for result in results:
+            result['content'] = json.loads(result['content'])
+        
+        return results
+    
+    async def get_analyses_without_interpretation_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy fundamentalne bez interpretacji dla konkretnego asset."""
+        results = await self.fetch_all("""
+        SELECT fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at,
+               array_agg(a.asset) as assets, array_agg(a.quote) as quotes, array_agg(a.id) as asset_ids
+        FROM fundamental_analysis fa
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        JOIN assets a ON faa.asset_id = a.id
+        WHERE faa.asset_id = $1 AND fa.id NOT IN (
+            SELECT DISTINCT faian.fundamental_analysis_id 
+            FROM fundamental_analysis_interpretation_analyses faian
+        )
+        GROUP BY fa.id, fa.timestamp, fa.content, fa.link, fa.service, fa.created_at
+        ORDER BY fa.id DESC LIMIT $2 OFFSET $3
+        """, asset_id, limit, offset)
+        
+        for result in results:
+            result['content'] = json.loads(result['content'])
+        
+        return results 
