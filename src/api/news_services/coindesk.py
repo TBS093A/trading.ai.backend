@@ -201,4 +201,20 @@ class CoinDeskService(AbstractService):
             return int(published_on)
         else:
             # Użyj aktualnego czasu jeśli brak PUBLISHED_ON
-            return int(datetime.now().timestamp()) 
+            return int(datetime.now().timestamp())
+    
+    def item_to_dict(self, item: str) -> Dict[str, Any]:
+        """
+        Konwertuje item z CoinDesk API na słownik.
+        
+        Args:
+            item: String zawierający wiadomość z CoinDesk API
+
+        Returns:
+            Dict[str, Any]: Słownik z danymi wiadomości
+        """
+        try:
+            return json.loads(item)
+        except json.JSONDecodeError:
+            logger.error(f"Błąd podczas parsowania JSON z CoinDesk: {item}")
+            return {} 

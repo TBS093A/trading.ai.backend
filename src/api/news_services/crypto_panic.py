@@ -286,3 +286,19 @@ class CryptoPanicService(AbstractService):
         else:
             # Użyj aktualnego czasu jeśli brak published_at
             return int(datetime.now().timestamp())
+    
+    def item_to_dict(self, item: str) -> Dict[str, Any]:
+        """
+        Konwertuje item z CryptoPanic API na słownik.
+        
+        Args:
+            item: String zawierający wiadomość z CryptoPanic API
+
+        Returns:
+            Dict[str, Any]: Słownik z danymi wiadomości
+        """
+        try:
+            return json.loads(item)
+        except json.JSONDecodeError:
+            logger.error(f"Błąd podczas parsowania JSON z CryptoPanic: {item}")
+            return {}
