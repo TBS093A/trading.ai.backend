@@ -46,6 +46,7 @@ class LlmFundamentalAnalysisInterpretation:
     ---
     
     📦 **Zwróć wynik w formacie JSON**:
+    ```json
     {{
       "asset": "{asset}",
       "quote": "{quote}",
@@ -67,6 +68,7 @@ class LlmFundamentalAnalysisInterpretation:
       "fundamental_rating": "🟡 Neutralna",
       "suggested_focus": "Obserwuj rozwój sytuacji wokół postępowania SEC. Możliwa korekta w krótkim terminie, ale fundamenty długoterminowe stabilne."
     }}
+    ```
     """
 
     def __init__(self, test_mode: bool = False):
@@ -155,6 +157,42 @@ class LlmFundamentalAnalysisInterpretation:
             List[Dict[str, Any]]: Posortowana lista newsów
         """
         return sorted(news_list, key=lambda x: x['timestamp'])
+
+    def _extract_json_from_response(self, response_text: str) -> str:
+        """
+        Wyciąga JSON z odpowiedzi LLM, która może być otoczona backticks.
+        
+        Args:
+            response_text: Odpowiedź z LLM
+            
+        Returns:
+            str: Wyciągnięty JSON jako string
+        """
+        # Usuń białe znaki z początku i końca
+        response_text = response_text.strip()
+        
+        # Sprawdź czy odpowiedź zaczyna się od ```json
+        if response_text.startswith('```json'):
+            # Znajdź koniec bloku kodu
+            end_marker = '```'
+            start_pos = response_text.find('```json') + 7  # 7 to długość '```json'
+            end_pos = response_text.rfind(end_marker)
+            
+            if end_pos > start_pos:
+                return response_text[start_pos:end_pos].strip()
+        
+        # Sprawdź czy odpowiedź zaczyna się od ```
+        elif response_text.startswith('```'):
+            # Znajdź koniec bloku kodu
+            end_marker = '```'
+            start_pos = response_text.find('```') + 3  # 3 to długość '```'
+            end_pos = response_text.rfind(end_marker)
+            
+            if end_pos > start_pos:
+                return response_text[start_pos:end_pos].strip()
+        
+        # Jeśli nie ma backticks, zwróć całą odpowiedź
+        return response_text
 
     def _get_latest_timestamp_from_news(self, news_list: List[Dict[str, Any]]) -> int:
         """
@@ -319,7 +357,7 @@ class LlmFundamentalAnalysisInterpretation:
                                             try:
                                                 logger.info(f"Odpowiedź z LLM'a dla iteracji {iteration_count}: {response['message']}")
                                                 # Próbuj sparsować odpowiedź jako JSON
-                                                interpretation_result = json.loads(response["message"])
+                                                interpretation_result = json.loads(self._extract_json_from_response(response["message"]))
                                                 
                                                 # Dodaj dodatkowe informacje
                                                 interpretation_result['asset'] = asset['asset']
@@ -389,7 +427,7 @@ class LlmFundamentalAnalysisInterpretation:
                                     try:
                                         logger.info(f"Odpowiedź z LLM'a dla ostatniej iteracji {iteration_count}: {response['message']}")
                                         # Próbuj sparsować odpowiedź jako JSON
-                                        interpretation_result = json.loads(response["message"])
+                                        interpretation_result = json.loads(self._extract_json_from_response(response["message"]))
                                         
                                         # Dodaj dodatkowe informacje
                                         interpretation_result['asset'] = asset['asset']
