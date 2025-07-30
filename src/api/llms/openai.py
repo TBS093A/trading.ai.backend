@@ -2,6 +2,7 @@ import os
 import logging
 import traceback
 import base64
+import tiktoken
 from typing import Optional, Dict, Any, List, Union
 from openai import AsyncOpenAI
 
@@ -33,6 +34,22 @@ class ImageProcessingError(OpenAIError):
     pass
 
 class OpenaiAPI:
+
+    MODELS = {
+        "prompt": {
+            "model": "gpt-4o",
+            "temperature": 0.2,
+            "limit": 30000,
+            "max_tokens": 4096
+        },
+        "vision": {
+            "model": "gpt-4-vision-preview",
+            "temperature": 0.2,
+            "limit": 100000,
+            "max_tokens": 4096
+        }
+    }
+
     def __init__(self, api_key: str, prompt: str = "{message}"):
         """
         Inicjalizacja klienta OpenAI.
@@ -52,6 +69,27 @@ class OpenaiAPI:
         except Exception as e:
             logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
             raise APIKeyMissingError(f"Błąd inicjalizacji klienta OpenAI: {e}")
+
+    def calculate_tokens_from_prompt(self, prompt: str, model: str = "gpt-4o") -> int:
+        """
+        Oblicza liczbę tokenów w promptcie dla określonego modelu.
+        
+        Args:
+            prompt: Tekst do analizy
+            model: Model OpenAI do obliczania tokenów (domyślnie gpt-4o)
+            
+        Returns:
+            int: Liczba tokenów w promptcie
+        """
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+            token_count = len(encoding.encode(prompt))
+            logger.debug(f"Obliczono {token_count} tokenów dla promptu (model: {model})")
+            return token_count
+        except Exception as e:
+            logger.warning(f"Błąd podczas obliczania tokenów: {e}")
+            # Fallback - przybliżone obliczenie (1 token ≈ 4 znaki)
+            return len(prompt) // 4
 
     async def check_api_status(self) -> Dict[str, Any]:
         """
@@ -153,6 +191,10 @@ class OpenaiAPI:
         try:
             prompt = self.prompt.format(message=message)
             
+            # Oblicz liczbę tokenów przed wysłaniem zapytania
+            token_count = self.calculate_tokens_from_prompt(prompt, self.MODELS["prompt"]["model"])
+            logger.info(f"Prompt zawiera {token_count} tokenów")
+            
             # Dodaj obrazek jeśli jest dostępny
             if image:
                 try:
@@ -162,9 +204,13 @@ class OpenaiAPI:
                         self.__prepare_image_content(image)
                     ]
                     
+                    # Dla obrazków używamy modelu vision, więc obliczamy tokeny dla gpt-4-vision
+                    vision_token_count = self.calculate_tokens_from_prompt(prompt, self.MODELS["vision"]["model"])
+                    logger.info(f"Prompt z obrazkiem zawiera {vision_token_count} tokenów (model: {self.MODELS['vision']['model']})")
+                    
                     logger.info("Wysyłanie zapytania z obrazkiem do OpenAI API")
                     response = await self.__client.chat.completions.create(
-                        model="gpt-4-vision-preview",  # Model z obsługą wizji
+                        model=self.MODELS["vision"]["model"],  # Model z obsługą wizji
                         messages=[
                             {
                                 "role": "system",
@@ -175,8 +221,8 @@ class OpenaiAPI:
                                 "content": content
                             }
                         ],
-                        temperature=0.2,
-                        max_tokens=4096,
+                        temperature=self.MODELS["vision"]["temperature"],
+                        max_tokens=self.MODELS["vision"]["max_tokens"],
                     )
                 except ImageProcessingError as e:
                     logger.error(f"Nie udało się przetworzyć obrazka: {e}, traceback: {traceback.format_exc()}")
@@ -185,20 +231,23 @@ class OpenaiAPI:
             else:
                 logger.info("Wysyłanie zapytania do OpenAI API")
                 response = await self.__client.chat.completions.create(
-                    model="gpt-4o",
+                    model=self.MODELS["prompt"]["model"],
                     messages=[
                         {"role": "system", "content": "Jesteś ekspertem w analizie technicznej rynków kryptowalut."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.2,
-                    max_tokens=4096,
+                    temperature=self.MODELS["prompt"]["temperature"],
+                    max_tokens=self.MODELS["prompt"]["max_tokens"],
                 )
 
             result = {
-                "message": response.choices[0].message.content.strip()
+                "message": response.choices[0].message.content.strip(),
+                "input_tokens": token_count,
+                "output_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None,
+                "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None
             }
             
-            logger.info("Pomyślnie wygenerowano analizę techniczną za pomocą OpenAI")
+            logger.info(f"Pomyślnie wygenerowano analizę techniczną za pomocą OpenAI. Tokeny: wejściowe={token_count}, wyjściowe={result['output_tokens']}, łącznie={result['total_tokens']}")
             return result
 
         except Exception as e:
