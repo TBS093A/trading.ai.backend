@@ -259,4 +259,32 @@ class AssetsTable(AbstractTable):
             
         except Exception as e:
             logger.error(f"Błąd podczas pobierania assetów z nowymi analizami: {e}", exc_info=True)
+            return []
+    
+    async def get_assets_without_harmonic_patterns(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Pobiera wszystkie assety które nie mają żadnych analiz technicznych harmonic patterns.
+        
+        Args:
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista assetów bez analiz technicznych harmonic patterns
+        """
+        try:
+            results = await self.fetch_all("""
+                SELECT a.id, a.asset, a.quote
+                FROM assets a
+                LEFT JOIN technical_analysis_harmonic_patterns ta ON a.id = ta.asset_id
+                WHERE ta.asset_id IS NULL
+                ORDER BY a.asset, a.quote
+                LIMIT $1 OFFSET $2
+            """, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} assetów bez analiz technicznych harmonic patterns")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania assetów bez analiz: {e}", exc_info=True)
             return [] 
