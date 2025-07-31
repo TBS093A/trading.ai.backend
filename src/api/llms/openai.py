@@ -164,20 +164,51 @@ class OpenaiAPI:
             # Konwersja bytes na base64
             base64_image = base64.b64encode(image_data).decode('utf-8')
             return {
-                "type": "input_image",
-                "image_url": f"data:image/jpeg;base64,{base64_image}"
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
             }
         except Exception as e:
             logger.error(f"Błąd podczas przetwarzania obrazka: {e}", exc_info=True)
             raise ImageProcessingError(f"Nie udało się przetworzyć obrazka: {str(e)}")
 
-    async def send_message(self, message: str, image: Optional[Union[str, bytes]] = None) -> Dict[str, str]:
+    def __prepare_images_content(self, images: List[Union[str, bytes]]) -> List[Dict[str, Any]]:
         """
-        Wysyła wiadomość i opcjonalnie obrazek do API OpenAI.
+        Przygotowuje listę obrazków do wysłania do API OpenAI.
+        
+        Args:
+            images: Lista danych obrazków (ścieżki do plików, base64 stringi lub bytes)
+            
+        Returns:
+            Lista słowników z danymi obrazków w formacie wymaganym przez API
+            
+        Raises:
+            ImageProcessingError: Gdy wystąpi błąd podczas przetwarzania obrazków
+        """
+        try:
+            prepared_images = []
+            for i, image_data in enumerate(images):
+                try:
+                    prepared_image = self.__prepare_image_content(image_data)
+                    prepared_images.append(prepared_image)
+                    logger.debug(f"Przygotowano obrazek {i+1}/{len(images)}")
+                except ImageProcessingError as e:
+                    logger.error(f"Błąd podczas przetwarzania obrazka {i+1}: {e}")
+                    raise ImageProcessingError(f"Błąd podczas przetwarzania obrazka {i+1}: {e}")
+            
+            logger.info(f"Pomyślnie przygotowano {len(prepared_images)} obrazków")
+            return prepared_images
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas przygotowywania obrazków: {e}", exc_info=True)
+            raise ImageProcessingError(f"Nie udało się przygotować obrazków: {str(e)}")
+
+    async def send_message(self, message: str, images: Optional[List[Union[str, bytes]]] = None) -> Dict[str, str]:
+        """
+        Wysyła wiadomość i opcjonalnie listę obrazków do API OpenAI.
         
         Args:
             message: Wiadomość do analizy
-            image: Opcjonalne dane obrazka (ścieżka do pliku, base64 string lub bytes)
+            images: Opcjonalna lista danych obrazków (ścieżki do plików, base64 stringi lub bytes)
             
         Returns:
             Słownik zawierający odpowiedź z API
@@ -186,7 +217,7 @@ class OpenaiAPI:
             APIKeyMissingError: Gdy brak klucza API OpenAI
             QuotaExceededError: Gdy przekroczono limit zapytań API
             AnalysisError: Przy innych błędach API OpenAI
-            ImageProcessingError: Gdy wystąpi błąd podczas przetwarzania obrazka
+            ImageProcessingError: Gdy wystąpi błąd podczas przetwarzania obrazków
         """
         try:
             prompt = self.prompt.format(message=message)
@@ -195,20 +226,19 @@ class OpenaiAPI:
             token_count = self.calculate_tokens_from_prompt(prompt, self.MODELS["prompt"]["model"])
             logger.info(f"Prompt zawiera {token_count} tokenów")
             
-            # Dodaj obrazek jeśli jest dostępny
-            if image:
+            # Dodaj obrazki jeśli są dostępne
+            if images and len(images) > 0:
                 try:
-                    # Przygotuj zawartość wiadomości z obrazkiem
-                    content = [
-                        {"type": "text", "text": prompt},
-                        self.__prepare_image_content(image)
-                    ]
+                    # Przygotuj zawartość wiadomości z obrazkami
+                    content = [{"type": "text", "text": prompt}]
+                    prepared_images = self.__prepare_images_content(images)
+                    content.extend(prepared_images)
                     
                     # Dla obrazków używamy modelu vision, więc obliczamy tokeny dla gpt-4-vision
                     vision_token_count = self.calculate_tokens_from_prompt(prompt, self.MODELS["vision"]["model"])
-                    logger.info(f"Prompt z obrazkiem zawiera {vision_token_count} tokenów (model: {self.MODELS['vision']['model']})")
+                    logger.info(f"Prompt z {len(images)} obrazkami zawiera {vision_token_count} tokenów (model: {self.MODELS['vision']['model']})")
                     
-                    logger.info("Wysyłanie zapytania z obrazkiem do OpenAI API")
+                    logger.info(f"Wysyłanie zapytania z {len(images)} obrazkami do OpenAI API")
                     response = await self.__client.chat.completions.create(
                         model=self.MODELS["vision"]["model"],  # Model z obsługą wizji
                         messages=[
@@ -225,9 +255,9 @@ class OpenaiAPI:
                         max_tokens=self.MODELS["vision"]["max_tokens"],
                     )
                 except ImageProcessingError as e:
-                    logger.error(f"Nie udało się przetworzyć obrazka: {e}, traceback: {traceback.format_exc()}")
-                    raise ImageProcessingError(f"Nie udało się przetworzyć obrazka: {e}, traceback: {traceback.format_exc()}")
-            # Przetwarzanie bez obrazka
+                    logger.error(f"Nie udało się przetworzyć obrazków: {e}, traceback: {traceback.format_exc()}")
+                    raise ImageProcessingError(f"Nie udało się przetworzyć obrazków: {e}, traceback: {traceback.format_exc()}")
+            # Przetwarzanie bez obrazków
             else:
                 logger.info("Wysyłanie zapytania do OpenAI API")
                 response = await self.__client.chat.completions.create(
@@ -244,10 +274,11 @@ class OpenaiAPI:
                 "message": response.choices[0].message.content.strip(),
                 "input_tokens": token_count,
                 "output_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None,
-                "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None
+                "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                "images_processed": len(images) if images else 0
             }
             
-            logger.info(f"Pomyślnie wygenerowano analizę techniczną za pomocą OpenAI. Tokeny: wejściowe={token_count}, wyjściowe={result['output_tokens']}, łącznie={result['total_tokens']}")
+            logger.info(f"Pomyślnie wygenerowano analizę techniczną za pomocą OpenAI. Tokeny: wejściowe={token_count}, wyjściowe={result['output_tokens']}, łącznie={result['total_tokens']}, obrazków przetworzonych={result['images_processed']}")
             return result
 
         except Exception as e:
