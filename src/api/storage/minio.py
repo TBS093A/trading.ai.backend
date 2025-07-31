@@ -15,7 +15,7 @@ class MinIOStorage(AbstractStorage):
     Implementacja storage MinIO dziedzicząca po AbstractStorage
     """
     
-    ADDRESS = "minio://"
+    STORAGE = "MINIO"
     
     def __init__(self, bucket_name: str = "images"):
         """

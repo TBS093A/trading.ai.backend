@@ -2,6 +2,7 @@ from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
 from .news_services import CryptoPanicService, GNewsService, CoinDeskService
+from .storage import MinIOStorage
 from typing import List
 
 from ..config import config
@@ -51,6 +52,11 @@ class ApiFabric:
             **self.config.coindesk_config,
         )
 
+    def get_minio_storage(self):
+        return MinIOStorage(
+            **self.config.minio_config,
+        )
+
     def get_news_services_apis(self):
         return [
             self.get_crypto_panic_api(),
@@ -75,5 +81,8 @@ class ApiFabric:
             self.get_telegram_api()
         ]
     
-    
+    def get_storage_apis(self):
+        return [
+            self.get_minio_storage()
+        ]
     
