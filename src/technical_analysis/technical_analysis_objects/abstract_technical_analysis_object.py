@@ -45,6 +45,21 @@ class TechnicalAnalysisObject(ABC):
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], **kwargs) -> None:
         """Oblicza dane obiektu analizy technicznej"""
         pass
+
+    @abstractmethod
+    def sync_objects_from_database(self, klines: List[Dict[str, Union[int, float, str]]]) -> None:
+        """Synchronizuje obiekty z bazy danych"""
+        pass
+
+    @abstractmethod
+    def save_objects_to_database(self) -> bool:
+        """Zapisuje obiekty do bazy danych"""
+        pass
+    
+    @abstractmethod
+    def delete_objects_from_database(self) -> None:
+        """Usuwa obiekty z bazy danych"""
+        pass
     
     @abstractmethod
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
