@@ -9,6 +9,8 @@ from .fundamental_analysis_table import FundamentalAnalysisTable
 from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
 from .technical_analysis_harmonic_patterns_table import TechnicalAnalysisHarmonicPatternsTable
 from .technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
+from .chart_images_table import ChartImagesTable
+from .chart_images_harmonic_patterns_table import ChartImagesHarmonicPatternsTable
 from .general_interpretation_table import GeneralInterpretationTable
 from .telegram_signal_channels_table import TelegramSignalChannelsTable
 from .telegram_signals_table import TelegramSignalsTable
@@ -26,6 +28,8 @@ __all__ = [
     'FundamentalAnalysisInterpretationTable',
     'TechnicalAnalysisHarmonicPatternsTable',
     'TechnicalAnalysisInterpretationTable',
+    'ChartImagesTable',
+    'ChartImagesHarmonicPatternsTable',
     'GeneralInterpretationTable',
     'TelegramSignalChannelsTable',
     'TelegramSignalsTable',
