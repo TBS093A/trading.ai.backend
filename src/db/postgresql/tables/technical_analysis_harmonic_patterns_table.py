@@ -367,4 +367,80 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
         
-        return result 
+        return result
+    
+    async def get_with_chart_images(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """Pobiera wzorzec harmoniczny wraz z powiązanymi obrazami wykresów."""
+        result = await self.fetch_one("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote,
+               ARRAY_AGG(
+                   CASE WHEN ci.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', ci.id,
+                           'image_file_path', ci.image_file_path,
+                           'image_file_name', ci.image_file_name,
+                           'storage', ci.storage,
+                           'created_at', ci.created_at,
+                           'updated_at', ci.updated_at
+                       )
+                   END
+               ) FILTER (WHERE ci.id IS NOT NULL) as chart_images
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
+        LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
+        WHERE ta.id = $1
+        GROUP BY ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                 a.asset, a.quote
+        """, record_id)
+        
+        if result:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+            # Konwertuj chart_images z listy na listę słowników
+            if result['chart_images']:
+                result['chart_images'] = [img for img in result['chart_images'] if img is not None]
+            else:
+                result['chart_images'] = []
+        
+        return result
+    
+    async def get_all_with_chart_images(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie wzorce harmoniczne wraz z powiązanymi obrazami wykresów."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote,
+               ARRAY_AGG(
+                   CASE WHEN ci.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', ci.id,
+                           'image_file_path', ci.image_file_path,
+                           'image_file_name', ci.image_file_name,
+                           'storage', ci.storage,
+                           'created_at', ci.created_at,
+                           'updated_at', ci.updated_at
+                       )
+                   END
+               ) FILTER (WHERE ci.id IS NOT NULL) as chart_images
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
+        LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
+        GROUP BY ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                 a.asset, a.quote
+        ORDER BY ta.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+            # Konwertuj chart_images z listy na listę słowników
+            if result['chart_images']:
+                result['chart_images'] = [img for img in result['chart_images'] if img is not None]
+            else:
+                result['chart_images'] = []
+        
+        return results 
