@@ -63,7 +63,7 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę FundamentalAnalysisInterpretation."""
         return self.get_table('fundamental_analysis_interpretation')
     
-    def get_technical_analysis_table(self) -> TechnicalAnalysisHarmonicPatternsTable:
+    def get_technical_analysis_harmonic_patterns_table(self) -> TechnicalAnalysisHarmonicPatternsTable:
         """Zwraca tabelę TechnicalAnalysisHarmonicPatterns."""
         return self.get_table('technical_analysis_harmonic_patterns')
     

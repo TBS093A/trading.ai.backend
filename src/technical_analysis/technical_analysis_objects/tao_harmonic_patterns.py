@@ -487,19 +487,19 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 end_timestamp = int(klines[-1]['close_time'])
                 
                 # Pobierz istniejące wzorce z bazy dla tego zakresu czasowego
-                technical_analysis_table = self.database_factory.get_technical_analysis_table()
+                technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
                 
                 # Debug: sprawdź wartości przed zapytaniem
                 logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
                 
-                self.existing_patterns = await technical_analysis_table.get_by_timestamp_range_and_asset_id(
+                self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id(
                     start_timestamp, end_timestamp, self.asset_id
                 )
                 
                 logger.info(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
                 
                 # Debug: sprawdź wszystkie wzorce dla tego asset_id (bez filtrowania czasowego)
-                all_patterns_for_asset = await technical_analysis_table.get_by_asset_id(self.asset_id)
+                all_patterns_for_asset = await technical_analysis_harmonic_patterns_table.get_by_asset_id(self.asset_id)
                 logger.info(f"DEBUG: Wszystkie wzorce dla asset_id {self.asset_id}: {len(all_patterns_for_asset)}")
                 
                 if all_patterns_for_asset:
@@ -598,15 +598,15 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             }
             
             # Sprawdź czy wzorzec już istnieje w bazie danych
-            technical_analysis_table = self.database_factory.get_technical_analysis_table()
-            pattern_exists = await technical_analysis_table.check_pattern_exists(
+            technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
+            pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
                 self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
             )
             
             if pattern_exists:
                 logger.info(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
                 # Znajdź ID istniejącego wzorca i dodaj do self.regenerated_patterns
-                existing_pattern = await technical_analysis_table.get_by_point_timestamps(
+                existing_pattern = await technical_analysis_harmonic_patterns_table.get_by_point_timestamps(
                     self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
                 )
                 if existing_pattern:
@@ -614,7 +614,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 return True
             else:
                 # Zapisz do bazy danych
-                new_pattern_id = await technical_analysis_table.create(**pattern_data)
+                new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
                 
                 if new_pattern_id:
                     logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
@@ -635,13 +635,13 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             return
             
         try:
-            technical_analysis_table = self.database_factory.get_technical_analysis_table()
+            technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
             deleted_count = 0
             
             for pattern_id in self.patterns_to_delete:
                 # Usuń tylko wzorce, które nie zostały ponownie wygenerowane
                 if pattern_id not in self.regenerated_patterns:
-                    if await technical_analysis_table.delete(pattern_id):
+                    if await technical_analysis_harmonic_patterns_table.delete(pattern_id):
                         deleted_count += 1
                         logger.info(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
                     else:
