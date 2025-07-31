@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List
 from .abstract_table import AbstractTable
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -192,4 +193,70 @@ class AssetsTable(AbstractTable):
         return await self.fetch_all(
             "SELECT id, asset, quote FROM assets WHERE quote ILIKE $1 ORDER BY quote",
             f"%{quote}%"
-        ) 
+        )
+    
+    async def get_assets_with_old_harmonic_patterns(self, time_delta: timedelta, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Pobiera assety które mają analizy techniczne harmoniczne starsze niż podany interwał czasowy.
+        
+        Args:
+            time_delta: Interwał czasowy (np. timedelta(days=365))
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista assetów z analizami starszymi niż podany interwał
+        """
+        try:
+            # Oblicz timestamp dla granicy czasowej
+            current_time = datetime.now()
+            cutoff_timestamp = int((current_time - time_delta).timestamp() * 1000)  # Konwersja na milisekundy
+            
+            results = await self.fetch_all("""
+                SELECT DISTINCT a.id, a.asset, a.quote
+                FROM assets a
+                JOIN technical_analysis_harmonic_patterns ta ON a.id = ta.asset_id
+                WHERE ta.x_point_timestamp < $1
+                ORDER BY a.asset, a.quote
+                LIMIT $2 OFFSET $3
+            """, cutoff_timestamp, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} assetów z analizami starszymi niż {time_delta}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania assetów ze starymi analizami: {e}", exc_info=True)
+            return []
+    
+    async def get_assets_with_recent_harmonic_patterns(self, time_delta: timedelta, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Pobiera assety które mają analizy techniczne harmoniczne młodsze niż podany interwał czasowy.
+        
+        Args:
+            time_delta: Interwał czasowy (np. timedelta(days=365))
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista assetów z analizami młodszymi niż podany interwał
+        """
+        try:
+            # Oblicz timestamp dla granicy czasowej
+            current_time = datetime.now()
+            cutoff_timestamp = int((current_time - time_delta).timestamp() * 1000)  # Konwersja na milisekundy
+            
+            results = await self.fetch_all("""
+                SELECT DISTINCT a.id, a.asset, a.quote
+                FROM assets a
+                JOIN technical_analysis_harmonic_patterns ta ON a.id = ta.asset_id
+                WHERE ta.x_point_timestamp >= $1
+                ORDER BY a.asset, a.quote
+                LIMIT $2 OFFSET $3
+            """, cutoff_timestamp, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} assetów z analizami młodszymi niż {time_delta}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania assetów z nowymi analizami: {e}", exc_info=True)
+            return [] 
