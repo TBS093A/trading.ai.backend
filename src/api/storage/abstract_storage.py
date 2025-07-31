@@ -2,7 +2,7 @@ from typing import Optional
 
 class AbstractStorage:
 
-    ADDRESS = "abstract_storage://"
+    STORAGE = "ABSTRACT"
 
     def __init__(self):
         pass
