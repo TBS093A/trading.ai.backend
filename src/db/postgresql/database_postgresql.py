@@ -46,6 +46,8 @@ class DatabasePostgreSQL:
             # Wykonaj zapytania w odpowiedniej kolejności (z uwzględnieniem zależności)
             table_order = [
                 'assets',
+                'exchanges',
+                'asset_exchanges',
                 'users', 
                 'user_secrets',
                 'transactions',
@@ -109,6 +111,8 @@ class DatabasePostgreSQL:
                 'fundamental_analysis_assets',  # Tabela pośrednia
                 'fundamental_analysis',
                 'transactions',
+                'asset_exchanges',
+                'exchanges',
                 'user_secrets',
                 'users',
                 'assets'

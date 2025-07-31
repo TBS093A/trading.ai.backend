@@ -1,5 +1,7 @@
 from .abstract_table import AbstractTable
 from .assets_table import AssetsTable
+from .exchanges_table import ExchangesTable
+from .asset_exchanges_table import AssetExchangesTable
 from .users_table import UsersTable
 from .user_secrets_table import UserSecretsTable
 from .transactions_table import TransactionsTable
@@ -15,6 +17,8 @@ from .telegram_signal_interpretation_table import TelegramSignalInterpretationTa
 __all__ = [
     'AbstractTable',
     'AssetsTable',
+    'ExchangesTable',
+    'AssetExchangesTable',
     'UsersTable',
     'UserSecretsTable',
     'TransactionsTable',

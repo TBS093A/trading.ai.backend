@@ -90,7 +90,7 @@ class Exchanges:
     
     async def _sync_exchange_symbols_with_database(self, all_exchange_symbols: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
         """
-        Synchronizuje symbole z giełd z bazą danych - dodaje brakujące assety.
+        Synchronizuje symbole z giełd z bazą danych - dodaje brakujące assety i exchanges.
         
         Args:
             all_exchange_symbols: Słownik z symbolami ze wszystkich giełd
@@ -105,13 +105,33 @@ class Exchanges:
         try:
             logger.info(f"Rozpoczynam synchronizację symboli z giełd z bazą danych")
             
-            # Zbierz wszystkie unikalne assety ze wszystkich giełd
+            # KROK 1: Synchronizuj exchanges
+            logger.info("=== KROK 1: Synchronizacja exchanges ===")
+            exchanges_to_create = []
+            for exchange_name in all_exchange_symbols.keys():
+                exchanges_to_create.append({
+                    'name': exchange_name,
+                    'display_name': exchange_name,
+                    'is_active': True
+                })
+            
+            exchanges_table = self.db.get_factory().get_exchanges_table()
+            created_exchanges = await exchanges_table.create_many(exchanges_to_create)
+            logger.info(f"Zsynchronizowano {len(created_exchanges)} exchanges")
+            
+            # KROK 2: Zbierz wszystkie unikalne assety ze wszystkich giełd
+            logger.info("=== KROK 2: Przygotowanie assetów ===")
             all_assets = set()
+            asset_exchange_mapping = {}  # Mapowanie asset_code -> lista exchanges
+            
             for exchange_name, exchange_data in all_exchange_symbols.items():
                 for symbol_info in exchange_data:
                     base_asset = symbol_info.get('base_asset')
                     if base_asset:
                         all_assets.add(base_asset)
+                        if base_asset not in asset_exchange_mapping:
+                            asset_exchange_mapping[base_asset] = []
+                        asset_exchange_mapping[base_asset].append(exchange_name)
             
             logger.info(f"Znaleziono {len(all_assets)} unikalnych assetów ze wszystkich giełd")
             
@@ -151,7 +171,8 @@ class Exchanges:
                     'quote': quote_asset
                 }
             
-            # Sprawdź które assety już istnieją w bazie danych
+            # KROK 3: Sprawdź które assety już istnieją w bazie danych
+            logger.info("=== KROK 3: Sprawdzanie istniejących assetów ===")
             assets_table = self.db.get_factory().get_assets_table()
             existing_assets = await assets_table.check_many(assets_to_check)
             
@@ -178,7 +199,8 @@ class Exchanges:
                         'quote': quote_asset
                     })
             
-            # Utwórz wszystkie brakujące assety jednym zapytaniem
+            # KROK 4: Utwórz wszystkie brakujące assety jednym zapytaniem
+            logger.info("=== KROK 4: Tworzenie nowych assetów ===")
             if assets_to_create:
                 logger.info(f"Tworzę {len(assets_to_create)} nowych assetów jednym zapytaniem")
                 created_assets = await assets_table.create_many(assets_to_create)
@@ -195,7 +217,31 @@ class Exchanges:
             else:
                 logger.info("Wszystkie assety już istnieją w bazie danych")
             
-            logger.info(f"Zakończono synchronizację symboli z giełd. Znaleziono {len(found_assets)} assetów, dodano {added_assets_to_db} assetów do bazy danych")
+            # KROK 5: Utwórz relacje asset-exchange
+            logger.info("=== KROK 5: Tworzenie relacji asset-exchange ===")
+            asset_exchanges_table = self.db.get_factory().get_asset_exchanges_table()
+            asset_exchange_relations = []
+            added_relations = 0
+            
+            for asset_code, asset_id in found_assets.items():
+                exchanges_for_asset = asset_exchange_mapping.get(asset_code, [])
+                for exchange_name in exchanges_for_asset:
+                    if exchange_name in created_exchanges:
+                        exchange_id = created_exchanges[exchange_name]
+                        asset_exchange_relations.append({
+                            'asset_id': asset_id,
+                            'exchange_id': exchange_id
+                        })
+            
+            if asset_exchange_relations:
+                logger.info(f"Tworzę {len(asset_exchange_relations)} relacji asset-exchange")
+                created_relations = await asset_exchanges_table.create_many(asset_exchange_relations)
+                added_relations = len(created_relations)
+                logger.info(f"Utworzono {added_relations} nowych relacji asset-exchange")
+            else:
+                logger.info("Brak nowych relacji asset-exchange do utworzenia")
+            
+            logger.info(f"Zakończono synchronizację symboli z giełd. Znaleziono {len(found_assets)} assetów, dodano {added_assets_to_db} assetów do bazy danych, utworzono {added_relations} relacji asset-exchange")
             return found_assets
             
         except Exception as e:

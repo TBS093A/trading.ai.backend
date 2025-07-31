@@ -10,6 +10,8 @@ class DatabasePostgreSQLFactory:
     
     _table_classes: Dict[str, Type[AbstractTable]] = {
         'assets': AssetsTable,
+        'exchanges': ExchangesTable,
+        'asset_exchanges': AssetExchangesTable,
         'users': UsersTable,
         'user_secrets': UserSecretsTable,
         'transactions': TransactionsTable,
@@ -42,6 +44,14 @@ class DatabasePostgreSQLFactory:
     def get_assets_table(self) -> AssetsTable:
         """Zwraca tabelę Assets."""
         return self.get_table('assets')
+    
+    def get_exchanges_table(self) -> ExchangesTable:
+        """Zwraca tabelę Exchanges."""
+        return self.get_table('exchanges')
+    
+    def get_asset_exchanges_table(self) -> AssetExchangesTable:
+        """Zwraca tabelę AssetExchanges."""
+        return self.get_table('asset_exchanges')
     
     def get_users_table(self) -> UsersTable:
         """Zwraca tabelę Users."""
