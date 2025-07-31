@@ -58,7 +58,13 @@ class Config:
         # Database konfiguracja
         self.database_url = os.getenv("DATABASE_URL")
         self.test_database_url = os.getenv("TEST_DATABASE_URL")
-        
+
+        # Minio Storage konfiguracja
+        self.minio_access_key = os.getenv("MINIO_ACCESS_KEY")
+        self.minio_secret_key = os.getenv("MINIO_SECRET_KEY")
+        self.minio_endpoint = os.getenv("MINIO_ENDPOINT")
+        self.minio_secure = os.getenv("MINIO_SECURE")
+
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
     
@@ -74,7 +80,7 @@ class Config:
             "MEXC_API_KEY": self.mexc_api_key,
             "MEXC_API_SECRET": self.mexc_api_secret,
             "OPENAI_API_KEY": self.openai_api_key,
-            "DATABASE_URL": self.database_url
+            "DATABASE_URL": self.database_url,
         }
         
         missing_vars = []
@@ -167,6 +173,16 @@ class Config:
         return {
             'api_key': self.coindesk_api_key
         }
+
+    @property
+    def minio_config(self) -> dict:
+        """Konfiguracja Minio jako słownik"""
+        return {
+            'access_key': self.minio_access_key,
+            'secret_key': self.minio_secret_key,
+            'endpoint': self.minio_endpoint,
+            'secure': self.minio_secure
+        }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
         """Pobierz konfigurację API dla określonej giełdy"""
@@ -175,7 +191,7 @@ class Config:
             'mexc': self.mexc_config
         }
         return exchange_configs.get(exchange.lower())
-    
+
     def is_exchange_configured(self, exchange: str) -> bool:
         """Sprawdź czy giełda jest skonfigurowana"""
         config = self.get_api_config(exchange)
