@@ -2,6 +2,7 @@
 .tox/
 .temp_pkg/
 __pycache__/
+local_storage/
 
 pump.*
 !pump.py
