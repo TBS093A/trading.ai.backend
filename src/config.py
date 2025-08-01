@@ -64,11 +64,11 @@ class Config:
         self.minio_secret_key = os.getenv("MINIO_SECRET_KEY")
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT")
         self.minio_secure = os.getenv("MINIO_SECURE")
+        self.minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
 
         # Local Storage konfiguracja
         self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED")
         self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
-        self.minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
 
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
@@ -182,12 +182,17 @@ class Config:
     @property
     def minio_config(self) -> dict:
         """Konfiguracja Minio jako słownik"""
+        # Sprawdź czy wszystkie wymagane parametry są dostępne
+        required_params = [self.minio_access_key, self.minio_secret_key, self.minio_endpoint]
+        is_enabled = all(param is not None and param.strip() != "" for param in required_params)
+        
         return {
             'access_key': self.minio_access_key,
             'secret_key': self.minio_secret_key,
             'endpoint': self.minio_endpoint,
             'secure': self.minio_secure,
-            'bucket_name': self.minio_bucket_name
+            'bucket_name': self.minio_bucket_name,
+            'is_enabled': is_enabled
         }
 
     @property

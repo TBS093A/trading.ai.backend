@@ -128,6 +128,41 @@ class AssetExchangesTable(AbstractTable):
             WHERE ae.asset_id = $1 AND ae.exchange_id = $2
         """, asset_id, exchange_id)
     
+    async def update(self, record_id: int, **kwargs) -> bool:
+        """Aktualizuje relację asset-exchange o podanym ID."""
+        try:
+            # Sprawdź jakie pola są dostępne do aktualizacji
+            allowed_fields = ['asset_id', 'exchange_id']
+            update_fields = []
+            params = []
+            param_counter = 1
+            
+            for field, value in kwargs.items():
+                if field in allowed_fields:
+                    update_fields.append(f"{field} = ${param_counter}")
+                    params.append(value)
+                    param_counter += 1
+            
+            if not update_fields:
+                logger.warning(f"Brak dozwolonych pól do aktualizacji dla relacji asset-exchange {record_id}")
+                return False
+            
+            # Dodaj record_id jako ostatni parametr
+            params.append(record_id)
+            
+            query = f"""
+                UPDATE asset_exchanges 
+                SET {', '.join(update_fields)}
+                WHERE id = ${param_counter}
+            """
+            
+            await self.execute_query(query, *params)
+            logger.info(f"Zaktualizowano relację asset-exchange z ID: {record_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas aktualizacji relacji asset-exchange: {e}", exc_info=True)
+            return False
+    
     async def delete(self, record_id: int) -> bool:
         """Usuwa relację asset-exchange o podanym ID."""
         try:

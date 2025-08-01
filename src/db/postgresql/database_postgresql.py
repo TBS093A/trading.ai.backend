@@ -61,7 +61,9 @@ class DatabasePostgreSQL:
                 'general_interpretation',
                 'telegram_signal_channels',
                 'telegram_signals',
-                'telegram_signal_interpretation'
+                'telegram_signal_interpretation',
+                'chart_images',
+                'chart_images_harmonic_patterns'
             ]
             
             for table_name in table_order:
@@ -99,6 +101,8 @@ class DatabasePostgreSQL:
         async with self.pool.acquire() as connection:
             # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
             table_order = [
+                'chart_images_harmonic_patterns',
+                'chart_images',
                 'telegram_signal_interpretation',
                 'telegram_signals',
                 'telegram_signal_channels',

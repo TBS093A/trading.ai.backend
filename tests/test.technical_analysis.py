@@ -2,7 +2,8 @@ import unittest
 from technical_analysis_tests import (
     TestHarmonicPatternsCalculation,
     TestHarmonicPatternsCalculationWithDatabaseIntegration,
-    TestHarmonicPatternsCalculationWithDatabaseAndAIIntegration
+    TestHarmonicPatternsCalculationWithDatabaseAndAIIntegration,
+    TestTechnicalAnalysisIntegration
 )
 
 if __name__ == "__main__":
