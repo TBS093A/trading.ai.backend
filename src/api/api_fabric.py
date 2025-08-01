@@ -2,7 +2,7 @@ from .comunication import TelegramAPI
 from .llms import OpenaiAPI
 from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
 from .news_services import CryptoPanicService, GNewsService, CoinDeskService
-from .storage import MinIOStorage
+from .storage import MinIOStorage, LocalStorage
 from typing import List
 
 from ..config import config
