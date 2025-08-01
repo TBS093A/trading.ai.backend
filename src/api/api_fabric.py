@@ -57,6 +57,11 @@ class ApiFabric:
             **self.config.minio_config,
         )
 
+    def get_local_storage(self):
+        return LocalStorage(
+            **self.config.local_config,
+        )
+
     def get_news_services_apis(self):
         return [
             self.get_crypto_panic_api(),
@@ -83,6 +88,7 @@ class ApiFabric:
     
     def get_storage_apis(self):
         return [
-            self.get_minio_storage()
+            self.get_minio_storage(),
+            self.get_local_storage()
         ]
     

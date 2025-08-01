@@ -65,6 +65,11 @@ class Config:
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT")
         self.minio_secure = os.getenv("MINIO_SECURE")
 
+        # Local Storage konfiguracja
+        self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED")
+        self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
+        self.minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
+
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
     
@@ -181,7 +186,8 @@ class Config:
             'access_key': self.minio_access_key,
             'secret_key': self.minio_secret_key,
             'endpoint': self.minio_endpoint,
-            'secure': self.minio_secure
+            'secure': self.minio_secure,
+            'bucket_name': self.minio_bucket_name
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
