@@ -22,7 +22,9 @@ class DatabasePostgreSQLFactory:
         'general_interpretation': GeneralInterpretationTable,
         'telegram_signal_channels': TelegramSignalChannelsTable,
         'telegram_signals': TelegramSignalsTable,
-        'telegram_signal_interpretation': TelegramSignalInterpretationTable
+        'telegram_signal_interpretation': TelegramSignalInterpretationTable,
+        'chart_images': ChartImagesTable,
+        'chart_images_harmonic_patterns': ChartImagesHarmonicPatternsTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -96,6 +98,14 @@ class DatabasePostgreSQLFactory:
     def get_telegram_signal_interpretation_table(self) -> TelegramSignalInterpretationTable:
         """Zwraca tabelę TelegramSignalInterpretation."""
         return self.get_table('telegram_signal_interpretation')
+
+    def get_chart_images_table(self) -> ChartImagesTable:
+        """Zwraca tabelę ChartImages."""
+        return self.get_table('chart_images')
+    
+    def get_chart_images_harmonic_patterns_table(self) -> ChartImagesHarmonicPatternsTable:
+        """Zwraca tabelę ChartImagesHarmonicPatterns."""
+        return self.get_table('chart_images_harmonic_patterns')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

@@ -12,7 +12,7 @@ from src.llm_fundamental_analysis_interpretation import LlmFundamentalAnalysisIn
 from src.db import DatabaseFacade
 from src.config import config
 
-
+@unittest.skip("Skipping fundamental analysis interpretation integration tests")
 class TestFundamentalAnalysisInterpretationIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()

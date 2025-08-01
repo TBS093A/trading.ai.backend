@@ -17,7 +17,8 @@ class MinIOStorage(AbstractStorage):
     
     STORAGE = "MINIO"
     
-    def __init__(self, access_key: str, secret_key: str, endpoint: str, secure: bool, bucket_name: str = "images"):
+    def __init__(self, access_key: str = None, secret_key: str = None, endpoint: str = None, 
+                 secure: bool = True, bucket_name: str = "images", is_enabled: bool = False):
         """
         Inicjalizacja MinIO Storage
         
@@ -27,6 +28,7 @@ class MinIOStorage(AbstractStorage):
             endpoint (str): Adres endpoint'u MinIO
             secure (bool): Czy używać secure connection (jeśli True, używaj https)
             bucket_name (str): Nazwa bucket'a w MinIO (domyślnie "images")
+            is_enabled (bool): Czy storage jest włączony
         """
         super().__init__()
         
@@ -35,10 +37,20 @@ class MinIOStorage(AbstractStorage):
         self.endpoint = endpoint
         self.secure = secure
         self.bucket_name = bucket_name
+        self.is_enabled = is_enabled
+        
+        # Jeśli storage jest wyłączony, nie inicjalizuj klienta
+        if not self.is_enabled:
+            logger.info("MinIOStorage jest wyłączony - pomijam inicjalizację klienta")
+            self.client = None
+            return
         
         # Walidacja wymaganych parametrów
         if not all([self.access_key, self.secret_key, self.endpoint]):
-            raise ValueError("Brak wymaganych parametrów MinIO: access_key, secret_key, endpoint")
+            logger.warning("Brak wymaganych parametrów MinIO - wyłączam storage")
+            self.is_enabled = False
+            self.client = None
+            return
         
         # Inicjalizacja klienta MinIO
         try:
@@ -58,7 +70,8 @@ class MinIOStorage(AbstractStorage):
                 
         except Exception as e:
             logger.error(f"Błąd podczas inicjalizacji MinIO: {str(e)}")
-            raise Exception(f"Nie można połączyć się z MinIO: {str(e)}")
+            self.is_enabled = False
+            self.client = None
     
     def upload_file(self, file_name: str, file_base64: str) -> bool:
         """
@@ -72,8 +85,11 @@ class MinIOStorage(AbstractStorage):
             bool: True jeśli upload się powiódł, False w przeciwnym razie
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas uploadu
+            Exception: Gdy wystąpi błąd podczas uploadu lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("MinIOStorage jest wyłączony")
+            
         try:
             if file_base64 is not None:
                 # Dekoduj base64 i upload do MinIO
@@ -115,8 +131,10 @@ class MinIOStorage(AbstractStorage):
             Optional[str]: Base64 string z zawartością pliku lub None jeśli błąd
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas pobierania
+            Exception: Gdy wystąpi błąd podczas pobierania lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("MinIOStorage jest wyłączony")
         try:
             # Pobierz plik z MinIO jako bytes
             response = self.client.get_object(
@@ -158,8 +176,10 @@ class MinIOStorage(AbstractStorage):
             bool: True jeśli usunięcie się powiodło, False w przeciwnym razie
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas usuwania
+            Exception: Gdy wystąpi błąd podczas usuwania lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("MinIOStorage jest wyłączony")
         try:
             # Usuń plik z MinIO
             self.client.remove_object(
@@ -191,7 +211,12 @@ class MinIOStorage(AbstractStorage):
             
         Returns:
             bool: True jeśli plik istnieje, False w przeciwnym razie
+            
+        Raises:
+            Exception: Gdy wystąpi błąd podczas sprawdzania lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("MinIOStorage jest wyłączony")
         try:
             # Sprawdź czy obiekt istnieje
             self.client.stat_object(
@@ -219,7 +244,12 @@ class MinIOStorage(AbstractStorage):
             
         Returns:
             Optional[str]: URL do pliku lub None jeśli błąd
+            
+        Raises:
+            Exception: Gdy wystąpi błąd podczas generowania URL lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("MinIOStorage jest wyłączony")
         try:
             # Generuj presigned URL
             url = self.client.presigned_get_object(
