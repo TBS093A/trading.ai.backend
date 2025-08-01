@@ -7,29 +7,28 @@ class AbstractStorage:
     def __init__(self):
         pass
 
-    def upload_file(self, file_path: str, file_name: str) -> bool:
+    def upload_file(self, file_name: str, file_base64: str) -> str:
         """
         Upload pliku do storage
         
         Args:
-            file_path (str): Ścieżka do pliku lokalnego
-            file_name (str): Nazwa pliku w storage
+            file_name (str): Nazwa pliku w storage (może zawierać ścieżkę względną)
+            file_base64 (str): Base64 string do zapisania jako plik
             
         Returns:
             bool: True jeśli upload się powiódł, False w przeciwnym razie
         """
         pass
 
-    def download_file(self, file_name: str, local_path: Optional[str] = None) -> Optional[str]:
+    def download_file(self, file_name: str) -> Optional[str]:
         """
         Pobierz plik z storage
         
         Args:
-            file_name (str): Nazwa pliku w storage
-            local_path (str, optional): Ścieżka lokalna gdzie zapisać plik
+            file_name (str): Nazwa pliku w storage (może zawierać ścieżkę względną)
             
         Returns:
-            Optional[str]: Ścieżka do pobranego pliku lub None jeśli błąd
+            Optional[str]: Base64 string z zawartością pliku lub None jeśli błąd
         """
         pass
     
@@ -38,7 +37,7 @@ class AbstractStorage:
         Usuń plik z storage
         
         Args:
-            file_name (str): Nazwa pliku w storage do usunięcia
+            file_name (str): Nazwa pliku w storage do usunięcia (może zawierać ścieżkę względną)
             
         Returns:
             bool: True jeśli usunięcie się powiodło, False w przeciwnym razie
