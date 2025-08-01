@@ -189,6 +189,14 @@ class Config:
             'secure': self.minio_secure,
             'bucket_name': self.minio_bucket_name
         }
+
+    @property
+    def local_storage_config(self) -> dict:
+        """Konfiguracja Local Storage jako słownik"""
+        return {
+            'is_enabled': self.local_storage_is_enabled,
+            'storage_path': self.local_storage_path
+        }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
         """Pobierz konfigurację API dla określonej giełdy"""

@@ -59,7 +59,7 @@ class ApiFabric:
 
     def get_local_storage(self):
         return LocalStorage(
-            **self.config.local_config,
+            **self.config.local_storage_config,
         )
 
     def get_news_services_apis(self):

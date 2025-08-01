@@ -51,8 +51,11 @@ class LocalStorage(AbstractStorage):
             bool: True jeśli upload się powiódł, False w przeciwnym razie
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas uploadu
+            Exception: Gdy wystąpi błąd podczas uploadu lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("LocalStorage jest wyłączony")
+            
         try:
             # Utwórz pełną ścieżkę docelową: storage_path + file_name (który może zawierać ścieżkę)
             destination_path = os.path.join(self.storage_path, file_name)
@@ -93,8 +96,11 @@ class LocalStorage(AbstractStorage):
             Optional[str]: Base64 string z zawartością pliku lub None jeśli błąd
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas pobierania
+            Exception: Gdy wystąpi błąd podczas pobierania lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("LocalStorage jest wyłączony")
+            
         try:
             # Utwórz pełną ścieżkę: storage_path + file_name (który może zawierać ścieżkę)
             file_path = os.path.join(self.storage_path, file_name)
@@ -128,8 +134,11 @@ class LocalStorage(AbstractStorage):
             bool: True jeśli usunięcie się powiodło, False w przeciwnym razie
             
         Raises:
-            Exception: Gdy wystąpi błąd podczas usuwania
+            Exception: Gdy wystąpi błąd podczas usuwania lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("LocalStorage jest wyłączony")
+            
         try:
             # Utwórz pełną ścieżkę: storage_path + file_name (który może zawierać ścieżkę)
             file_path = os.path.join(self.storage_path, file_name)
@@ -159,7 +168,13 @@ class LocalStorage(AbstractStorage):
             
         Returns:
             bool: True jeśli plik istnieje, False w przeciwnym razie
+            
+        Raises:
+            Exception: Gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("LocalStorage jest wyłączony")
+            
         try:
             # Utwórz pełną ścieżkę: storage_path + file_name (który może zawierać ścieżkę)
             file_path = os.path.join(self.storage_path, file_name)
@@ -180,6 +195,9 @@ class LocalStorage(AbstractStorage):
             None: Zawsze zwraca None
             
         Raises:
-            Exception: Zawsze rzuca wyjątek o braku obsługi URL-i
+            Exception: Zawsze rzuca wyjątek o braku obsługi URL-i lub gdy storage jest wyłączony
         """
+        if not self.is_enabled:
+            raise Exception("LocalStorage jest wyłączony")
+            
         raise Exception("LocalStorage nie obsługuje URL-i - ta funkcjonalność nie jest dostępna dla lokalnego storage") 
