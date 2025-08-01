@@ -22,6 +22,10 @@ class MinIOStorage(AbstractStorage):
         Inicjalizacja MinIO Storage
         
         Args:
+            access_key (str): Klucz dostępu do MinIO
+            secret_key (str): Klucz tajny do MinIO
+            endpoint (str): Adres endpoint'u MinIO
+            secure (bool): Czy używać secure connection (jeśli True, używaj https)
             bucket_name (str): Nazwa bucket'a w MinIO (domyślnie "images")
         """
         super().__init__()
