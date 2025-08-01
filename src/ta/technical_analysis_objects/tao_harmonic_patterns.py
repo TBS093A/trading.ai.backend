@@ -27,13 +27,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from ..draw_utils import DrawUtils
-from .abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern
+from .abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern, TechnicalAnalysisObjectDatabase
 from .tao_fibonacci import Fibonacci
 from .tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
 from .tao_fibonacci_targets import FibonacciTargets
 
 
-class HarmonicPatterns(TechnicalAnalysisObject):
+class HarmonicPatterns(
+    TechnicalAnalysisObject, 
+    TechnicalAnalysisObjectDatabase
+):
     """Wzorce harmoniczne XABCD"""
     
     def __init__(

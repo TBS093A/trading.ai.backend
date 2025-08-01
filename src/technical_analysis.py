@@ -194,7 +194,7 @@ class TechnicalAnalysis:
         """
         return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
-    async def sync_technical_analysis(self) -> None:
+    async def sync_technical_analysis(self, limit: int = 100, offset: int = 0) -> None:
         """
         Synchronizuje analizę techniczną dla wszystkich assetów i interwałów.
         """
@@ -229,8 +229,20 @@ class TechnicalAnalysis:
                 time_delta = self._calculate_time_delta_for_assets(interval)
                 assets = await assets_table.get_assets_with_old_harmonic_patterns(
                     time_delta=time_delta,
-                    limit=100
+                    limit=limit,
+                    offset=offset
                 )
+                
+                # Jeśli pobrano mniej assetów niż limit, uzupełnij assetami bez harmonic patterns
+                if len(assets) < limit:
+                    remaining_limit = limit - len(assets)
+                    remaining_offset = offset + len(assets)
+                    assets_without_patterns = await assets_table.get_assets_without_harmonic_patterns(
+                        limit=remaining_limit,
+                        offset=remaining_offset
+                    )
+                    assets.extend(assets_without_patterns)
+                    logger.info(f"Uzupełniono listę o {len(assets_without_patterns)} assetów bez harmonic patterns")
                 
                 if not assets:
                     logger.info(f"Brak assetów do przetworzenia dla interwału {interval}")
