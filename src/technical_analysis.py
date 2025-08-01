@@ -32,7 +32,7 @@ class TechnicalAnalysis:
     CANDLES_COUNT = 500
 
     # Konfiguracje HarmonicPatterns
-    self.HARMONIC_PATTERNS_CONFIGS = [
+    HARMONIC_PATTERNS_CONFIGS = [
         {
             'general_fibonacci_levels': {
                 'show': True,
