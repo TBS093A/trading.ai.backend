@@ -197,7 +197,8 @@ class AssetsTable(AbstractTable):
     
     async def get_assets_with_old_harmonic_patterns(self, time_delta: timedelta, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """
-        Pobiera assety które mają analizy techniczne harmoniczne starsze niż podany interwał czasowy.
+        Pobiera assety które mają analizy techniczne harmoniczne starsze niż podany interwał czasowy,
+        ale NIE mają młodszych niż podany interwał.
         
         Args:
             time_delta: Interwał czasowy (np. timedelta(days=365))
@@ -205,7 +206,7 @@ class AssetsTable(AbstractTable):
             offset: Przesunięcie dla paginacji
             
         Returns:
-            List[Dict[str, Any]]: Lista assetów z analizami starszymi niż podany interwał
+            List[Dict[str, Any]]: Lista assetów z analizami starszymi niż podany interwał, ale bez młodszych
         """
         try:
             # Oblicz timestamp dla granicy czasowej
@@ -217,11 +218,16 @@ class AssetsTable(AbstractTable):
                 FROM assets a
                 JOIN technical_analysis_harmonic_patterns ta ON a.id = ta.asset_id
                 WHERE ta.x_point_timestamp < $1
+                AND a.id NOT IN (
+                    SELECT DISTINCT asset_id 
+                    FROM technical_analysis_harmonic_patterns 
+                    WHERE x_point_timestamp >= $1
+                )
                 ORDER BY a.asset, a.quote
                 LIMIT $2 OFFSET $3
             """, cutoff_timestamp, limit, offset)
             
-            logger.info(f"Znaleziono {len(results)} assetów z analizami starszymi niż {time_delta}")
+            logger.info(f"Znaleziono {len(results)} assetów z analizami starszymi niż {time_delta} (bez młodszych)")
             return results
             
         except Exception as e:
