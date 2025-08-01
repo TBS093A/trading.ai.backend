@@ -1,5 +1,6 @@
 import os
 import logging
+import base64
 from typing import Optional, Dict, Any
 from minio import Minio
 from minio.error import S3Error
@@ -55,76 +56,80 @@ class MinIOStorage(AbstractStorage):
             logger.error(f"Błąd podczas inicjalizacji MinIO: {str(e)}")
             raise Exception(f"Nie można połączyć się z MinIO: {str(e)}")
     
-    def upload_file(self, file_path: str, file_name: str) -> bool:
+    def upload_file(self, file_name: str, file_base64: str) -> bool:
         """
-        Upload pliku do MinIO
+        Upload pliku do MinIO (zapis base64)
         
         Args:
-            file_path (str): Ścieżka do pliku lokalnego
-            file_name (str): Nazwa pliku w MinIO
+            file_name (str): Nazwa pliku w MinIO (może zawierać ścieżkę względną w bucket)
+            file_base64 (str, optional): Base64 string do zapisania jako plik
             
         Returns:
             bool: True jeśli upload się powiódł, False w przeciwnym razie
             
         Raises:
-            FileNotFoundError: Gdy plik lokalny nie istnieje
             Exception: Gdy wystąpi błąd podczas uploadu
         """
         try:
-            # Sprawdź czy plik lokalny istnieje
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"Plik lokalny nie istnieje: {file_path}")
+            if file_base64 is not None:
+                # Dekoduj base64 i upload do MinIO
+                try:
+                    file_content = base64.b64decode(file_base64)
+                    
+                    # Upload pliku do MinIO
+                    self.client.put_object(
+                        bucket_name=self.bucket_name,
+                        object_name=file_name,
+                        data=file_content,
+                        length=len(file_content)
+                    )
+                    
+                    logger.info(f"Pomyślnie zapisano base64 jako plik: {file_name}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Błąd podczas dekodowania base64: {str(e)}")
+                    raise Exception(f"Błąd podczas dekodowania base64: {str(e)}")
+            else:
+                raise ValueError("Musi być podany parametr file_base64")
             
-            # Upload pliku do MinIO
-            self.client.fput_object(
-                bucket_name=self.bucket_name,
-                object_name=file_name,
-                file_path=file_path
-            )
-            
-            logger.info(f"Pomyślnie uploadowano plik: {file_path} -> {file_name}")
-            return True
-            
-        except FileNotFoundError:
-            logger.error(f"Plik lokalny nie istnieje: {file_path}")
-            raise
         except S3Error as e:
-            logger.error(f"Błąd S3 podczas uploadu pliku {file_path}: {str(e)}")
+            logger.error(f"Błąd S3 podczas uploadu pliku {file_name}: {str(e)}")
             raise Exception(f"Błąd S3 podczas uploadu: {str(e)}")
         except Exception as e:
-            logger.error(f"Nieoczekiwany błąd podczas uploadu pliku {file_path}: {str(e)}")
+            logger.error(f"Nieoczekiwany błąd podczas uploadu pliku {file_name}: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise Exception(f"Błąd podczas uploadu pliku: {str(e)}")
     
-    def download_file(self, file_name: str, local_path: Optional[str] = None) -> Optional[str]:
+    def download_file(self, file_name: str) -> Optional[str]:
         """
-        Pobierz plik z MinIO
+        Pobierz plik z MinIO i zwróć jako base64 string
         
         Args:
-            file_name (str): Nazwa pliku w MinIO
-            local_path (str, optional): Ścieżka lokalna gdzie zapisać plik.
-                                      Jeśli None, użyje file_name jako nazwy pliku lokalnego
+            file_name (str): Nazwa pliku w MinIO (może zawierać ścieżkę względną w bucket)
             
         Returns:
-            Optional[str]: Ścieżka do pobranego pliku lub None jeśli błąd
+            Optional[str]: Base64 string z zawartością pliku lub None jeśli błąd
             
         Raises:
             Exception: Gdy wystąpi błąd podczas pobierania
         """
         try:
-            # Jeśli nie podano local_path, użyj file_name jako nazwy pliku lokalnego
-            if local_path is None:
-                local_path = file_name
-            
-            # Pobierz plik z MinIO
-            self.client.fget_object(
+            # Pobierz plik z MinIO jako bytes
+            response = self.client.get_object(
                 bucket_name=self.bucket_name,
-                object_name=file_name,
-                file_path=local_path
+                object_name=file_name
             )
             
-            logger.info(f"Pomyślnie pobrano plik: {file_name} -> {local_path}")
-            return local_path
+            # Wczytaj zawartość pliku
+            file_content = response.read()
+            response.close()
+            response.release_conn()
+            
+            # Przekonwertuj na base64
+            base64_content = base64.b64encode(file_content).decode('utf-8')
+            
+            logger.info(f"Pomyślnie wczytano plik jako base64: {file_name}")
+            return base64_content
             
         except S3Error as e:
             if "NoSuchKey" in str(e):
@@ -143,7 +148,7 @@ class MinIOStorage(AbstractStorage):
         Usuń plik z MinIO
         
         Args:
-            file_name (str): Nazwa pliku w MinIO do usunięcia
+            file_name (str): Nazwa pliku w MinIO do usunięcia (może zawierać ścieżkę względną w bucket)
             
         Returns:
             bool: True jeśli usunięcie się powiodło, False w przeciwnym razie
@@ -178,7 +183,7 @@ class MinIOStorage(AbstractStorage):
         Sprawdź czy plik istnieje w MinIO
         
         Args:
-            file_name (str): Nazwa pliku w MinIO
+            file_name (str): Nazwa pliku w MinIO (może zawierać ścieżkę względną w bucket)
             
         Returns:
             bool: True jeśli plik istnieje, False w przeciwnym razie
@@ -205,7 +210,7 @@ class MinIOStorage(AbstractStorage):
         Pobierz URL do pliku w MinIO (presigned URL)
         
         Args:
-            file_name (str): Nazwa pliku w MinIO
+            file_name (str): Nazwa pliku w MinIO (może zawierać ścieżkę względną w bucket)
             expires (int): Czas wygaśnięcia URL w sekundach (domyślnie 1 godzina)
             
         Returns:

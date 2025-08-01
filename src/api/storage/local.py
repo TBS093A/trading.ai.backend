@@ -39,7 +39,7 @@ class LocalStorage(AbstractStorage):
             logger.error(f"Błąd podczas tworzenia katalogu storage: {str(e)}")
             raise Exception(f"Nie można utworzyć katalogu storage: {str(e)}")
     
-    def upload_file(self, file_name: str, file_base64: Optional[str] = None) -> bool:
+    def upload_file(self, file_name: str, file_base64: str) -> bool:
         """
         Upload pliku do lokalnego storage (zapis base64)
         
