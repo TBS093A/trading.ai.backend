@@ -17,16 +17,16 @@ class TechnicalAnalysis:
     """
     
     CHART_INTERVALS = {
-        "1m": timedelta(minutes=1),
-        "15m": timedelta(minutes=15),
-        "30m": timedelta(minutes=30),
-        "1h": timedelta(hours=1),
+        #"1m": timedelta(minutes=1),
+        #"15m": timedelta(minutes=15),
+        #"30m": timedelta(minutes=30),
+        #"1h": timedelta(hours=1),
         "4h": timedelta(hours=4),
         "1D": timedelta(days=1),
         "1W": timedelta(weeks=1),
         "1M": timedelta(days=31),
-        "3M": timedelta(days=93),
-        "1Y": timedelta(days=365),
+        #"3M": timedelta(days=93),
+        #"1Y": timedelta(days=365),
     }
     
     CANDLES_COUNT = 500
@@ -194,7 +194,7 @@ class TechnicalAnalysis:
         """
         return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
-    async def sync_technical_analysis(self, limit: int = 100, offset: int = 0) -> None:
+    async def sync_technical_analysis(self, limit: int = 10, offset: int = 0) -> None:
         """
         Synchronizuje analizę techniczną dla wszystkich assetów i interwałów.
         """
@@ -319,7 +319,7 @@ class TechnicalAnalysis:
                                 chart_base64 = await self.technical_analysis_facade.create_candlestick_chart(
                                     klines=klines,
                                     enabled_indicators=indicators,
-                                    enabled_objects={'HarmonicPatterns': type(harmonic_patterns)},
+                                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
                                     title=f"{asset['asset']}/{asset['quote']} - {interval}"
                                 )
                                 
