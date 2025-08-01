@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 from minio import Minio
 from minio.error import S3Error
 from .abstract_storage import AbstractStorage
-from ...config import config
 import traceback
 
 logger = logging.getLogger(__name__)
@@ -17,7 +16,7 @@ class MinIOStorage(AbstractStorage):
     
     STORAGE = "MINIO"
     
-    def __init__(self, bucket_name: str = "images"):
+    def __init__(self, access_key: str, secret_key: str, endpoint: str, secure: bool, bucket_name: str = "images"):
         """
         Inicjalizacja MinIO Storage
         
@@ -26,13 +25,10 @@ class MinIOStorage(AbstractStorage):
         """
         super().__init__()
         
-        # Pobierz konfigurację MinIO z config
-        minio_config = config.minio_config
-        
-        self.access_key = minio_config.get('access_key')
-        self.secret_key = minio_config.get('secret_key')
-        self.endpoint = minio_config.get('endpoint')
-        self.secure = minio_config.get('secure', 'false').lower() == 'true'
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.endpoint = endpoint
+        self.secure = secure
         self.bucket_name = bucket_name
         
         # Walidacja wymaganych parametrów
