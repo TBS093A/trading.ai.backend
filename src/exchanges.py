@@ -34,25 +34,25 @@ class Exchanges:
     def _clean_asset_code(self, asset_code: str) -> str:
         """
         Czyści kod assetu z niepożądanych znaków.
+        Zostawia tylko litery i cyfry, usuwa wszystkie inne znaki.
         
         Args:
             asset_code: Oryginalny kod assetu
             
         Returns:
-            str: Wyczyszczony kod assetu
+            str: Wyczyszczony kod assetu zawierający tylko litery i cyfry
         """
         if not asset_code:
             return asset_code
         
-        # Usuń niepożądane znaki: USDT, /, \, -
+        # Konwertuj na wielkie litery
         cleaned = asset_code.upper()
-        cleaned = cleaned.replace('USDT', '')
-        cleaned = cleaned.replace('/', '')
-        cleaned = cleaned.replace('\\', '')
-        cleaned = cleaned.replace('-', '')
-        cleaned = cleaned.replace('_', '')
         
-        # Usuń białe znaki
+        # Usuń wszystkie znaki, które nie są literami ani cyframi
+        import re
+        cleaned = re.sub(r'[^A-Z0-9]', '', cleaned)
+        
+        # Usuń białe znaki (dodatkowe zabezpieczenie)
         cleaned = cleaned.strip()
         
         logger.debug(f"Wyczyszczono asset_code: '{asset_code}' -> '{cleaned}'")
