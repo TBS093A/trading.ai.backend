@@ -194,7 +194,7 @@ class TechnicalAnalysis:
         """
         return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
-    async def sync_technical_analysis(self, limit: int = 10, offset: int = 0) -> None:
+    async def sync_technical_analysis(self, limit: int = 1, offset: int = 0) -> None:
         """
         Synchronizuje analizę techniczną dla wszystkich assetów i interwałów.
         """
