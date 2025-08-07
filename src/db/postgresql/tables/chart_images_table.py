@@ -235,4 +235,150 @@ class ChartImagesTable(AbstractTable):
             else:
                 result['harmonic_patterns'] = []
         
-        return results 
+        return results
+    
+    async def get_with_technical_analysis_interpretations(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """Pobiera obraz wykresu wraz z powiązanymi interpretacjami analizy technicznej."""
+        result = await self.fetch_one("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at,
+               ARRAY_AGG(
+                   CASE WHEN tai.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', tai.id,
+                           'asset_id', tai.asset_id,
+                           'technical_analysis_id', tai.technical_analysis_id,
+                           'timestamp', tai.timestamp,
+                           'content', tai.content,
+                           'created_at', tai.created_at,
+                           'asset', a.asset,
+                           'quote', a.quote
+                       )
+                   END
+               ) FILTER (WHERE tai.id IS NOT NULL) as technical_analysis_interpretations
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        LEFT JOIN technical_analysis_interpretation tai ON taici.technical_analysis_interpretation_id = tai.id
+        LEFT JOIN assets a ON tai.asset_id = a.id
+        WHERE ci.id = $1
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at
+        """, record_id)
+        
+        if result:
+            # Konwertuj technical_analysis_interpretations z listy na listę słowników
+            if result['technical_analysis_interpretations']:
+                result['technical_analysis_interpretations'] = [interpretation for interpretation in result['technical_analysis_interpretations'] if interpretation is not None]
+            else:
+                result['technical_analysis_interpretations'] = []
+        
+        return result
+    
+    async def get_all_with_technical_analysis_interpretations(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie obrazy wykresów wraz z powiązanymi interpretacjami analizy technicznej."""
+        results = await self.fetch_all("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at,
+               ARRAY_AGG(
+                   CASE WHEN tai.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', tai.id,
+                           'asset_id', tai.asset_id,
+                           'technical_analysis_id', tai.technical_analysis_id,
+                           'timestamp', tai.timestamp,
+                           'content', tai.content,
+                           'created_at', tai.created_at,
+                           'asset', a.asset,
+                           'quote', a.quote
+                       )
+                   END
+               ) FILTER (WHERE tai.id IS NOT NULL) as technical_analysis_interpretations
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        LEFT JOIN technical_analysis_interpretation tai ON taici.technical_analysis_interpretation_id = tai.id
+        LEFT JOIN assets a ON tai.asset_id = a.id
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at
+        ORDER BY ci.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+        
+        for result in results:
+            # Konwertuj technical_analysis_interpretations z listy na listę słowników
+            if result['technical_analysis_interpretations']:
+                result['technical_analysis_interpretations'] = [interpretation for interpretation in result['technical_analysis_interpretations'] if interpretation is not None]
+            else:
+                result['technical_analysis_interpretations'] = []
+        
+        return results
+    
+    async def get_without_technical_analysis_interpretations(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera obrazy wykresów które nie mają przypisanych interpretacji analizy technicznej."""
+        return await self.fetch_all("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        WHERE taici.chart_image_id IS NULL
+        ORDER BY ci.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+    
+    async def get_without_technical_analysis_interpretations_by_asset_and_interval(self, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera obrazy wykresów bez interpretacji analizy technicznej pogrupowane według asset i interval."""
+        return await self.fetch_all("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at,
+               a.asset, a.quote
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ci.id = cihp.chart_image_id
+        LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
+        LEFT JOIN assets a ON tahp.asset_id = a.id
+        WHERE taici.chart_image_id IS NULL 
+              AND tahp.asset_id = $1 
+              AND ci.interval = $2
+        ORDER BY ci.id DESC LIMIT $3 OFFSET $4
+        """, asset_id, interval, limit, offset)
+    
+    async def get_without_technical_analysis_interpretations_by_asset(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera obrazy wykresów bez interpretacji analizy technicznej dla konkretnego asset."""
+        return await self.fetch_all("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at,
+               a.asset, a.quote
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ci.id = cihp.chart_image_id
+        LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
+        LEFT JOIN assets a ON tahp.asset_id = a.id
+        WHERE taici.chart_image_id IS NULL AND tahp.asset_id = $1
+        ORDER BY ci.id DESC LIMIT $2 OFFSET $3
+        """, asset_id, limit, offset)
+    
+    async def get_without_technical_analysis_interpretations_by_interval(self, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera obrazy wykresów bez interpretacji analizy technicznej dla konkretnego interwału."""
+        return await self.fetch_all("""
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.created_at, ci.updated_at
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        WHERE taici.chart_image_id IS NULL AND ci.interval = $1
+        ORDER BY ci.id DESC LIMIT $2 OFFSET $3
+        """, interval, limit, offset)
+    
+    async def count_without_technical_analysis_interpretations(self) -> int:
+        """Zwraca liczbę obrazów wykresów bez interpretacji analizy technicznej."""
+        result = await self.fetch_one("""
+        SELECT COUNT(*) as count
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        WHERE taici.chart_image_id IS NULL
+        """)
+        
+        return result['count'] if result else 0
+    
+    async def count_without_technical_analysis_interpretations_by_asset_and_interval(self, asset_id: int, interval: str) -> int:
+        """Zwraca liczbę obrazów wykresów bez interpretacji analizy technicznej dla konkretnego asset i interwału."""
+        result = await self.fetch_one("""
+        SELECT COUNT(*) as count
+        FROM chart_images ci
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ci.id = cihp.chart_image_id
+        LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
+        WHERE taici.chart_image_id IS NULL 
+              AND tahp.asset_id = $1 
+              AND ci.interval = $2
+        """, asset_id, interval)
+        
+        return result['count'] if result else 0
