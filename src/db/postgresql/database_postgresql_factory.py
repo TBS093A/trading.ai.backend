@@ -19,6 +19,7 @@ class DatabasePostgreSQLFactory:
         'fundamental_analysis_interpretation': FundamentalAnalysisInterpretationTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
         'technical_analysis_interpretation': TechnicalAnalysisInterpretationTable,
+        'technical_analysis_interpretation_chart_images': TechnicalAnalysisInterpretationChartImagesTable,
         'general_interpretation': GeneralInterpretationTable,
         'telegram_signal_channels': TelegramSignalChannelsTable,
         'telegram_signals': TelegramSignalsTable,
@@ -82,6 +83,10 @@ class DatabasePostgreSQLFactory:
     def get_technical_analysis_interpretation_table(self) -> TechnicalAnalysisInterpretationTable:
         """Zwraca tabelę TechnicalAnalysisInterpretation."""
         return self.get_table('technical_analysis_interpretation')
+    
+    def get_technical_analysis_interpretation_chart_images_table(self) -> TechnicalAnalysisInterpretationChartImagesTable:
+        """Zwraca tabelę TechnicalAnalysisInterpretationChartImages."""
+        return self.get_table('technical_analysis_interpretation_chart_images')
     
     def get_general_interpretation_table(self) -> GeneralInterpretationTable:
         """Zwraca tabelę GeneralInterpretation."""

@@ -9,6 +9,7 @@ from .fundamental_analysis_table import FundamentalAnalysisTable
 from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
 from .technical_analysis_harmonic_patterns_table import TechnicalAnalysisHarmonicPatternsTable
 from .technical_analysis_interpretation_table import TechnicalAnalysisInterpretationTable
+from .technical_analysis_interpretation_chart_images_table import TechnicalAnalysisInterpretationChartImagesTable
 from .chart_images_table import ChartImagesTable
 from .chart_images_harmonic_patterns_table import ChartImagesHarmonicPatternsTable
 from .general_interpretation_table import GeneralInterpretationTable
@@ -28,6 +29,7 @@ __all__ = [
     'FundamentalAnalysisInterpretationTable',
     'TechnicalAnalysisHarmonicPatternsTable',
     'TechnicalAnalysisInterpretationTable',
+    'TechnicalAnalysisInterpretationChartImagesTable',
     'ChartImagesTable',
     'ChartImagesHarmonicPatternsTable',
     'GeneralInterpretationTable',

@@ -163,4 +163,78 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
         WHERE tai.asset_id = $1
         ORDER BY tai.id DESC
         LIMIT 1
-        """, asset_id) 
+        """, asset_id)
+    
+    async def get_with_chart_images(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """Pobiera interpretację analizy technicznej wraz z powiązanymi obrazami wykresów."""
+        result = await self.fetch_one("""
+        SELECT tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+               a.asset, a.quote, ta.x_point_timestamp,
+               ARRAY_AGG(
+                   CASE WHEN ci.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', ci.id,
+                           'image_file_path', ci.image_file_path,
+                           'image_file_name', ci.image_file_name,
+                           'storage', ci.storage,
+                           'interval', ci.interval,
+                           'created_at', ci.created_at,
+                           'updated_at', ci.updated_at
+                       )
+                   END
+               ) FILTER (WHERE ci.id IS NOT NULL) as chart_images
+        FROM technical_analysis_interpretation tai
+        JOIN assets a ON tai.asset_id = a.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON tai.id = taici.technical_analysis_interpretation_id
+        LEFT JOIN chart_images ci ON taici.chart_image_id = ci.id
+        WHERE tai.id = $1
+        GROUP BY tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+                 a.asset, a.quote, ta.x_point_timestamp
+        """, record_id)
+        
+        if result:
+            # Konwertuj chart_images z listy na listę słowników
+            if result['chart_images']:
+                result['chart_images'] = [img for img in result['chart_images'] if img is not None]
+            else:
+                result['chart_images'] = []
+        
+        return result
+    
+    async def get_all_with_chart_images(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wszystkie interpretacje analiz technicznych wraz z powiązanymi obrazami wykresów."""
+        results = await self.fetch_all("""
+        SELECT tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+               a.asset, a.quote, ta.x_point_timestamp,
+               ARRAY_AGG(
+                   CASE WHEN ci.id IS NOT NULL THEN 
+                       json_build_object(
+                           'id', ci.id,
+                           'image_file_path', ci.image_file_path,
+                           'image_file_name', ci.image_file_name,
+                           'storage', ci.storage,
+                           'interval', ci.interval,
+                           'created_at', ci.created_at,
+                           'updated_at', ci.updated_at
+                       )
+                   END
+               ) FILTER (WHERE ci.id IS NOT NULL) as chart_images
+        FROM technical_analysis_interpretation tai
+        JOIN assets a ON tai.asset_id = a.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
+        LEFT JOIN technical_analysis_interpretation_chart_images taici ON tai.id = taici.technical_analysis_interpretation_id
+        LEFT JOIN chart_images ci ON taici.chart_image_id = ci.id
+        GROUP BY tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+                 a.asset, a.quote, ta.x_point_timestamp
+        ORDER BY tai.id DESC LIMIT $1 OFFSET $2
+        """, limit, offset)
+        
+        for result in results:
+            # Konwertuj chart_images z listy na listę słowników
+            if result['chart_images']:
+                result['chart_images'] = [img for img in result['chart_images'] if img is not None]
+            else:
+                result['chart_images'] = []
+        
+        return results 
