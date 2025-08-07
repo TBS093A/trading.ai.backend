@@ -501,14 +501,10 @@ class HarmonicPatterns(
                 # Debug: sprawdź wartości przed zapytaniem
                 logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, interval: {self.interval}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
                 
-                # Jeśli interval jest ustawiony, użyj nowej metody get_by_asset_id_and_interval
+                # Jeśli interval jest ustawiony, użyj nowej metody get_by_timestamp_range_and_asset_id_and_interval
                 if self.interval:
-                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_asset_id_and_interval(
-                        self.asset_id, self.interval
-                    )
-                else:
-                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id(
-                        start_timestamp, end_timestamp, self.asset_id
+                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
+                        start_timestamp, end_timestamp, self.asset_id, self.interval
                     )
                 
                 logger.info(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
