@@ -353,6 +353,23 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         return results 
     
+    async def get_by_timestamp_range_and_asset_id_and_interval(self, start_timestamp: int, end_timestamp: int, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy techniczne z określonego zakresu czasowego, asset i interwału."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.x_point_timestamp >= $1 AND ta.x_point_timestamp <= $2 AND ta.asset_id = $3 AND ta.interval = $4
+        ORDER BY ta.id DESC LIMIT $5 OFFSET $6
+        """, start_timestamp, end_timestamp, asset_id, interval, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
+    
     async def check_pattern_exists(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
                                  b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> bool:
         """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
