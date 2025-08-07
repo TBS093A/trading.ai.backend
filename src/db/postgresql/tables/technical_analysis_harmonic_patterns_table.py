@@ -29,6 +29,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         CREATE TABLE IF NOT EXISTS technical_analysis_harmonic_patterns (
             id SERIAL PRIMARY KEY,
             asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            interval VARCHAR(10),
             x_point_timestamp BIGINT,
             a_point_timestamp BIGINT,
             b_point_timestamp BIGINT,
@@ -39,7 +40,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """
     
     async def create(self, asset_id: int, ta_object_json: Dict[str, Any], 
-                    x_point_timestamp: int = None, a_point_timestamp: int = None, 
+                    interval: str = None, x_point_timestamp: int = None, a_point_timestamp: int = None, 
                     b_point_timestamp: int = None, c_point_timestamp: int = None, 
                     d_point_timestamp: int = None) -> Optional[int]:
         """Tworzy nową analizę techniczną i zwraca jej ID."""
@@ -49,9 +50,9 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             
             analysis_id = await self.fetch_val(
                 """INSERT INTO technical_analysis_harmonic_patterns 
-                (asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id""",
-                asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json)
+                (asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id""",
+                asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json)
             )
             logger.info(f"Utworzono analizę techniczną z ID: {analysis_id}")
             return analysis_id
@@ -62,7 +63,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera analizę techniczną po ID."""
         result = await self.fetch_one("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -85,6 +86,11 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             if 'asset_id' in kwargs:
                 update_fields.append(f"asset_id = ${param_count}")
                 values.append(kwargs['asset_id'])
+                param_count += 1
+            
+            if 'interval' in kwargs:
+                update_fields.append(f"interval = ${param_count}")
+                values.append(kwargs['interval'])
                 param_count += 1
             
             if 'x_point_timestamp' in kwargs:
@@ -145,7 +151,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie analizy techniczne z limitem i offsetem."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -161,7 +167,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne dla asset."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -175,10 +181,27 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         return results
     
+    async def get_by_asset_id_and_interval(self, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera analizy techniczne dla asset i interwału."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.asset_id = $1 AND ta.interval = $2
+        ORDER BY ta.id DESC LIMIT $3 OFFSET $4
+        """, asset_id, interval, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results
+    
     async def get_by_timestamp_range(self, start_timestamp: int, end_timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne z określonego zakresu czasowego (używa x_point_timestamp)."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -195,7 +218,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_latest_by_asset_id(self, asset_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera najnowszą analizę techniczną dla asset."""
         result = await self.fetch_one("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -213,7 +236,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def search_by_json_pattern(self, pattern: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje analizy techniczne po wzorcu w JSON."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -234,7 +257,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -255,7 +278,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -272,7 +295,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_complete_patterns(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera kompletne wzorce harmoniczne (wszystkie punkty wypełnione)."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -294,7 +317,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_incomplete_patterns(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera niekompletne wzorce harmoniczne (przynajmniej jeden punkt jest NULL)."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -316,7 +339,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_by_timestamp_range_and_asset_id(self, start_timestamp: int, end_timestamp: int, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy techniczne z określonego zakresu czasowego i asset."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -350,7 +373,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
                                      b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> Optional[Dict[str, Any]]:
         """Pobiera wzorzec o podanych timestampach dla danego asset."""
         result = await self.fetch_one("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
@@ -372,7 +395,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_with_chart_images(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera wzorzec harmoniczny wraz z powiązanymi obrazami wykresów."""
         result = await self.fetch_one("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote,
                ARRAY_AGG(
@@ -392,7 +415,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
         LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
         WHERE ta.id = $1
-        GROUP BY ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        GROUP BY ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                  ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                  a.asset, a.quote
         """, record_id)
@@ -410,7 +433,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_all_with_chart_images(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie wzorce harmoniczne wraz z powiązanymi obrazami wykresów."""
         results = await self.fetch_all("""
-        SELECT ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                a.asset, a.quote,
                ARRAY_AGG(
@@ -429,7 +452,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
         LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
-        GROUP BY ta.id, ta.asset_id, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+        GROUP BY ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
                  ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
                  a.asset, a.quote
         ORDER BY ta.id DESC LIMIT $1 OFFSET $2

@@ -56,7 +56,8 @@ class HarmonicPatterns(
         },
         use_database: bool = False,
         database_factory = None,
-        asset_id: int = None
+        asset_id: int = None,
+        interval: str = None
     ):
         super().__init__("HarmonicPatterns")
         self.general_fibonacci_levels = general_fibonacci_levels
@@ -65,6 +66,7 @@ class HarmonicPatterns(
         self.use_database = use_database
         self.database_factory = database_factory
         self.asset_id = asset_id
+        self.interval = interval
         # Inicjalizuj obiekty Fibonacci do współpracy
         self.fibonacci = Fibonacci()
         self.fibonacci_all_levels = FibonacciAllHarmonicPatternPointsLevels()
@@ -78,6 +80,10 @@ class HarmonicPatterns(
                   min_points: int = 5, symbol: str = '', interval: str = '',
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
+        # Aktualizuj interval w instancji jeśli został przekazany
+        if interval:
+            self.interval = interval
+            
         # Usuń chart_config z kwargs przed przekazaniem do __calculate_harmonic_patterns
         calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
         
@@ -493,11 +499,17 @@ class HarmonicPatterns(
                 technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
                 
                 # Debug: sprawdź wartości przed zapytaniem
-                logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
+                logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, interval: {self.interval}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
                 
-                self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id(
-                    start_timestamp, end_timestamp, self.asset_id
-                )
+                # Jeśli interval jest ustawiony, użyj nowej metody get_by_asset_id_and_interval
+                if self.interval:
+                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_asset_id_and_interval(
+                        self.asset_id, self.interval
+                    )
+                else:
+                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id(
+                        start_timestamp, end_timestamp, self.asset_id
+                    )
                 
                 logger.info(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
                 
@@ -578,6 +590,7 @@ class HarmonicPatterns(
             
             pattern_data = {
                 'asset_id': self.asset_id,
+                'interval': self.interval,
                 'ta_object_json': {
                     'pattern_name': pattern_name,
                     'pattern_type': str(pattern.name),
