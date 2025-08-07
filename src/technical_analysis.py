@@ -371,12 +371,18 @@ class TechnicalAnalysis:
                                             continue
                                     
                                     if uploaded_to_storage:
+                                        # Oblicz timestampy z klines
+                                        timestamp_start = int(klines[0]['open_time'])
+                                        timestamp_end = int(klines[-1]['close_time'])
+                                        
                                         # Zapisz do bazy danych
                                         chart_image_id = await chart_images_table.create(
                                             image_file_path=file_name,
                                             image_file_name=file_name.split('/')[-1],
                                             storage=uploaded_to_storage,
-                                            interval=interval
+                                            interval=interval,
+                                            timestamp_start=timestamp_start,
+                                            timestamp_end=timestamp_end
                                         )
                                         
                                         if chart_image_id:
