@@ -58,6 +58,7 @@ class DatabasePostgreSQL:
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'technical_analysis_harmonic_patterns',
                 'technical_analysis_interpretation',
+                'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'general_interpretation',
                 'telegram_signal_channels',
                 'telegram_signals',
@@ -103,6 +104,7 @@ class DatabasePostgreSQL:
             table_order = [
                 'chart_images_harmonic_patterns',
                 'chart_images',
+                'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'telegram_signal_interpretation',
                 'telegram_signals',
                 'telegram_signal_channels',
