@@ -255,38 +255,49 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
         logger.info(f"Pobrano {len(downloaded_images)} obrazów z {len(chart_images)} dostępnych")
         return downloaded_images
     
-    async def _get_harmonic_patterns_for_chart_image(self, chart_image_id: int) -> List[Dict[str, Any]]:
+    async def _get_harmonic_patterns_for_chart_images(self, chart_images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Pobiera wzorce harmoniczne dla danego obrazu wykresu.
+        Pobiera wzorce harmoniczne dla wszystkich obrazów wykresów i usuwa duplikaty.
         
         Args:
-            chart_image_id: ID obrazu wykresu
+            chart_images: Lista obrazów wykresów
             
         Returns:
-            List[Dict[str, Any]]: Lista wzorców harmonicznych
+            List[Dict[str, Any]]: Lista unikalnych wzorców harmonicznych
         """
         try:
             chart_images_harmonic_patterns_table = self.db.get_table("chart_images_harmonic_patterns")
-            patterns = await chart_images_harmonic_patterns_table.get_by_chart_image_id(chart_image_id)
+            all_patterns = []
+            seen_pattern_ids = set()
             
-            # Konwertuj wzorce na format JSON
-            json_patterns = []
-            for pattern in patterns:
-                json_pattern = {
-                    "id": pattern['id'],
-                    "asset_id": pattern['asset_id'],
-                    "asset": pattern['asset'],
-                    "quote": pattern['quote'],
-                    "x_point_timestamp": pattern['x_point_timestamp'],
-                    "a_point_timestamp": pattern['a_point_timestamp'],
-                    "b_point_timestamp": pattern['b_point_timestamp'],
-                    "c_point_timestamp": pattern['c_point_timestamp'],
-                    "d_point_timestamp": pattern['d_point_timestamp']
-                }
-                json_patterns.append(json_pattern)
+            for chart_image in chart_images:
+                chart_image_id = chart_image['id']
+                patterns = await chart_images_harmonic_patterns_table.get_by_chart_image_id(chart_image_id)
+                
+                for pattern in patterns:
+                    pattern_id = pattern['id']
+                    
+                    # Sprawdź czy wzorzec już został dodany (usuń duplikaty)
+                    if pattern_id not in seen_pattern_ids:
+                        seen_pattern_ids.add(pattern_id)
+                        
+                        # Konwertuj wzorzec na format JSON
+                        json_pattern = {
+                            "id": pattern['id'],
+                            "asset_id": pattern['asset_id'],
+                            "asset": pattern['asset'],
+                            "quote": pattern['quote'],
+                            "x_point_timestamp": pattern['x_point_timestamp'],
+                            "a_point_timestamp": pattern['a_point_timestamp'],
+                            "b_point_timestamp": pattern['b_point_timestamp'],
+                            "c_point_timestamp": pattern['c_point_timestamp'],
+                            "d_point_timestamp": pattern['d_point_timestamp'],
+                            "ta_object_json": pattern['ta_object_json']
+                        }
+                        all_patterns.append(json_pattern)
             
-            logger.debug(f"Pobrano {len(json_patterns)} wzorców harmonicznych dla chart_image_id={chart_image_id}")
-            return json_patterns
+            logger.debug(f"Pobrano {len(all_patterns)} unikalnych wzorców harmonicznych z {len(chart_images)} obrazów wykresów")
+            return all_patterns
         except Exception as e:
             logger.error(f"Błąd podczas pobierania wzorców harmonicznych: {e}", exc_info=True)
             return []
@@ -435,10 +446,9 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                             logger.warning(f"Nie udało się pobrać żadnych obrazów dla {asset_name}/{quote_name} - {interval}")
                             continue
                         
-                        # 3. Pobierz wzorce harmoniczne dla pierwszego obrazu (zakładamy, że wszystkie mają te same wzorce)
+                        # 3. Pobierz wzorce harmoniczne dla wszystkich obrazów i usuń duplikaty
                         if chart_images:
-                            first_chart_image_id = chart_images[0]['id']
-                            harmonic_patterns = await self._get_harmonic_patterns_for_chart_image(first_chart_image_id)
+                            harmonic_patterns = await self._get_harmonic_patterns_for_chart_images(chart_images)
                             
                             # Przygotuj JSON z wzorcami
                             json_patterns_list = json.dumps(harmonic_patterns, indent=2) if harmonic_patterns else "[]"
