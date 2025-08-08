@@ -58,12 +58,12 @@ class DatabasePostgreSQL:
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'technical_analysis_harmonic_patterns',
                 'technical_analysis_interpretation',
+                'chart_images',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'general_interpretation',
                 'telegram_signal_channels',
                 'telegram_signals',
                 'telegram_signal_interpretation',
-                'chart_images',
                 'chart_images_harmonic_patterns'
             ]
             
@@ -103,8 +103,8 @@ class DatabasePostgreSQL:
             # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
             table_order = [
                 'chart_images_harmonic_patterns',
-                'chart_images',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
+                'chart_images',
                 'telegram_signal_interpretation',
                 'telegram_signals',
                 'telegram_signal_channels',
