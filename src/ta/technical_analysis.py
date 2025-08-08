@@ -22,7 +22,7 @@ except ImportError:
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    level=logging.debug
 )
 logger = logging.getLogger(__name__)
 
@@ -109,6 +109,8 @@ class TechnicalAnalysis:
         # Wyczyść poprzednie obliczenia
         self.indicators.clear()
         self.technical_analysis_objects.clear()
+
+        logger.info(f"Obliczanie wskaźników i obiektów analizy technicznej")
         
         # Oblicz wskaźniki tylko jeśli podano enabled_indicators
         if enabled_indicators is not None:
@@ -165,6 +167,8 @@ class TechnicalAnalysis:
         """
         # Inicjalizuj konfigurację wykresu
         chart_config = self.__init_candlestick_chart_config(klines, title, **kwargs)
+
+        logger.info(f"Rysowanie wykresu z konfiguracją: {chart_config}")
         
         # Jeśli podano enabled_indicators lub enabled_objects, oblicz je
         if enabled_indicators is not None or enabled_objects is not None:
@@ -307,7 +311,7 @@ class TechnicalAnalysis:
                 chart_base64 = base64.b64encode(buffer.getvalue()).decode()
                 plt.close(fig)
                 
-                logger.info("Utworzono wykres w trybie awaryjnym")
+                logger.warning("Utworzono wykres w trybie awaryjnym")
                 return chart_base64
                 
             except Exception as fallback_error:
@@ -412,8 +416,8 @@ class TechnicalAnalysis:
         max_height = 100
         dynamic_height = max(min_height, min(dynamic_height, max_height))
         
-        logger.info(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
-        logger.info(f"Dynamiczna wysokość wykresu: {dynamic_height} (dla zakresu {price_range_for_height:.6f}, ratio: {y_max_for_height/y_min_for_height if y_min_for_height > 0 else 1:.2f})")
+        logger.debug(f"Dynamiczna szerokość wykresu: {dynamic_width} (dla {candles_count} świec, mnożnik: {width_multiplier:.2f})")
+        logger.debug(f"Dynamiczna wysokość wykresu: {dynamic_height} (dla zakresu {price_range_for_height:.6f}, ratio: {y_max_for_height/y_min_for_height if y_min_for_height > 0 else 1:.2f})")
         
         return {
             'dynamic_width': dynamic_width,
@@ -433,7 +437,7 @@ class TechnicalAnalysis:
         elif candles_count > 200:
             tick_interval = candles_count / 100
             
-        logger.info(f"Interwał osi X: co {tick_interval} świeca (dla {candles_count} świec)")
+        logger.debug(f"Interwał osi X: co {tick_interval} świeca (dla {candles_count} świec)")
         
         # Oblicz parametry formatowania osi Y
         y_min = df[['low']].min().iloc[0]
@@ -455,7 +459,7 @@ class TechnicalAnalysis:
         else:
             y_format = '%.0f'
         
-        logger.info(f"Parametry osi Y: {base_ticks} tick-ów, format {y_format}, zakres: {y_min:.6f} - {y_max:.6f}")
+        logger.debug(f"Parametry osi Y: {base_ticks} tick-ów, format {y_format}, zakres: {y_min:.6f} - {y_max:.6f}")
         
         return {
             'tick_interval': tick_interval,
@@ -488,7 +492,7 @@ class TechnicalAnalysis:
         # Oblicz padding w jednostkach cenowych dla skali logarytmicznej
         single_padding_factor = padding_ratio * 0.15  # Współczynnik dla skali log
         
-        logger.info(f"Obliczony padding: {padding_pixels}px = {padding_ratio:.4f} ratio = {single_padding_factor:.4f} factor na stronę")
+        logger.debug(f"Obliczony padding: {padding_pixels}px = {padding_ratio:.4f} ratio = {single_padding_factor:.4f} factor na stronę")
         
         return {
             'padding_ratio': padding_ratio,
@@ -515,7 +519,7 @@ class TechnicalAnalysis:
         dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
         dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
         
-        logger.info(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+        logger.debug(f"Dynamiczna wielkość czcionki - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
         
         return {
             'dynamic_font_size_labels': dynamic_font_size_labels,
@@ -565,7 +569,7 @@ class TechnicalAnalysis:
                             'is_bullish': pattern_info.get('pattern_is_bullish', False),
                         })
         
-        logger.info(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
+        logger.debug(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
         
         return patterns_data + forming_patterns_data
     
@@ -615,10 +619,10 @@ class TechnicalAnalysis:
             bottom_padding = y_min_current - y_min_padded
             top_padding = y_max_padded - y_max_current
             
-            logger.info(f"Ustawiono równy padding osi Y:")
-            logger.info(f"  Przed: {y_min_current:.6f} - {y_max_current:.6f}")
-            logger.info(f"  Po:    {y_min_padded:.6f} - {y_max_padded:.6f}")
-            logger.info(f"  Padding dolny: {abs(bottom_padding):.6f}, górny: {top_padding:.6f}")
+            logger.debug(f"Ustawiono równy padding osi Y:")
+            logger.debug(f"  Przed: {y_min_current:.6f} - {y_max_current:.6f}")
+            logger.debug(f"  Po:    {y_min_padded:.6f} - {y_max_padded:.6f}")
+            logger.debug(f"  Padding dolny: {abs(bottom_padding):.6f}, górny: {top_padding:.6f}")
             
         except Exception as e:
             logger.warning(f"Nie można ustawić paddingu osi Y: {e}")
@@ -639,7 +643,7 @@ class TechnicalAnalysis:
                 for label in ax.get_xticklabels():
                     label.set_rotation(90)
             
-            logger.info(f"Ustawiono tick interwał {chart_config['tick_interval']} dla osi X i formatowanie dla skali logarytmicznej")
+            logger.debug(f"Ustawiono tick interwał {chart_config['tick_interval']} dla osi X i formatowanie dla skali logarytmicznej")
         except Exception as e:
             logger.warning(f"Nie można ustawić formatowania osi: {e}")
         

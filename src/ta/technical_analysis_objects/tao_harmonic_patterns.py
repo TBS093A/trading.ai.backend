@@ -22,7 +22,7 @@ except ImportError:
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    level=logging.debug
 )
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ class HarmonicPatterns(
 
                 # Wykonaj wyszukiwanie wzorców
                 for fib_tolerance_strategy_name, fib_tolerance in fib_tolerance_strategy.items():
-                    logger.info(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
+                    logger.debug(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
                     harmonic_search = HarmonicSearch(
                         technicals,
                         fib_tolerance=fib_tolerance, 
@@ -200,12 +200,12 @@ class HarmonicPatterns(
                     else:
                         patterns = harmonic_search.get_patterns()
 
-                    logger.info(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
+                    logger.debug(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
 
                     # Przetwórz wzorce i nanieś punkty na klines
                     for pattern_type_key in patterns:
                         pattern_list = patterns[pattern_type_key]
-                        logger.info(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key} dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}")
+                        logger.debug(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key} dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}")
 
                         for pattern_idx, pattern in enumerate(pattern_list):
                             try:
@@ -360,11 +360,11 @@ class HarmonicPatterns(
                                     # Loguj przykłady obliczonych kombinacji i targetów
                                     if all_points_fibonacci:
                                         example_combinations = list(all_points_fibonacci.keys())[:5]  # Pierwsze 5 kombinacji
-                                        logger.info(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
+                                        logger.debug(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
                                     
                                     if all_targets:
                                         targets_info = [f"{k}({v['type']})" for k, v in all_targets.items()]
-                                        logger.info(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
+                                        logger.debug(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
 
                                     # Upewnij się że istnieje struktura patterns
                                     if 'patterns' not in klines[first_kline_idx]:
@@ -398,7 +398,7 @@ class HarmonicPatterns(
                                 total_fib_levels = len(fibonacci_levels.get('retracement', {})) + len(fibonacci_levels.get('extension', {})) + len(fibonacci_levels.get('targets', {}))
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
                                 total_all_targets = len(fibonacci_levels.get('all_targets', {}))
-                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
+                                logger.debug(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
                                 logger.debug(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
 
                                 # Zarejestruj wzorzec jako dodany
@@ -419,8 +419,8 @@ class HarmonicPatterns(
                                 logger.error(traceback.format_exc())
                                 continue
 
-            logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
-            logger.info(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
+            logger.debug(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
+            logger.debug(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
             
             # Usuń wzorce z bazy danych, które nie zostały ponownie wygenerowane
             await self.delete_deprecated_objects_from_database()
@@ -499,7 +499,7 @@ class HarmonicPatterns(
                 technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
                 
                 # Debug: sprawdź wartości przed zapytaniem
-                logger.info(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, interval: {self.interval}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
+                logger.debug(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, interval: {self.interval}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
                 
                 # Jeśli interval jest ustawiony, użyj nowej metody get_by_timestamp_range_and_asset_id_and_interval
                 if self.interval:
@@ -507,19 +507,19 @@ class HarmonicPatterns(
                         start_timestamp, end_timestamp, self.asset_id, self.interval
                     )
                 
-                logger.info(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
+                logger.debug(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
                 
                 # Debug: sprawdź wszystkie wzorce dla tego asset_id (bez filtrowania czasowego)
                 all_patterns_for_asset = await technical_analysis_harmonic_patterns_table.get_by_asset_id(self.asset_id)
-                logger.info(f"DEBUG: Wszystkie wzorce dla asset_id {self.asset_id}: {len(all_patterns_for_asset)}")
+                logger.debug(f"DEBUG: Wszystkie wzorce dla asset_id {self.asset_id}: {len(all_patterns_for_asset)}")
                 
                 if all_patterns_for_asset:
-                    logger.info(f"DEBUG: Przykładowe wzorce w bazie:")
+                    logger.debug(f"DEBUG: Przykładowe wzorce w bazie:")
                     for i, pattern in enumerate(all_patterns_for_asset[:3]):  # Pierwsze 3
-                        logger.info(f"  Wzorzec {i+1}: ID={pattern['id']}, X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
+                        logger.debug(f"  Wzorzec {i+1}: ID={pattern['id']}, X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
                         # Debug: sprawdź typy danych
-                        logger.info(f"    Typy: X={type(pattern['x_point_timestamp'])}, A={type(pattern['a_point_timestamp'])}")
-                        logger.info(f"    Wartości: X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
+                        logger.debug(f"    Typy: X={type(pattern['x_point_timestamp'])}, A={type(pattern['a_point_timestamp'])}")
+                        logger.debug(f"    Wartości: X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
                     
                     # Przygotuj listę wzorców do usunięcia (wszystkie istniejące)
                     self.patterns_to_delete = [pattern['id'] for pattern in self.existing_patterns]
@@ -616,7 +616,7 @@ class HarmonicPatterns(
             )
             
             if pattern_exists:
-                logger.info(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
+                logger.debug(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
                 # Znajdź ID istniejącego wzorca i dodaj do self.regenerated_patterns
                 existing_pattern = await technical_analysis_harmonic_patterns_table.get_by_point_timestamps(
                     self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
@@ -629,7 +629,7 @@ class HarmonicPatterns(
                 new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
                 
                 if new_pattern_id:
-                    logger.info(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
+                    logger.debug(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
                     return True
                 else:
                     logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
@@ -655,13 +655,13 @@ class HarmonicPatterns(
                 if pattern_id not in self.regenerated_patterns:
                     if await technical_analysis_harmonic_patterns_table.delete(pattern_id):
                         deleted_count += 1
-                        logger.info(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
+                        logger.debug(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
                     else:
                         logger.warning(f"Nie udało się usunąć wzorca z bazy danych o ID: {pattern_id}")
                 else:
-                    logger.info(f"Wzorzec o ID: {pattern_id} został ponownie wygenerowany - zachowuję w bazie")
+                    logger.debug(f"Wzorzec o ID: {pattern_id} został ponownie wygenerowany - zachowuję w bazie")
             
-            logger.info(f"Usunięto {deleted_count} wzorców z bazy danych, które nie zostały ponownie wygenerowane")
+            logger.debug(f"Usunięto {deleted_count} wzorców z bazy danych, które nie zostały ponownie wygenerowane")
             
         except Exception as e:
             logger.error(f"Błąd podczas usuwania wzorców z bazy danych: {e}")
@@ -726,22 +726,22 @@ class HarmonicPatterns(
                             'is_bullish': pattern_info.get('pattern_is_bullish', False),
                         })
         
-        logger.info(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
-        logger.info(f"Znalezione poziomy Fibonacci: {len(fibonacci_data)}")
-        logger.info(f"Znalezione retraces: {len(retraces_data)}")
+        logger.debug(f"Znalezione wzorce: {len(patterns_data)} punktów formed, {len(forming_patterns_data)} punktów forming")
+        logger.debug(f"Znalezione poziomy Fibonacci: {len(fibonacci_data)}")
+        logger.debug(f"Znalezione retraces: {len(retraces_data)}")
         
         # Wyświetl szczegółowe informacje o wzorcach
         if patterns_data:
-            logger.info("Szczegóły znalezionych wzorców:")
+            logger.debug("Szczegóły znalezionych wzorców:")
             for pattern in patterns_data[:5]:  # Pokaż pierwsze 5
-                logger.info(f"Wzorzec {pattern['pattern_id']}: {pattern['point_name']} @ {pattern['price']:.2f} - {pattern['pattern_name']}")
+                logger.debug(f"Wzorzec {pattern['pattern_id']}: {pattern['point_name']} @ {pattern['price']:.2f} - {pattern['pattern_name']}")
         
         # Wyświetl informacje o retraces
         if retraces_data:
-            logger.info("Znalezione retraces wzorców:")
+            logger.debug("Znalezione retraces wzorców:")
             for retraces_info in retraces_data[:5]:  # Pokaż pierwsze 5
                 for retrace_name, retrace_value in retraces_info['pattern_retraces'].items():
-                    logger.info(f"Wzorzec {retraces_info['pattern_id']}: {retrace_name} = {retrace_value:.4f}")
+                    logger.debug(f"Wzorzec {retraces_info['pattern_id']}: {retrace_name} = {retrace_value:.4f}")
                     break  # Tylko jedna na wzorzec dla czytelności
         
         # Rysuj wzorce harmoniczne
@@ -787,7 +787,7 @@ class HarmonicPatterns(
                         if 'pattern_retraces' in kline['patterns'][pattern_id]:
                             pattern_groups[pattern_id]['pattern_retraces'] = kline['patterns'][pattern_id]['pattern_retraces']
             
-            logger.info(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
+            logger.debug(f"Rysowanie linii i trójkątów dla {len(pattern_groups)} wzorców")
             
             # Inicjalizuj listę etykiet do rysowania w paddingu
             pattern_labels_for_padding = []
@@ -800,7 +800,7 @@ class HarmonicPatterns(
                 dynamic_font_size_fibo_labels = chart_config.get('dynamic_font_size_fibo_labels', 6)
                 dynamic_width = chart_config.get('dynamic_width', 20)
                 dynamic_height = chart_config.get('dynamic_height', 20)
-                logger.info(f"Użyto chart_config - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels}")
+                logger.debug(f"Użyto chart_config - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels}")
             else:
                 # Oblicz dynamiczną wielkość czcionki na podstawie rozmiaru wykresu i paddingu
                 dynamic_width = kwargs.get('dynamic_width', 20)
@@ -818,7 +818,7 @@ class HarmonicPatterns(
                 dynamic_font_size_axes = int(base_font_size_axes * scaling_ratio)  # Dla osi
                 dynamic_font_size_fibo_labels = int(base_font_size_fibo_labels * scaling_ratio)  # Dla etykiet Fibonacci
                 
-                logger.info(f"Obliczono lokalnie - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
+                logger.debug(f"Obliczono lokalnie - etykiety: {dynamic_font_size_labels}, osi: {dynamic_font_size_axes}, fibonacci: {dynamic_font_size_fibo_labels} (współczynnik: {scaling_ratio:.3f}, szerokość: {width_factor:.2f}, wysokość: {height_factor:.2f}, padding: {padding_factor:.2f})")
             
             # Najpierw przygotuj mapę wszystkich punktów na świecach (dla wszystkich wzorców)
             all_points_by_candle = {}
@@ -830,11 +830,11 @@ class HarmonicPatterns(
                     all_points_by_candle[candle_idx].append((pattern_id, point_name, point_data))
             
             # Loguj informacje o punktach na świecach dla debugowania
-            logger.info(f"Mapa punktów na świecach:")
+            logger.debug(f"Mapa punktów na świecach:")
             for candle_idx, points_list in all_points_by_candle.items():
                 if len(points_list) > 1:  # Tylko świece z wieloma punktami
                     point_descriptions = [f"({pid}:{name})" for pid, name, _ in points_list]
-                    logger.info(f"Świeca {candle_idx}: {len(points_list)} punktów: {', '.join(point_descriptions)}")
+                    logger.debug(f"Świeca {candle_idx}: {len(points_list)} punktów: {', '.join(point_descriptions)}")
             
             # Rysuj linie i trójkąty dla każdego wzorca
             for pattern_id, pattern_group in pattern_groups.items():
@@ -1065,7 +1065,7 @@ class HarmonicPatterns(
                 displaced_points = sum(1 for point_name in points.keys() 
                                      if len(all_points_by_candle.get(points[point_name]['index'], [])) > 1)
                 
-                logger.info(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
+                logger.debug(f"Narysowano wzorzec {pattern_name} (ID: {pattern_id}) z {len(pattern_retraces)} retraces i {displaced_points} przesuniętymi punktami")
             
             # Rysuj poziomy Fibonacciego i/lub targety jeśli włączone
             # show_fibonacci = kwargs.get('show_fibonacci', False)
