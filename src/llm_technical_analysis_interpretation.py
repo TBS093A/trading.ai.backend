@@ -185,7 +185,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             List[Dict[str, Any]]: Lista assetów
         """
         try:
-            assets_table = self.db.get_table("assets")
+            assets_table = self.db.get_factory().get_assets_table()
             assets = await assets_table.get_all(limit=1000, offset=0)
             logger.info(f"Pobrano {len(assets)} assetów z bazy danych")
             return assets
@@ -205,7 +205,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             List[Dict[str, Any]]: Lista obrazów wykresów
         """
         try:
-            chart_images_table = self.db.get_table("chart_images")
+            chart_images_table = self.db.get_factory().get_chart_images_table()
             chart_images = await chart_images_table.get_without_technical_analysis_interpretations_by_asset_and_interval(
                 asset_id=asset_id, 
                 interval=interval,
@@ -266,7 +266,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             List[Dict[str, Any]]: Lista unikalnych wzorców harmonicznych
         """
         try:
-            chart_images_harmonic_patterns_table = self.db.get_table("chart_images_harmonic_patterns")
+            chart_images_harmonic_patterns_table = self.db.get_factory().get_chart_images_harmonic_patterns_table()
             all_patterns = []
             seen_pattern_ids = set()
             
@@ -343,7 +343,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             Optional[int]: ID zapisanej interpretacji lub None w przypadku błędu
         """
         try:
-            technical_analysis_interpretation_table = self.db.get_table("technical_analysis_interpretation")
+            technical_analysis_interpretation_table = self.db.get_factory().get_technical_analysis_interpretation_table()
             timestamp = datetime.now().isoformat()
             
             interpretation_id = await technical_analysis_interpretation_table.create(
@@ -378,7 +378,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
         """
         try:
             # Pobierz obrazy wykresów dla tego assetu
-            chart_images_table = self.db.get_table("chart_images")
+            chart_images_table = self.db.get_factory().get_chart_images_table()
             chart_images = await chart_images_table.get_without_technical_analysis_interpretations_by_asset(
                 asset_id=asset_id,
                 limit=100,
@@ -386,7 +386,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             )
             
             # Utwórz powiązania
-            technical_analysis_interpretation_chart_images_table = self.db.get_table("technical_analysis_interpretation_chart_images")
+            technical_analysis_interpretation_chart_images_table = self.db.get_factory().get_technical_analysis_interpretation_chart_images_table()
             
             for chart_image in chart_images:
                 try:
