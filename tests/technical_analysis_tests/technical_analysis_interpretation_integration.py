@@ -163,6 +163,57 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
         except Exception as e:
             print(f"Błąd podczas pobierania statystyk z bazy danych: {e}")
     
+    async def cleanup_storage(self, factory, test_name: str):
+        """Metoda pomocnicza do czyszczenia storage po teście"""
+        try:
+            from src.api import ApiFacade
+            
+            # Pobierz storage APIs
+            api_facade = ApiFacade()
+            storage_apis = api_facade.get_fabric().get_storage_apis()
+            
+            # Pobierz wszystkie chart images z bazy
+            chart_images_table = factory.get_chart_images_table()
+            all_chart_images = await chart_images_table.get_all()
+            
+            deleted_files_count = 0
+            failed_deletions_count = 0
+            
+            print(f"\n=== {test_name} - CZYSZCZENIE STORAGE ===")
+            
+            for chart_image in all_chart_images:
+                try:
+                    file_path = chart_image['image_file_path']
+                    file_name = chart_image['image_file_name']
+                    storage_type = chart_image['storage']
+                    
+                    # Znajdź odpowiedni storage API
+                    for storage_api in storage_apis:
+                        if storage_api.STORAGE == storage_type:
+                            # Próbuj usunąć plik
+                            if storage_api.delete_file(f"{file_path}/{file_name}"):
+                                deleted_files_count += 1
+                                print(f"Usunięto plik: {file_path}/{file_name} (storage: {storage_type})")
+                            else:
+                                failed_deletions_count += 1
+                                print(f"Nie udało się usunąć pliku: {file_path}/{file_name} (storage: {storage_type})")
+                            break
+                    else:
+                        failed_deletions_count += 1
+                        print(f"Nie znaleziono storage API dla typu: {storage_type}")
+                        
+                except Exception as e:
+                    failed_deletions_count += 1
+                    print(f"Błąd podczas usuwania pliku {chart_image.get('image_file_path', 'unknown')}: {e}")
+                    continue
+            
+            print(f"Usunięto plików: {deleted_files_count}")
+            print(f"Nieudanych usunięć: {failed_deletions_count}")
+            print(f"=== KONIEC CZYSZCZENIA STORAGE {test_name} ===\n")
+            
+        except Exception as e:
+            print(f"Błąd podczas czyszczenia storage: {e}")
+
     async def cleanup_database(self, factory, test_name: str):
         """Metoda pomocnicza do czyszczenia bazy danych po teście"""
         try:
@@ -265,7 +316,8 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                     chart_image = await chart_images_table.get_by_id(relation['chart_image_id'])
                     self.assertIsNotNone(chart_image, f"Chart Image ID {relation['chart_image_id']} nie istnieje w bazie")
                 
-                # Wyczyść bazę danych po teście
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_basic")
                 await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_basic")
                 
             except Exception as e:
@@ -364,7 +416,8 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                     self.assertIsInstance(relation['technical_analysis_interpretation_id'], int)
                     self.assertIsInstance(relation['chart_image_id'], int)
                 
-                # Wyczyść bazę danych po teście
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_content_validation")
                 await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_content_validation")
                 
             except Exception as e:
@@ -436,7 +489,8 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                         f"Interpretation {interpretation['id']} nie ma żadnych relacji z chart images"
                     )
                 
-                # Wyczyść bazę danych po teście
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_relationships")
                 await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_relationships")
                 
             except Exception as e:
@@ -490,7 +544,8 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                 # Liczba unikalnych kombinacji powinna być równa liczbie rekordów
                 self.assertEqual(len(unique_combinations), len(all_interpretations))
                 
-                # Wyczyść bazę danych po teście
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_duplicate_prevention")
                 await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_duplicate_prevention")
                 
             except Exception as e:
@@ -548,7 +603,8 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                     # Sprawdź czy asset_id jest zgodny
                     self.assertEqual(interpretation['asset_id'], harmonic_pattern['asset_id'])
                 
-                # Wyczyść bazę danych po teście
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_harmonic_patterns")
                 await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_harmonic_patterns")
                 
             except Exception as e:
