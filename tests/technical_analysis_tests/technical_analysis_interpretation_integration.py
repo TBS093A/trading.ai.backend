@@ -184,19 +184,18 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
             for chart_image in all_chart_images:
                 try:
                     file_path = chart_image['image_file_path']
-                    file_name = chart_image['image_file_name']
                     storage_type = chart_image['storage']
                     
                     # Znajdź odpowiedni storage API
                     for storage_api in storage_apis:
                         if storage_api.STORAGE == storage_type:
                             # Próbuj usunąć plik
-                            if storage_api.delete_file(f"{file_path}/{file_name}"):
+                            if storage_api.delete_file(f"{file_path}"):
                                 deleted_files_count += 1
-                                print(f"Usunięto plik: {file_path}/{file_name} (storage: {storage_type})")
+                                print(f"Usunięto plik: {file_path} (storage: {storage_type})")
                             else:
                                 failed_deletions_count += 1
-                                print(f"Nie udało się usunąć pliku: {file_path}/{file_name} (storage: {storage_type})")
+                                print(f"Nie udało się usunąć pliku: {file_path} (storage: {storage_type})")
                             break
                     else:
                         failed_deletions_count += 1
