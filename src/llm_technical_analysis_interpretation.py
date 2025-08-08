@@ -408,6 +408,10 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
         Przetwarza wszystkie assety i interwały, generuje interpretacje za pomocą LLM'a.
         """
         try:
+            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+
             logger.info("Rozpoczynam synchronizację interpretacji analiz technicznych")
             
             # 0. Pobierz wszystkie assety z bazy
