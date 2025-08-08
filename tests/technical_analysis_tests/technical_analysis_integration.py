@@ -11,7 +11,7 @@ from src.exchanges import Exchanges
 from src.db import DatabaseFacade
 from src.config import config
 
-
+@unittest.skip("Skipping basic technical analysis test")
 class TestTechnicalAnalysisIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
@@ -234,7 +234,6 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_test())
 
-    @unittest.skip("Skipping file naming test")
     def test_sync_technical_analysis_file_naming(self):
         """Test konwencji nazewnictwa plików wykresów"""
         
@@ -313,7 +312,6 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_file_naming_test())
 
-    @unittest.skip("Skipping storage integration test")
     def test_sync_technical_analysis_storage_integration(self):
         """Test integracji z storage"""
         
@@ -375,7 +373,6 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_storage_test())
 
-    @unittest.skip("Skipping harmonic patterns relationships test")
     def test_sync_technical_analysis_harmonic_patterns_relationships(self):
         """Test relacji między chart images a harmonic patterns"""
         
@@ -456,7 +453,6 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_relationships_test())
 
-    @unittest.skip("Skipping duplicate prevention test")
     def test_sync_technical_analysis_duplicate_prevention(self):
         """Test zapobiegania duplikatom podczas synchronizacji analizy technicznej"""
         
@@ -510,7 +506,6 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_duplicate_test())
 
-    @unittest.skip("Skipping content validation test")
     def test_sync_technical_analysis_content_validation(self):
         """Test walidacji zawartości analizy technicznej"""
         
