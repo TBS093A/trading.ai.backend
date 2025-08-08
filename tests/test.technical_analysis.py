@@ -3,7 +3,8 @@ from technical_analysis_tests import (
     TestHarmonicPatternsCalculation,
     TestHarmonicPatternsCalculationWithDatabaseIntegration,
     TestHarmonicPatternsCalculationWithDatabaseAndAIIntegration,
-    TestTechnicalAnalysisIntegration
+    TestTechnicalAnalysisIntegration,
+    TestTechnicalAnalysisInterpretationIntegration
 )
 
 if __name__ == "__main__":
