@@ -177,20 +177,25 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             logger.error(f"Błąd podczas wyciągania JSON z odpowiedzi: {e}")
             return response_text
     
-    async def _get_all_assets(self) -> List[Dict[str, Any]]:
+    async def _get_assets_with_unprocessed_chart_images(self, interval: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """
-        Pobiera wszystkie assety z bazy danych.
+        Pobiera assety z unprocessed chart images z bazy danych z paginacją dla danego interwału.
+        
+        Args:
+            interval: Interwał czasowy (np. '4h', '1d')
+            limit: Maksymalna liczba assetów do pobrania
+            offset: Offset dla paginacji
         
         Returns:
             List[Dict[str, Any]]: Lista assetów
         """
         try:
             assets_table = self.db.get_factory().get_assets_table()
-            assets = await assets_table.get_all(limit=1000, offset=0)
-            logger.info(f"Pobrano {len(assets)} assetów z bazy danych")
+            assets = await assets_table.get_assets_with_unprocessed_chart_images_by_interval(interval=interval, limit=limit, offset=offset)
+            logger.info(f"Pobrano {len(assets)} assetów z unprocessed chart images dla interval={interval} (limit={limit}, offset={offset})")
             return assets
         except Exception as e:
-            logger.error(f"Błąd podczas pobierania assetów: {e}", exc_info=True)
+            logger.error(f"Błąd podczas pobierania assetów z unprocessed chart images: {e}", exc_info=True)
             return []
     
     async def _get_chart_images_without_interpretations(self, asset_id: int, interval: str) -> List[Dict[str, Any]]:
@@ -215,7 +220,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                 offset=0
             )
             
-            logger.debug(f"Pobrano {len(all_chart_images)} obrazów wykresów dla interval={interval} (przed filtrowaniem po asset_id)")
+            logger.info(f"Pobrano {len(all_chart_images)} obrazów wykresów dla interval={interval} (przed filtrowaniem po asset_id)")
             
             # Filtruj obrazy które mają harmonic patterns dla danego asset_id
             chart_images_harmonic_patterns_table = self.db.get_factory().get_chart_images_harmonic_patterns_table()
@@ -228,13 +233,27 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                 # Sprawdź czy chart_image ma harmonic patterns dla danego asset_id
                 harmonic_pattern_relations = await chart_images_harmonic_patterns_table.get_by_chart_image_id(chart_image_id)
                 
+                logger.debug(f"Chart image ID {chart_image_id}: znaleziono {len(harmonic_pattern_relations)} harmonic pattern relations")
+                
                 for relation in harmonic_pattern_relations:
                     # relation już zawiera wszystkie dane harmonic pattern z JOINa
-                    if relation and relation['asset_id'] == asset_id:
+                    relation_asset_id = relation.get('asset_id') if relation else None
+                    logger.debug(f"Chart image ID {chart_image_id}: relation asset_id={relation_asset_id}, szukany asset_id={asset_id}")
+                    
+                    if relation and relation_asset_id == asset_id:
                         filtered_chart_images.append(chart_image)
+                        logger.debug(f"Chart image ID {chart_image_id}: DODANY do filtered_chart_images (asset_id match: {relation_asset_id})")
                         break  # Znaleziono matching pattern, nie trzeba sprawdzać dalej
-            
-            logger.info(f"Pobrano {len(filtered_chart_images)} obrazów wykresów dla asset_id={asset_id}, interval={interval} (po filtrowaniu)")
+                else:
+                    # Ten else wykonuje się gdy pętla for nie została przerwana przez break
+                    if harmonic_pattern_relations:
+                        logger.debug(f"Chart image ID {chart_image_id}: NIE DODANY - brak matching asset_id (relations: {len(harmonic_pattern_relations)})")
+                    else:
+                        logger.debug(f"Chart image ID {chart_image_id}: NIE DODANY - brak harmonic pattern relations")
+            if len(filtered_chart_images) > 0:
+                logger.info(f"Pobrano {len(filtered_chart_images)} obrazów wykresów dla asset_id={asset_id}, interval={interval} (po filtrowaniu)")
+            else:
+                logger.debug(f"Brak obrazów wykresów dla asset_id={asset_id}, interval={interval} (po filtrowaniu)")
             return filtered_chart_images
             
         except Exception as e:
@@ -425,10 +444,15 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia powiązań: {e}", exc_info=True)
     
-    async def sync(self) -> None:
+    async def sync(self, limit: int = 10, offset: int = 0) -> None:
         """
         Główna metoda synchronizacji interpretacji analiz technicznych.
-        Przetwarza wszystkie assety i interwały, generuje interpretacje za pomocą LLM'a.
+        Przetwarza assety i interwały, generuje interpretacje za pomocą LLM'a.
+        
+        Args:
+            limit: Maksymalna liczba assetów do przetworzenia
+            offset: Offset dla paginacji assetów
+            time_delta: Interwał czasowy dla recent harmonic patterns (domyślnie 30 dni)
         """
         try:
             # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
@@ -437,13 +461,8 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
 
             logger.info("Rozpoczynam synchronizację interpretacji analiz technicznych")
             
-            # 0. Pobierz wszystkie assety z bazy
-            assets = await self._get_all_assets()
-            if not assets:
-                logger.warning("Brak assetów do przetworzenia")
-                return
-            
-            logger.info(f"Znaleziono {len(assets)} assetów do przetworzenia")
+            # 0. Sprawdź dostępność APIs przed przetwarzaniem
+            logger.info(f"Rozpoczynam synchronizację z parametrami: limit={limit}, offset={offset}")
             
             # Debug: sprawdź dostępność LLM APIs
             logger.info(f"Dostępne LLM APIs: {len(self.llm_apis)}")
@@ -462,33 +481,41 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             # Debug: sprawdź CHART_INTERVALS
             logger.info(f"CHART_INTERVALS do sprawdzenia: {list(self.CHART_INTERVALS.keys())}")
             
-            # Nested loop po assetach i interwałach
-            for asset in assets:
-                asset_id = asset['id']
-                asset_name = asset['asset']
-                quote_name = asset['quote']
+            # Nested loop po interwałach i assetach (zmieniona kolejność)
+            for interval, time_delta in self.CHART_INTERVALS.items():
+                logger.info(f"=== Przetwarzam interwał: {interval} (time_delta={time_delta}) ===")
                 
-                logger.info(f"Przetwarzam asset: {asset_name}/{quote_name} (ID: {asset_id})")
+                # Pobierz assety z unprocessed chart images dla tego interwału
+                assets = await self._get_assets_with_unprocessed_chart_images(interval=interval, limit=limit, offset=offset)
+                if not assets:
+                    logger.warning(f"Brak assetów z unprocessed chart images do przetworzenia dla interval={interval} (limit={limit}, offset={offset})")
+                    continue
                 
-                for interval in self.CHART_INTERVALS.keys():
-                    logger.info(f"Przetwarzam interwał: {interval} dla assetu {asset_name}/{quote_name}")
+                logger.info(f"Znaleziono {len(assets)} assetów z unprocessed chart images dla interval={interval}")
+                
+                for asset in assets:
+                    asset_id = asset['id']
+                    asset_name = asset['asset']
+                    quote_name = asset['quote']
+                    
+                    logger.info(f"Przetwarzam asset: {asset_name}/{quote_name} (ID: {asset_id}) dla interval={interval}")
                     
                     try:
                         # 1. Pobierz obrazy wykresów bez interpretacji dla asset i interwału
                         chart_images = await self._get_chart_images_without_interpretations(asset_id, interval)
                         
-                        logger.debug(f"Znaleziono {len(chart_images)} obrazów wykresów dla {asset_name}/{quote_name} - {interval}")
+                        logger.info(f"Znaleziono {len(chart_images)} obrazów wykresów dla {asset_name}/{quote_name} - {interval}")
                         
                         if not chart_images:
                             logger.info(f"Brak obrazów wykresów bez interpretacji dla {asset_name}/{quote_name} - {interval}")
                             continue
                         
-                        logger.info(f"Znaleziono {len(chart_images)} obrazów wykresów do przetworzenia")
+                        logger.info(f"Znaleziono {len(chart_images)} obrazów wykresów do przetworzenia, dla {asset_name}/{quote_name} - {interval}")
                         
                         # 2. Pobierz obrazy ze storage
                         downloaded_images = await self._download_chart_images(chart_images)
                         
-                        logger.debug(f"Pobrano {len(downloaded_images)} obrazów ze storage dla {asset_name}/{quote_name} - {interval}")
+                        logger.info(f"Pobrano {len(downloaded_images)} obrazów ze storage dla {asset_name}/{quote_name} - {interval}")
                         
                         if not downloaded_images:
                             logger.warning(f"Nie udało się pobrać żadnych obrazów dla {asset_name}/{quote_name} - {interval}")
@@ -497,7 +524,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         # 3. Pobierz wzorce harmoniczne dla wszystkich obrazów i usuń duplikaty
                         harmonic_patterns = await self._get_harmonic_patterns_for_chart_images(chart_images)
                         
-                        logger.debug(f"Pobrano {len(harmonic_patterns)} wzorców harmonicznych dla {asset_name}/{quote_name} - {interval}")
+                        logger.info(f"Pobrano {len(harmonic_patterns)} wzorców harmonicznych dla {asset_name}/{quote_name} - {interval}")
                         
                         # Przygotuj JSON z wzorcami
                         json_patterns_list = json.dumps(harmonic_patterns, indent=2) if harmonic_patterns else "[]"
@@ -512,14 +539,14 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         )
                         
                         # 5. Wyślij do LLM'a
-                        logger.debug(f"Wysyłam prompt do LLM dla {asset_name}/{quote_name} - {interval} z {len(downloaded_images)} obrazami")
+                        logger.info(f"Wysyłam prompt do LLM dla {asset_name}/{quote_name} - {interval} z {len(downloaded_images)} obrazami")
                         llm_response = await self._send_to_llm(prompt, downloaded_images)
                         
                         if not llm_response:
                             logger.error(f"Nie otrzymano odpowiedzi z LLM'a dla {asset_name}/{quote_name} - {interval}")
                             continue
                         
-                        logger.debug(f"Otrzymano odpowiedź z LLM dla {asset_name}/{quote_name} - {interval}")
+                        logger.info(f"Otrzymano odpowiedź z LLM dla {asset_name}/{quote_name} - {interval}")
                         
                         # 6. Wyciągnij JSON z odpowiedzi
                         response_content = llm_response.get('message', '')
@@ -546,7 +573,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         logger.error(f"Błąd podczas przetwarzania {asset_name}/{quote_name} - {interval}: {e}", exc_info=True)
                         continue
             
-            logger.info("Zakończono synchronizację interpretacji analiz technicznych")
+            logger.info(f"Zakończono synchronizację interpretacji analiz technicznych dla wszystkich interwałów")
             
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji interpretacji analiz technicznych: {e}", exc_info=True)
