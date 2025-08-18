@@ -333,18 +333,13 @@ class ChartImagesTable(AbstractTable):
     async def get_without_technical_analysis_interpretations_by_asset_and_interval(self, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów bez interpretacji analizy technicznej pogrupowane według asset i interval."""
         return await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
-               a.asset, a.quote
+        SELECT DISTINCT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
         FROM chart_images ci
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
-        LEFT JOIN chart_images_harmonic_patterns cihp ON ci.id = cihp.chart_image_id
-        LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
-        LEFT JOIN assets a ON tahp.asset_id = a.id
         WHERE taici.chart_image_id IS NULL 
-              AND tahp.asset_id = $1 
-              AND ci.interval = $2
-        ORDER BY ci.id DESC LIMIT $3 OFFSET $4
-        """, asset_id, interval, limit, offset)
+              AND ci.interval = $1
+        ORDER BY ci.id DESC LIMIT $2 OFFSET $3
+        """, interval, limit, offset)
     
     async def get_without_technical_analysis_interpretations_by_asset(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów bez interpretacji analizy technicznej dla konkretnego asset."""

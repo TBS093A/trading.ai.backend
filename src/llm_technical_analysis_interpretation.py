@@ -206,14 +206,37 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
         """
         try:
             chart_images_table = self.db.get_factory().get_chart_images_table()
-            chart_images = await chart_images_table.get_without_technical_analysis_interpretations_by_asset_and_interval(
-                asset_id=asset_id, 
+            
+            # Pobierz wszystkie chart_images bez interpretacji dla danego interwału
+            all_chart_images = await chart_images_table.get_without_technical_analysis_interpretations_by_asset_and_interval(
+                asset_id=asset_id,  # Ten parametr teraz nie jest używany w SQL
                 interval=interval,
                 limit=100,
                 offset=0
             )
-            logger.info(f"Pobrano {len(chart_images)} obrazów wykresów dla asset_id={asset_id}, interval={interval}")
-            return chart_images
+            
+            logger.debug(f"Pobrano {len(all_chart_images)} obrazów wykresów dla interval={interval} (przed filtrowaniem po asset_id)")
+            
+            # Filtruj obrazy które mają harmonic patterns dla danego asset_id
+            chart_images_harmonic_patterns_table = self.db.get_factory().get_chart_images_harmonic_patterns_table()
+            
+            filtered_chart_images = []
+            
+            for chart_image in all_chart_images:
+                chart_image_id = chart_image['id']
+                
+                # Sprawdź czy chart_image ma harmonic patterns dla danego asset_id
+                harmonic_pattern_relations = await chart_images_harmonic_patterns_table.get_by_chart_image_id(chart_image_id)
+                
+                for relation in harmonic_pattern_relations:
+                    # relation już zawiera wszystkie dane harmonic pattern z JOINa
+                    if relation and relation['asset_id'] == asset_id:
+                        filtered_chart_images.append(chart_image)
+                        break  # Znaleziono matching pattern, nie trzeba sprawdzać dalej
+            
+            logger.info(f"Pobrano {len(filtered_chart_images)} obrazów wykresów dla asset_id={asset_id}, interval={interval} (po filtrowaniu)")
+            return filtered_chart_images
+            
         except Exception as e:
             logger.error(f"Błąd podczas pobierania obrazów wykresów: {e}", exc_info=True)
             return []
@@ -275,7 +298,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                 patterns = await chart_images_harmonic_patterns_table.get_by_chart_image_id(chart_image_id)
                 
                 for pattern in patterns:
-                    pattern_id = pattern['id']
+                    pattern_id = pattern['harmonic_pattern_id']  # To jest ID z tabeli technical_analysis_harmonic_patterns
                     
                     # Sprawdź czy wzorzec już został dodany (usuń duplikaty)
                     if pattern_id not in seen_pattern_ids:
@@ -283,7 +306,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         
                         # Konwertuj wzorzec na format JSON
                         json_pattern = {
-                            "id": pattern['id'],
+                            "id": pattern['harmonic_pattern_id'],
                             "asset_id": pattern['asset_id'],
                             "asset": pattern['asset'],
                             "quote": pattern['quote'],
@@ -292,7 +315,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                             "b_point_timestamp": pattern['b_point_timestamp'],
                             "c_point_timestamp": pattern['c_point_timestamp'],
                             "d_point_timestamp": pattern['d_point_timestamp'],
-                            "ta_object_json": pattern['ta_object_json']
+                            "ta_object_json": pattern.get('ta_object_json', {})  # Użyj get() żeby uniknąć KeyError
                         }
                         all_patterns.append(json_pattern)
             
@@ -422,6 +445,23 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             
             logger.info(f"Znaleziono {len(assets)} assetów do przetworzenia")
             
+            # Debug: sprawdź dostępność LLM APIs
+            logger.info(f"Dostępne LLM APIs: {len(self.llm_apis)}")
+            for i, llm_api in enumerate(self.llm_apis):
+                logger.info(f"LLM API {i}: {llm_api.__class__.__name__}")
+            
+            if len(self.llm_apis) == 0:
+                logger.warning("BRAK LLM APIs - interpretacje nie będą generowane")
+                return
+            
+            # Debug: sprawdź dostępność Storage APIs  
+            logger.info(f"Dostępne Storage APIs: {len(self.storage_apis)}")
+            for i, storage_api in enumerate(self.storage_apis):
+                logger.info(f"Storage API {i}: {storage_api.__class__.__name__} - {storage_api.STORAGE}")
+            
+            # Debug: sprawdź CHART_INTERVALS
+            logger.info(f"CHART_INTERVALS do sprawdzenia: {list(self.CHART_INTERVALS.keys())}")
+            
             # Nested loop po assetach i interwałach
             for asset in assets:
                 asset_id = asset['id']
@@ -437,6 +477,8 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         # 1. Pobierz obrazy wykresów bez interpretacji dla asset i interwału
                         chart_images = await self._get_chart_images_without_interpretations(asset_id, interval)
                         
+                        logger.debug(f"Znaleziono {len(chart_images)} obrazów wykresów dla {asset_name}/{quote_name} - {interval}")
+                        
                         if not chart_images:
                             logger.info(f"Brak obrazów wykresów bez interpretacji dla {asset_name}/{quote_name} - {interval}")
                             continue
@@ -446,12 +488,16 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         # 2. Pobierz obrazy ze storage
                         downloaded_images = await self._download_chart_images(chart_images)
                         
+                        logger.debug(f"Pobrano {len(downloaded_images)} obrazów ze storage dla {asset_name}/{quote_name} - {interval}")
+                        
                         if not downloaded_images:
                             logger.warning(f"Nie udało się pobrać żadnych obrazów dla {asset_name}/{quote_name} - {interval}")
                             continue
                         
                         # 3. Pobierz wzorce harmoniczne dla wszystkich obrazów i usuń duplikaty
                         harmonic_patterns = await self._get_harmonic_patterns_for_chart_images(chart_images)
+                        
+                        logger.debug(f"Pobrano {len(harmonic_patterns)} wzorców harmonicznych dla {asset_name}/{quote_name} - {interval}")
                         
                         # Przygotuj JSON z wzorcami
                         json_patterns_list = json.dumps(harmonic_patterns, indent=2) if harmonic_patterns else "[]"
@@ -466,11 +512,14 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         )
                         
                         # 5. Wyślij do LLM'a
+                        logger.debug(f"Wysyłam prompt do LLM dla {asset_name}/{quote_name} - {interval} z {len(downloaded_images)} obrazami")
                         llm_response = await self._send_to_llm(prompt, downloaded_images)
                         
                         if not llm_response:
                             logger.error(f"Nie otrzymano odpowiedzi z LLM'a dla {asset_name}/{quote_name} - {interval}")
                             continue
+                        
+                        logger.debug(f"Otrzymano odpowiedź z LLM dla {asset_name}/{quote_name} - {interval}")
                         
                         # 6. Wyciągnij JSON z odpowiedzi
                         response_content = llm_response.get('message', '')
