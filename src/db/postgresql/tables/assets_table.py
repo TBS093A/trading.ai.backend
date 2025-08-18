@@ -293,4 +293,37 @@ class AssetsTable(AbstractTable):
             
         except Exception as e:
             logger.error(f"Błąd podczas pobierania assetów bez analiz: {e}", exc_info=True)
+            return []
+    
+    async def get_assets_with_unprocessed_chart_images_by_interval(self, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Pobiera assety które mają chart images nieprzypisane do żadnej analizy technicznej dla konkretnego interwału.
+        
+        Args:
+            interval: Interwał czasowy (np. '4h', '1d')
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista assetów z chart images bez interpretacji dla danego interwału
+        """
+        try:
+            results = await self.fetch_all("""
+                SELECT DISTINCT a.id, a.asset, a.quote
+                FROM assets a
+                JOIN technical_analysis_harmonic_patterns tahp ON a.id = tahp.asset_id
+                JOIN chart_images_harmonic_patterns cihp ON tahp.id = cihp.harmonic_pattern_id
+                JOIN chart_images ci ON cihp.chart_image_id = ci.id
+                LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
+                WHERE taici.chart_image_id IS NULL 
+                      AND ci.interval = $1
+                ORDER BY a.asset, a.quote
+                LIMIT $2 OFFSET $3
+            """, interval, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} assetów z unprocessed chart images dla interval={interval}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania assetów z unprocessed chart images dla interval={interval}: {e}", exc_info=True)
             return [] 
