@@ -220,9 +220,13 @@ class TechnicalAnalysis:
         for indicator in self.indicators:
             # Przekaż parametry konfiguracyjne do wskaźnika
             indicator_kwargs = {**kwargs, 'dynamic_font_size_axes': chart_config['dynamic_font_size_axes']}
+            previous_panel = panel
             panel = indicator.draw(None, df, add_plots, panel, **indicator_kwargs)
-            if panel > 2:  # Jeśli panel się zwiększył, znaczy że wskaźnik został dodany
+            if panel > previous_panel:  # Jeśli panel się zwiększył, znaczy że wskaźnik został dodany
                 active_panels.append(indicator.get_active_panel_name(**kwargs))
+                logger.debug(f"Wskaźnik {indicator.__class__.__name__} dodany do panelu {previous_panel}, następny panel: {panel}")
+            else:
+                logger.debug(f"Wskaźnik {indicator.__class__.__name__} pominięty (panel nie zwiększony: {previous_panel} → {panel})")
         
         # Oblicz panel_ratios używając metod wskaźników
         panel_ratios = [6]  # Panel 0: główny panel z cenami
@@ -233,10 +237,15 @@ class TechnicalAnalysis:
         # Dodaj proporcje paneli tylko dla aktywnych wskaźników
         for indicator in self.indicators:
             panel_ratio = indicator.get_panel_ratio(**kwargs)
-            if panel_ratio > 0 and indicator.get_active_panel_name(**kwargs) in active_panels:
+            indicator_name = indicator.get_active_panel_name(**kwargs)
+            if panel_ratio > 0 and indicator_name in active_panels:
                 panel_ratios.append(panel_ratio)
+                logger.debug(f"Dodano panel_ratio={panel_ratio} dla wskaźnika {indicator_name}")
+            else:
+                logger.debug(f"Pominięto wskaźnik {indicator_name}: panel_ratio={panel_ratio}, w active_panels={indicator_name in active_panels}")
         
-        logger.info(f"Panel ratios: {panel_ratios} dla paneli: główny + volume + {active_panels}")
+        total_panels = 1 + (1 if 'volume' in df.columns else 0) + len(active_panels)
+        logger.info(f"Panel ratios: {panel_ratios} (łącznie {len(panel_ratios)}) dla {total_panels} paneli: główny" + (", volume" if 'volume' in df.columns else "") + f", wskaźniki: {active_panels}")
         
         # Utwórz wykres z konfiguracją
         try:

@@ -154,19 +154,40 @@ class OpenaiAPI:
         """
         try:
             if isinstance(image_data, str):
-                # Jeśli to już base64 string
+                # Jeśli to już pełny URL z base64
                 if image_data.startswith('data:image'):
                     return {"type": "image_url", "image_url": {"url": image_data}}
-                # Jeśli to ścieżka do pliku
-                with open(image_data, 'rb') as image_file:
-                    image_data = image_file.read()
+                
+                # Sprawdź czy to czysty base64 string (z storage API)
+                try:
+                    # Spróbuj zdekodować jako base64 - jeśli się uda, to jest to base64
+                    base64.b64decode(image_data, validate=True)
+                    return {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
+                    }
+                except Exception:
+                    # Jeśli dekodowanie base64 się nie udało, to prawdopodobnie ścieżka do pliku
+                    if os.path.exists(image_data):
+                        with open(image_data, 'rb') as image_file:
+                            image_bytes = image_file.read()
+                        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+                        return {
+                            "type": "image_url", 
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                        }
+                    else:
+                        raise ImageProcessingError(f"Nie można przetworzyć danych obrazka: nie jest to base64 ani ścieżka do pliku")
             
-            # Konwersja bytes na base64
+            # Jeśli to bytes, konwertuj na base64
             base64_image = base64.b64encode(image_data).decode('utf-8')
             return {
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
             }
+        except ImageProcessingError:
+            # Przepuść ImageProcessingError bez modyfikacji
+            raise
         except Exception as e:
             logger.error(f"Błąd podczas przetwarzania obrazka: {e}", exc_info=True)
             raise ImageProcessingError(f"Nie udało się przetworzyć obrazka: {str(e)}")

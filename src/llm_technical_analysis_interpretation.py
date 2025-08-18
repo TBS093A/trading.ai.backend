@@ -25,7 +25,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
 - Aktywo: {asset}/{quote}
 - Zakres czasowy wykresów: {interval}
 - Obrazki: [wiele wykresów – z różnych interwałów]
-- Data analizy: {datetime.now()}
+- Data analizy: {analysis_date}
 - Wykorzystane Patterny w liście obiektów JSON:
 
 {json_patterns_list}
@@ -55,8 +55,8 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
 🧾 **Wygeneruj odpowiedź w formacie JSON:**
 ```json
 {{
-  "asset": {asset},
-  "quote": {quote},
+  "asset": "{asset}",
+  "quote": "{quote}",
   "trend_direction": {{
     "short_term": "wzrostowy",
     "mid_term": "neutralny",
@@ -451,20 +451,17 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                             continue
                         
                         # 3. Pobierz wzorce harmoniczne dla wszystkich obrazów i usuń duplikaty
-                        if chart_images:
-                            harmonic_patterns = await self._get_harmonic_patterns_for_chart_images(chart_images)
-                            
-                            # Przygotuj JSON z wzorcami
-                            json_patterns_list = json.dumps(harmonic_patterns, indent=2) if harmonic_patterns else "[]"
-                        else:
-                            json_patterns_list = "[]"
+                        harmonic_patterns = await self._get_harmonic_patterns_for_chart_images(chart_images)
+                        
+                        # Przygotuj JSON z wzorcami
+                        json_patterns_list = json.dumps(harmonic_patterns, indent=2) if harmonic_patterns else "[]"
                         
                         # 4. Przygotuj prompt z danymi
                         prompt = self.TA_PROMPT.format(
                             asset=asset_name,
                             quote=quote_name,
                             interval=interval,
-                            datetime=datetime.now(),
+                            analysis_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             json_patterns_list=json_patterns_list
                         )
                         
