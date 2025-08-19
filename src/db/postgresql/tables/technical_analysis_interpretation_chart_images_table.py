@@ -21,12 +21,34 @@ class TechnicalAnalysisInterpretationChartImagesTable(AbstractTable):
     async def create(self, technical_analysis_interpretation_id: int, chart_image_id: int) -> Optional[int]:
         """Tworzy nowe powiązanie między interpretacją analizy technicznej a obrazem wykresu i zwraca jego ID."""
         try:
+            # Najpierw sprawdź czy powiązanie już istnieje
+            exists = await self.check_relation_exists(technical_analysis_interpretation_id, chart_image_id)
+            if exists:
+                logger.debug(f"Powiązanie interpretacja-obraz już istnieje: {technical_analysis_interpretation_id}-{chart_image_id}")
+                # Pobierz istniejące ID
+                existing_relation = await self.fetch_one("""
+                SELECT id FROM technical_analysis_interpretation_chart_images 
+                WHERE technical_analysis_interpretation_id = $1 AND chart_image_id = $2
+                """, technical_analysis_interpretation_id, chart_image_id)
+                return existing_relation['id'] if existing_relation else None
+            
             relation_id = await self.fetch_val(
                 """INSERT INTO technical_analysis_interpretation_chart_images (technical_analysis_interpretation_id, chart_image_id) 
-                VALUES ($1, $2) RETURNING id""",
+                VALUES ($1, $2) ON CONFLICT (technical_analysis_interpretation_id, chart_image_id) DO NOTHING RETURNING id""",
                 technical_analysis_interpretation_id, chart_image_id
             )
-            logger.info(f"Utworzono powiązanie interpretacja-obraz z ID: {relation_id}")
+            
+            if relation_id:
+                logger.info(f"Utworzono powiązanie interpretacja-obraz z ID: {relation_id}")
+            else:
+                logger.debug(f"Powiązanie interpretacja-obraz już istniało: {technical_analysis_interpretation_id}-{chart_image_id}")
+                # Pobierz istniejące ID w przypadku konfliktu
+                existing_relation = await self.fetch_one("""
+                SELECT id FROM technical_analysis_interpretation_chart_images 
+                WHERE technical_analysis_interpretation_id = $1 AND chart_image_id = $2
+                """, technical_analysis_interpretation_id, chart_image_id)
+                relation_id = existing_relation['id'] if existing_relation else None
+                
             return relation_id
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia powiązania interpretacja-obraz: {e}", exc_info=True)

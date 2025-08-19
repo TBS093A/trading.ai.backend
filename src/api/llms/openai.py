@@ -43,7 +43,7 @@ class OpenaiAPI:
             "max_tokens": 4096
         },
         "vision": {
-            "model": "gpt-4-vision-preview",
+            "model": "gpt-4o-mini",
             "temperature": 0.2,
             "limit": 100000,
             "max_tokens": 4096
@@ -106,7 +106,7 @@ class OpenaiAPI:
             logger.info("Sprawdzanie statusu API OpenAI")
             
             response = await self.__client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.MODELS["vision"]["model"],
                 messages=[
                     {"role": "system", "content": "This is a test message to check API status."},
                     {"role": "user", "content": "Hello"}
@@ -117,7 +117,7 @@ class OpenaiAPI:
             if response and response.choices and len(response.choices) > 0:
                 status_info = {
                     "available": True,
-                    "model": "gpt-4o-mini",
+                    "model": self.MODELS["vision"]["model"],
                     "usage": vars(response.usage) if hasattr(response, "usage") else {},
                     "organization_id": getattr(response, "organization_id", None)
                 }

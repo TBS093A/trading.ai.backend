@@ -427,22 +427,42 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                 offset=0
             )
             
+            logger.info(f"Znaleziono {len(chart_images)} obrazów wykresów do powiązania z interpretacją {interpretation_id} dla asset_id {asset_id}")
+            
+            if not chart_images:
+                logger.warning(f"Brak obrazów wykresów do powiązania dla asset_id {asset_id}")
+                return
+            
             # Utwórz powiązania
             technical_analysis_interpretation_chart_images_table = self.db.get_factory().get_technical_analysis_interpretation_chart_images_table()
             
+            created_relations = 0
+            skipped_relations = 0
+            failed_relations = 0
+            
             for chart_image in chart_images:
                 try:
-                    await technical_analysis_interpretation_chart_images_table.create(
+                    relation_id = await technical_analysis_interpretation_chart_images_table.create(
                         technical_analysis_interpretation_id=interpretation_id,
                         chart_image_id=chart_image['id']
                     )
-                    logger.debug(f"Utworzono powiązanie interpretacja-obraz: {interpretation_id}-{chart_image['id']}")
+                    
+                    if relation_id:
+                        created_relations += 1
+                        logger.debug(f"Utworzono powiązanie interpretacja-obraz: {interpretation_id}-{chart_image['id']} (ID: {relation_id})")
+                    else:
+                        skipped_relations += 1
+                        logger.debug(f"Pominięto istniejące powiązanie: {interpretation_id}-{chart_image['id']}")
+                        
                 except Exception as e:
-                    logger.error(f"Błąd podczas tworzenia powiązania: {e}")
+                    failed_relations += 1
+                    logger.error(f"Błąd podczas tworzenia powiązania {interpretation_id}-{chart_image['id']}: {e}")
                     continue
+            
+            logger.info(f"Powiązania dla interpretacji {interpretation_id}: utworzono={created_relations}, pominięto={skipped_relations}, błędów={failed_relations}")
                     
         except Exception as e:
-            logger.error(f"Błąd podczas tworzenia powiązań: {e}", exc_info=True)
+            logger.error(f"Błąd podczas tworzenia powiązań dla interpretacji {interpretation_id}, asset_id {asset_id}: {e}", exc_info=True)
     
     async def sync(self, limit: int = 10, offset: int = 0) -> None:
         """
