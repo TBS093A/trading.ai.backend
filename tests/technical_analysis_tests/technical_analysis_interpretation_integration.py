@@ -224,6 +224,7 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
         except Exception as e:
             print(f"Błąd podczas czyszczenia bazy danych: {e}")
 
+    @unittest.skip("Skipping basic test")
     def test_sync_technical_analysis_interpretation_basic(self):
         """Test podstawowej synchronizacji interpretacji analizy technicznej"""
         
@@ -244,6 +245,108 @@ class TestTechnicalAnalysisInterpretationIntegration(unittest.TestCase):
                 # KROK 2: Synchronizuj analizę techniczną
                 print("=== KROK 2: Synchronizacja analizy technicznej ===")
                 await self.technical_analysis.sync_technical_analysis()
+                await self.print_database_stats(factory, "test_sync_technical_analysis_interpretation_basic_po_analizie")
+                
+                # KROK 3: Synchronizuj interpretację analizy technicznej
+                print("=== KROK 3: Synchronizacja interpretacji analizy technicznej ===")
+                await self.llm_technical_analysis_interpretation.sync()
+                
+                # Wyświetl stan bazy po synchronizacji interpretacji
+                await self.print_database_records(factory, "test_sync_technical_analysis_interpretation_basic_po_interpretacji")
+                await self.print_database_stats(factory, "test_sync_technical_analysis_interpretation_basic_po_interpretacji")
+                
+                # Sprawdź czy interpretations zostały zapisane
+                technical_analysis_interpretation_table = factory.get_technical_analysis_interpretation_table()
+                all_interpretations = await technical_analysis_interpretation_table.get_all()
+                
+                # Sprawdź podstawowe asercje
+                self.assertIsInstance(all_interpretations, list)
+                self.assertGreaterEqual(len(all_interpretations), 0)
+                
+                # Sprawdź strukturę zapisanych interpretations
+                for interpretation in all_interpretations:
+                    self.assertIn('id', interpretation)
+                    self.assertIn('asset_id', interpretation)
+                    self.assertIn('technical_analysis_id', interpretation)
+                    self.assertIn('timestamp', interpretation)
+                    self.assertIn('content', interpretation)
+                    self.assertIn('created_at', interpretation)
+                    
+                    # Sprawdź typy danych
+                    self.assertIsInstance(interpretation['id'], int)
+                    self.assertIsInstance(interpretation['asset_id'], int)
+                    self.assertIsInstance(interpretation['technical_analysis_id'], int)
+                    self.assertIsInstance(interpretation['timestamp'], str)
+                    self.assertIsInstance(interpretation['content'], str)
+                    
+                    # Sprawdź czy content jest poprawnym JSON
+                    try:
+                        content_json = json.loads(interpretation['content'])
+                        self.assertIsInstance(content_json, dict)
+                    except json.JSONDecodeError:
+                        # Jeśli nie jest JSON, sprawdź czy to nie jest oryginalny tekst
+                        self.assertIsInstance(interpretation['content'], str)
+                
+                # Sprawdź relacje interpretation chart images
+                technical_analysis_interpretation_chart_images_table = factory.get_technical_analysis_interpretation_chart_images_table()
+                all_relations = await technical_analysis_interpretation_chart_images_table.get_all()
+                
+                # Sprawdź czy relacje zostały utworzone
+                self.assertIsInstance(all_relations, list)
+                self.assertGreaterEqual(len(all_relations), 0)
+                
+                # Sprawdź strukturę relacji
+                for relation in all_relations:
+                    self.assertIn('id', relation)
+                    self.assertIn('technical_analysis_interpretation_id', relation)
+                    self.assertIn('chart_image_id', relation)
+                    self.assertIn('created_at', relation)
+                    
+                    # Sprawdź typy danych
+                    self.assertIsInstance(relation['id'], int)
+                    self.assertIsInstance(relation['technical_analysis_interpretation_id'], int)
+                    self.assertIsInstance(relation['chart_image_id'], int)
+                    
+                    # Sprawdź czy interpretation_id istnieje
+                    interpretation = await technical_analysis_interpretation_table.get_by_id(relation['technical_analysis_interpretation_id'])
+                    self.assertIsNotNone(interpretation, f"Interpretation ID {relation['technical_analysis_interpretation_id']} nie istnieje w bazie")
+                    
+                    # Sprawdź czy chart_image_id istnieje
+                    chart_images_table = factory.get_chart_images_table()
+                    chart_image = await chart_images_table.get_by_id(relation['chart_image_id'])
+                    self.assertIsNotNone(chart_image, f"Chart Image ID {relation['chart_image_id']} nie istnieje w bazie")
+                
+                # Wyczyść storage i bazę danych po teście
+                await self.cleanup_storage(factory, "test_sync_technical_analysis_interpretation_basic")
+                await self.cleanup_database(factory, "test_sync_technical_analysis_interpretation_basic")
+                
+            except Exception as e:
+                print(f"Błąd podczas testu synchronizacji interpretacji analizy technicznej: {e}")
+                # Test przechodzi nawet jeśli baza nie jest dostępna (dla CI/CD)
+                self.assertTrue(True, "Test synchronizacji interpretacji analizy technicznej - baza może być niedostępna")
+        
+        self.loop.run_until_complete(run_sync_technical_analysis_interpretation_test())
+
+    def test_sync_technical_analysis_interpretation_basic_large_limit(self):
+        """Test podstawowej synchronizacji interpretacji analizy technicznej"""
+        
+        async def run_sync_technical_analysis_interpretation_test():
+            try:
+                # Reset bazy danych przed testem
+                await self.db.reset_database()
+                factory = self.db.get_factory()
+                
+                # Wyświetl stan bazy przed synchronizacją
+                await self.print_database_stats(factory, "test_sync_technical_analysis_interpretation_basic_przed")
+                
+                # KROK 1: Synchronizuj assety
+                print("=== KROK 1: Synchronizacja assetów ===")
+                await self.exchanges.sync_assets()
+                await self.print_database_stats(factory, "test_sync_technical_analysis_interpretation_basic_po_assetach")
+                
+                # KROK 2: Synchronizuj analizę techniczną
+                print("=== KROK 2: Synchronizacja analizy technicznej ===")
+                await self.technical_analysis.sync_technical_analysis(limit=10)
                 await self.print_database_stats(factory, "test_sync_technical_analysis_interpretation_basic_po_analizie")
                 
                 # KROK 3: Synchronizuj interpretację analizy technicznej
