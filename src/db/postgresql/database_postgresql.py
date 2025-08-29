@@ -60,6 +60,7 @@ class DatabasePostgreSQL:
                 'technical_analysis_interpretation',
                 'chart_images',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
+                'investment_strategies',
                 'general_interpretation',
                 'telegram_signal_channels',
                 'telegram_signals',
@@ -109,6 +110,7 @@ class DatabasePostgreSQL:
                 'telegram_signals',
                 'telegram_signal_channels',
                 'general_interpretation',
+                'investment_strategies',
                 'technical_analysis_interpretation',
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'fundamental_analysis_interpretation_assets',  # Tabela pośrednia
