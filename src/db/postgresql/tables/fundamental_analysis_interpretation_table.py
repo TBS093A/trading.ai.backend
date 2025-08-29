@@ -431,4 +431,31 @@ class FundamentalAnalysisInterpretationTable(AbstractTable):
         for result in results:
             result['content'] = json.loads(result['content'])
         
+        return results
+    
+    async def get_interpretations_without_general_interpretation_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera interpretacje analizy fundamentalnej które nie mają jeszcze powiązania z interpretacją generalną dla danego assetu."""
+        results = await self.fetch_all("""
+        SELECT fai.id, fai.timestamp, fai.content, fai.created_at,
+               array_agg(DISTINCT a.asset) as assets, 
+               array_agg(DISTINCT a.quote) as quotes, 
+               array_agg(DISTINCT a.id) as asset_ids,
+               array_agg(DISTINCT fa.id) as fundamental_analysis_ids
+        FROM fundamental_analysis_interpretation fai
+        LEFT JOIN fundamental_analysis_interpretation_assets faia ON fai.id = faia.fundamental_analysis_interpretation_id
+        LEFT JOIN assets a ON faia.asset_id = a.id
+        LEFT JOIN fundamental_analysis_interpretation_analyses faian ON fai.id = faian.fundamental_analysis_interpretation_id
+        LEFT JOIN fundamental_analysis fa ON faian.fundamental_analysis_id = fa.id
+        WHERE faia.asset_id = $1 
+        AND NOT EXISTS (
+            SELECT 1 FROM general_interpretation gi 
+            WHERE gi.fundamental_analysis_interpretation_id = fai.id
+        )
+        GROUP BY fai.id, fai.timestamp, fai.content, fai.created_at
+        ORDER BY fai.id DESC LIMIT $2 OFFSET $3
+        """, asset_id, limit, offset)
+        
+        for result in results:
+            result['content'] = json.loads(result['content'])
+        
         return results 

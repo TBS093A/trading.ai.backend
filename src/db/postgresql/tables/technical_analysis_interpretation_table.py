@@ -249,4 +249,20 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
         ORDER BY ta.interval
         """, record_id)
         
-        return [result['interval'] for result in results if result['interval']] 
+        return [result['interval'] for result in results if result['interval']]
+    
+    async def get_interpretations_without_general_interpretation_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera interpretacje analizy technicznej które nie mają jeszcze powiązania z interpretacją generalną dla danego assetu."""
+        return await self.fetch_all("""
+        SELECT tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+               a.asset, a.quote, ta.x_point_timestamp
+        FROM technical_analysis_interpretation tai
+        JOIN assets a ON tai.asset_id = a.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
+        WHERE tai.asset_id = $1
+        AND NOT EXISTS (
+            SELECT 1 FROM general_interpretation gi 
+            WHERE gi.technical_analysis_interpretation_id = tai.id
+        )
+        ORDER BY tai.id DESC LIMIT $2 OFFSET $3
+        """, asset_id, limit, offset) 
