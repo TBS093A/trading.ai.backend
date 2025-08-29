@@ -237,4 +237,16 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
             else:
                 result['chart_images'] = []
         
-        return results 
+        return results
+    
+    async def get_all_intervals_of_used_harmonic_patterns(self, record_id: int) -> List[str]:
+        """Zwraca wszystkie interwały wzorców harmonicznych powiązanych z daną interpretacją analizy technicznej."""
+        results = await self.fetch_all("""
+        SELECT DISTINCT ta.interval 
+        FROM technical_analysis_interpretation tai
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
+        WHERE tai.id = $1 AND ta.interval IS NOT NULL
+        ORDER BY ta.interval
+        """, record_id)
+        
+        return [result['interval'] for result in results if result['interval']] 
