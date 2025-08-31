@@ -19,6 +19,8 @@ from .telegram_signals_table import TelegramSignalsTable
 from .telegram_signal_interpretation_table import TelegramSignalInterpretationTable
 from .exchange_transactions_table import ExchangeTransactionsTable
 from .exchange_account_state_table import ExchangeAccountStateTable
+from .exchange_account_state_buy_strategies_table import ExchangeAccountStateBuyStrategiesTable
+from .exchange_account_state_sell_strategies_table import ExchangeAccountStateSellStrategiesTable
 
 __all__ = [
     'AbstractTable',
@@ -41,5 +43,7 @@ __all__ = [
     'TelegramSignalsTable',
     'TelegramSignalInterpretationTable',
     'ExchangeTransactionsTable',
-    'ExchangeAccountStateTable'
+    'ExchangeAccountStateTable',
+    'ExchangeAccountStateBuyStrategiesTable',
+    'ExchangeAccountStateSellStrategiesTable'
 ] 

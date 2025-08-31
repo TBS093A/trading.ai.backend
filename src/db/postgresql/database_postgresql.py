@@ -48,6 +48,8 @@ class DatabasePostgreSQL:
                 'assets',
                 'exchanges',
                 'exchange_account_state',
+                'exchange_account_state_buy_strategies',
+                'exchange_account_state_sell_strategies',
                 'asset_exchanges',
                 'users', 
                 'user_secrets',
