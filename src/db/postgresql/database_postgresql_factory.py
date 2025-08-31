@@ -27,7 +27,8 @@ class DatabasePostgreSQLFactory:
         'telegram_signal_interpretation': TelegramSignalInterpretationTable,
         'chart_images': ChartImagesTable,
         'chart_images_harmonic_patterns': ChartImagesHarmonicPatternsTable,
-        'exchange_transactions': ExchangeTransactionsTable
+        'exchange_transactions': ExchangeTransactionsTable,
+        'exchange_account_state': ExchangeAccountStateTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -121,6 +122,10 @@ class DatabasePostgreSQLFactory:
     def get_exchange_transactions_table(self) -> ExchangeTransactionsTable:
         """Zwraca tabelę ExchangeTransactions."""
         return self.get_table('exchange_transactions')
+    
+    def get_exchange_account_state_table(self) -> ExchangeAccountStateTable:
+        """Zwraca tabelę ExchangeAccountState."""
+        return self.get_table('exchange_account_state')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""
