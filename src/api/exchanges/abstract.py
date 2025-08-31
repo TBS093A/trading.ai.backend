@@ -14,6 +14,8 @@ print = logging.info
 
 
 class AbstractAPI:
+    
+    EXCHANGE_NAME = ""
 
     __general_endpoint = ""
     __buy_endpoint = ""
