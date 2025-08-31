@@ -47,6 +47,7 @@ class DatabasePostgreSQL:
             table_order = [
                 'assets',
                 'exchanges',
+                'exchange_account_state',
                 'asset_exchanges',
                 'users', 
                 'user_secrets',
