@@ -101,24 +101,10 @@ class Transactions:
         except Exception as e:
             logger.error(f"Błąd podczas obliczania kwoty transakcji: {e}")
             return 0.0
-    
-    def _find_exchange_by_name(self, exchange_name: str) -> Optional[Any]:
-        """
-        Znajduje obiekt giełdy po nazwie.
-        
-        Args:
-            exchange_name: Nazwa giełdy
-            
-        Returns:
-            Obiekt giełdy lub None jeśli nie znaleziono
-        """
-        for exchange in self.exchanges:
-            if hasattr(exchange, 'EXCHANGE_NAME') and exchange.EXCHANGE_NAME == exchange_name:
-                return exchange
-        return None
+
     
     async def _execute_transaction(self, exchange, transaction_side: str, strategy: Dict[str, Any], 
-                                 asset: Dict[str, Any], transaction_amount: float) -> Optional[Dict[str, Any]]:
+                                 asset: Dict[str, Any], transaction_amount: float, account_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Wykonuje transakcję na giełdzie.
         
@@ -128,6 +114,7 @@ class Transactions:
             strategy: Strategia transakcyjna
             asset: Informacje o assecie
             transaction_amount: Kwota do wykorzystania
+            account_state: Stan konta dla obliczania procentów
             
         Returns:
             Wynik transakcji lub None w przypadku błędu
@@ -164,11 +151,23 @@ class Transactions:
                         used_currency=quote_name
                     )
                 else:
-                    # Dla sprzedaży limit - używamy procent z dostępnych assetów
-                    # Trzeba przekalkulować na procent
+                    # Dla sprzedaży limit - oblicz wartość procentową na podstawie strategii
+                    if strategy['is_percent']:
+                        # Jeśli strategia ma is_percent=true, użyj tej wartości procentowej
+                        coin_percent_to_sell = strategy['movement_amount']
+                    else:
+                        # Jeśli strategia ma wartość bezwzględną, oblicz procent z stanu konta
+                        account_amount = account_state['amount']
+                        if account_amount > 0:
+                            coin_percent_to_sell = (transaction_amount / account_amount) * 100
+                        else:
+                            coin_percent_to_sell = 0.0
+                    
+                    logger.info(f"Sprzedaż LIMIT: używam {coin_percent_to_sell}% z konta")
+                    
                     result = exchange.sell(
                         coin=asset_name,
-                        coin_percent_size_to_sell=100.0,  # Używamy pełną kwotę którą obliczyliśmy
+                        coin_percent_size_to_sell=coin_percent_to_sell,
                         used_currency=quote_name
                     )
             
@@ -314,17 +313,12 @@ class Transactions:
                             logger.info(f"Asset {asset_name} jest powiązany z giełdą {exchange_name} (ID: {exchange_id})")
                             
                             # KROK 1.1.2: Pobierz włączone stany kont dla assetu na tej giełdzie
-                            # Szukamy kont z walutą quote (dla kupna) lub base (dla sprzedaży)
-                            if transaction_action == 'BUY':
-                                # Dla kupna potrzebujemy kont z walutą quote (np. USDT)
-                                target_currency = quote_name
-                            else:
-                                # Dla sprzedaży potrzebujemy kont z walutą asset (np. BTC)
-                                target_currency = asset_name
+                            # Zawsze używamy quote jako currency (bez wyjątku)
+                            target_currency = quote_name
                             
                             enabled_accounts = await exchange_account_state_table.get_enabled_accounts(exchange_id=exchange_id)
                             
-                            # Filtruj konta po walucie
+                            # Filtruj konta po walucie quote
                             target_accounts = [acc for acc in enabled_accounts if acc['currency'] == target_currency]
                             
                             if not target_accounts:
@@ -371,7 +365,7 @@ class Transactions:
                                     # KROK 1.1.2.1.2: Wykonaj transakcję na giełdzie
                                     asset_dict = {'asset': asset_name, 'quote': quote_name}
                                     transaction_result = await self._execute_transaction(
-                                        exchange, transaction_action, strategy, asset_dict, transaction_amount
+                                        exchange, transaction_action, strategy, asset_dict, transaction_amount, account_state
                                     )
                                     
                                     if not transaction_result:
