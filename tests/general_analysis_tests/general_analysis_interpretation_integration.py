@@ -6,12 +6,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Union
 
-from src.fundamental_analysis import FundamentalAnalysis
-from src.technical_analysis import TechnicalAnalysis
-from src.exchanges import Exchanges
-from src.llm_fundamental_analysis_interpretation import LlmFundamentalAnalysisInterpretation
-from src.llm_technical_analysis_interpretation import LlmTechnicalAnalysisInterpretation
-from src.llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
+from src.sync_fundamental_analysis import FundamentalAnalysis
+from src.sync_technical_analysis import TechnicalAnalysis
+from src.sync_exchanges import Exchanges
+from src.sync_llm_fundamental_analysis_interpretation import LlmFundamentalAnalysisInterpretation
+from src.sync_llm_technical_analysis_interpretation import LlmTechnicalAnalysisInterpretation
+from src.sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
 from src.db import DatabaseFacade
 from src.config import config
 
