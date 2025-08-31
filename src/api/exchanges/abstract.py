@@ -428,6 +428,62 @@ class AbstractAPI:
             "api_response": api_response,
         }
 
+    def market_buy(self, coin: str, currency_size: float, used_currency: str = "USDT"):
+        """
+        Wykonuje zlecenie kupna po cenie rynkowej (market order).
+        
+        Args:
+            coin: Symbol monety do kupna (np. BTC)
+            currency_size: Kwota waluty quote do wydania na zakup
+            used_currency: Waluta quote (domyślnie USDT)
+        """
+        
+        print("")
+        print(f"market_buy:")
+        print(f"\tcoin: {coin}")
+        print(f"\tquote: {used_currency}")
+        print(f"\tcurrency size: {currency_size}")
+
+        api_response = self._market_order_request(
+            transaction_side = "BUY",
+            coin = coin,
+            currency_size = currency_size,
+            used_currency = used_currency,
+        )
+
+        return {
+            "order_approach": "market",
+            "api_response": api_response,
+        }
+
+    def market_sell(self, coin: str, coin_size: float, used_currency: str = "USDT"):
+        """
+        Wykonuje zlecenie sprzedaży po cenie rynkowej (market order).
+        
+        Args:
+            coin: Symbol monety do sprzedaży (np. BTC)
+            coin_size: Ilość monety do sprzedania
+            used_currency: Waluta quote (domyślnie USDT)
+        """
+        
+        print("")
+        print(f"market_sell:")
+        print(f"\tcoin: {coin}")
+        print(f"\tquote: {used_currency}")
+        print(f"\tcoin size: {coin_size}")
+
+        api_response = self._market_order_request(
+            transaction_side = "SELL",
+            coin = coin,
+            currency_size = 0.0,  # Dla sprzedaży używamy coin_size zamiast currency_size
+            used_currency = used_currency,
+        )
+
+        return {
+            "order_approach": "market",
+            "api_response": api_response,
+        }
+
 
 class RequestsFactory:
 
