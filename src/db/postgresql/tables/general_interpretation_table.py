@@ -246,4 +246,37 @@ class GeneralInterpretationTable(AbstractTable):
     async def count_by_investment_strategy_id(self, investment_strategy_id: int) -> int:
         """Zwraca liczbę interpretacji dla danej strategii inwestycyjnej."""
         result = await self.fetch_val("SELECT COUNT(*) FROM general_interpretation WHERE investment_strategy_id = $1", investment_strategy_id)
-        return result or 0 
+        return result or 0
+    
+    async def get_all_general_interpretations_without_transactions(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Pobiera wszystkie ogólne interpretacje które nie mają powiązanych transakcji w ExchangeTransactionsTable.
+        
+        Args:
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista interpretacji bez powiązanych transakcji
+        """
+        try:
+            results = await self.fetch_all("""
+                SELECT gi.id, gi.asset_id, gi.technical_analysis_interpretation_id, 
+                       gi.fundamental_analysis_interpretation_id, gi.investment_strategy_id, gi.timestamp, gi.content, gi.created_at,
+                       a.asset, a.quote,
+                       istr.name as investment_strategy_name, istr.description as investment_strategy_description
+                FROM general_interpretation gi
+                JOIN assets a ON gi.asset_id = a.id
+                LEFT JOIN investment_strategies istr ON gi.investment_strategy_id = istr.id
+                LEFT JOIN exchange_transactions et ON gi.id = et.general_interpretation_id
+                WHERE et.general_interpretation_id IS NULL
+                ORDER BY gi.id DESC
+                LIMIT $1 OFFSET $2
+            """, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} interpretacji bez powiązanych transakcji")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania interpretacji bez transakcji: {e}", exc_info=True)
+            return [] 
