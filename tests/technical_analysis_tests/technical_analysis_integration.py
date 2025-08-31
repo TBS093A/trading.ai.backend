@@ -6,8 +6,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Union
 
-from src.technical_analysis import TechnicalAnalysis
-from src.exchanges import Exchanges
+from src.sync_technical_analysis import TechnicalAnalysis
+from src.sync_exchanges import Exchanges
 from src.db import DatabaseFacade
 from src.config import config
 

@@ -102,7 +102,6 @@ class Transactions:
             logger.error(f"Błąd podczas obliczania kwoty transakcji: {e}")
             return 0.0
 
-    
     async def _execute_transaction(self, exchange, transaction_side: str, strategy: Dict[str, Any], 
                                  asset: Dict[str, Any], transaction_amount: float, account_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
