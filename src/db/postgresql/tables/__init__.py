@@ -17,6 +17,7 @@ from .investment_strategies_table import InvestmentStrategiesTable
 from .telegram_signal_channels_table import TelegramSignalChannelsTable
 from .telegram_signals_table import TelegramSignalsTable
 from .telegram_signal_interpretation_table import TelegramSignalInterpretationTable
+from .exchange_transactions_table import ExchangeTransactionsTable
 
 __all__ = [
     'AbstractTable',
@@ -37,5 +38,6 @@ __all__ = [
     'InvestmentStrategiesTable',
     'TelegramSignalChannelsTable',
     'TelegramSignalsTable',
-    'TelegramSignalInterpretationTable'
+    'TelegramSignalInterpretationTable',
+    'ExchangeTransactionsTable'
 ] 
