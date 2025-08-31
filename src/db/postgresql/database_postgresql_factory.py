@@ -28,7 +28,9 @@ class DatabasePostgreSQLFactory:
         'chart_images': ChartImagesTable,
         'chart_images_harmonic_patterns': ChartImagesHarmonicPatternsTable,
         'exchange_transactions': ExchangeTransactionsTable,
-        'exchange_account_state': ExchangeAccountStateTable
+        'exchange_account_state': ExchangeAccountStateTable,
+        'exchange_account_state_buy_strategies': ExchangeAccountStateBuyStrategiesTable,
+        'exchange_account_state_sell_strategies': ExchangeAccountStateSellStrategiesTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -126,6 +128,14 @@ class DatabasePostgreSQLFactory:
     def get_exchange_account_state_table(self) -> ExchangeAccountStateTable:
         """Zwraca tabelę ExchangeAccountState."""
         return self.get_table('exchange_account_state')
+    
+    def get_exchange_account_state_buy_strategies_table(self) -> ExchangeAccountStateBuyStrategiesTable:
+        """Zwraca tabelę ExchangeAccountStateBuyStrategies."""
+        return self.get_table('exchange_account_state_buy_strategies')
+    
+    def get_exchange_account_state_sell_strategies_table(self) -> ExchangeAccountStateSellStrategiesTable:
+        """Zwraca tabelę ExchangeAccountStateSellStrategies."""
+        return self.get_table('exchange_account_state_sell_strategies')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""
