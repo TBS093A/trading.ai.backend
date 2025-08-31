@@ -14,6 +14,8 @@ class KucoinAPI(
     AbstractAPI
 ):
 
+    EXCHANGE_NAME = "KUCOIN"
+
     __general_url = "https://api.kucoin.com"
     __buy_endpoint = "/api/v1/orders"
     __sell_endpoint = "/api/v1/orders"

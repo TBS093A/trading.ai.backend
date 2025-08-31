@@ -7,6 +7,8 @@ class MexcAPI(
     AbstractAPI
 ):
 
+    EXCHANGE_NAME = "MEXC"
+
     __api_transaction_requests_limit = {"requests": 499, "in_seconds": 10}
 
     def __init__(self, api_key: str, api_secret: str, DEBUG: bool = False) -> None:
