@@ -62,6 +62,7 @@ class DatabasePostgreSQL:
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'investment_strategies',
                 'general_interpretation',
+                'exchange_transactions',
                 'telegram_signal_channels',
                 'telegram_signals',
                 'telegram_signal_interpretation',
