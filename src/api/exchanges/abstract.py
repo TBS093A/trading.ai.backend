@@ -242,6 +242,24 @@ class AbstractAPI:
         """
         pass
 
+    def _get_wallet_information(self) -> List[Dict[str, Union[bool, str, float]]]:
+        """
+        Pobiera informacje o portfelu/koncie.
+        
+        Returns:
+            Lista zawierająca informacje o balansach:
+            [
+                {
+                    "is_enabled": bool,
+                    "type": str,
+                    "currency": str,
+                    "amount": float,
+                },
+                ...
+            ]
+        """
+        pass
+
     def __prepare_coin_price_to_buy(self, price_buy_balance_percent: float, coin_ask_price: dict) -> float:
 
         price_one_houndred_percent = float(coin_ask_price)

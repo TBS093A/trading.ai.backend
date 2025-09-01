@@ -277,3 +277,55 @@ class MexcAPI(
     ) -> List[Dict[str, any]]:
         pass
 
+    def _get_wallet_information(self) -> List[Dict[str, Union[bool, str, float]]]:
+        """
+        Pobiera informacje o portfelu/koncie z MEXC.
+        
+        Returns:
+            Lista zawierająca informacje o balansach:
+            [
+                {
+                    "is_enabled": bool,
+                    "type": str,
+                    "currency": str,
+                    "amount": float,
+                },
+                ...
+            ]
+        """
+        try:
+            account_info = self.__spot_client.account_information()
+        except Exception as error:
+            if self.__DEBUG == False:
+                raise error
+            if self.__DEBUG == True:
+                # Zwróć przykładowe dane testowe w trybie DEBUG
+                return [
+                    {
+                        "is_enabled": True,
+                        "type": "SPOT",
+                        "currency": "USDT",
+                        "amount": 100.0,
+                    },
+                    {
+                        "is_enabled": True,
+                        "type": "SPOT", 
+                        "currency": "BTC",
+                        "amount": 0.001,
+                    }
+                ]
+
+        # Przekształć odpowiedź do żądanego formatu
+        wallet_balances = []
+        is_enabled = account_info["accountType"] == "SPOT"
+        
+        for balance in account_info["balances"]:
+            wallet_balances.append({
+                "is_enabled": is_enabled,
+                "type": account_info["accountType"],
+                "currency": balance["asset"],
+                "amount": float(balance["free"]),
+            })
+        
+        return wallet_balances
+
