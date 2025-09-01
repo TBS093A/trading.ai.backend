@@ -16,6 +16,7 @@ from src.sync_llm_fundamental_analysis_interpretation import LlmFundamentalAnaly
 from src.sync_llm_technical_analysis_interpretation import LlmTechnicalAnalysisInterpretation
 from src.sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
 from src.sync_transactions import Transactions
+from src.sync_transactions_wallets import TransactionsWallets
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,9 @@ class SyncController:
     3. LlmFundamentalAnalysisInterpretation (po FundamentalAnalysis)
     4. LlmTechnicalAnalysisInterpretation (po TechnicalAnalysis)
     5. LlmGeneralAnalysisTransactionDecision (po obu interpretacjach LLM)
-    6. Transactions (po LlmGeneralAnalysisTransactionDecision)
+    6. TransactionsWallets (przed transakcjami, po LlmGeneralAnalysisTransactionDecision)
+    7. Transactions (po TransactionsWallets)
+    8. TransactionsWallets (po transakcjach, aktualizacja portfeli)
     """
     
     def __init__(self, test_mode: bool = False):
@@ -56,7 +59,9 @@ class SyncController:
             'llm_fundamental_completed': False,
             'llm_technical_completed': False,
             'llm_general_completed': False,
-            'transactions_completed': False
+            'transactions_wallets_pre_completed': False,
+            'transactions_completed': False,
+            'transactions_wallets_post_completed': False
         }
     
     def _init_sync_classes(self) -> None:
@@ -68,6 +73,7 @@ class SyncController:
             self.llm_fundamental = LlmFundamentalAnalysisInterpretation(test_mode=self.test_mode)
             self.llm_technical = LlmTechnicalAnalysisInterpretation(test_mode=self.test_mode)
             self.llm_general = LlmGeneralAnalysisTransactionDecision(test_mode=self.test_mode)
+            self.transactions_wallets = TransactionsWallets(test_mode=self.test_mode)
             self.transactions = Transactions(test_mode=self.test_mode)
             
             logger.info("Zainicjalizowano wszystkie klasy synchronizacyjne")
@@ -189,6 +195,37 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
+    async def _run_transactions_wallets_sync(self, phase: str = "pre") -> bool:
+        """
+        Uruchamia synchronizację portfeli/walletów z giełd.
+        
+        Args:
+            phase: Faza synchronizacji ("pre" lub "post")
+        
+        Returns:
+            bool: True jeśli synchronizacja się udała, False w przeciwnym razie
+        """
+        try:
+            phase_label = "PRZED TRANSAKCJAMI" if phase == "pre" else "PO TRANSAKCJACH"
+            logger.info(f"=== ROZPOCZĘCIE SYNCHRONIZACJI PORTFELI {phase_label} ===")
+            
+            sync_report = await self.transactions_wallets.sync()
+            
+            # Oznacz odpowiednią fazę jako ukończoną
+            if phase == "pre":
+                self.workflow_status['transactions_wallets_pre_completed'] = True
+            else:
+                self.workflow_status['transactions_wallets_post_completed'] = True
+            
+            logger.info(f"=== SYNCHRONIZACJA PORTFELI {phase_label} ZAKOŃCZONA POMYŚLNIE ===")
+            logger.info(f"Portfele zsynchronizowane: {sync_report['successful_wallets']}/{sync_report['total_wallets_processed']}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas synchronizacji portfeli ({phase}): {e}")
+            logger.error(traceback.format_exc())
+            return False
+
     async def _run_transactions_sync(self, limit: int = 500, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację transakcji.
@@ -288,7 +325,9 @@ class SyncController:
         2. FundamentalAnalysis + TechnicalAnalysis (równolegle)
         3. LlmFundamentalAnalysisInterpretation + LlmTechnicalAnalysisInterpretation (równolegle)
         4. LlmGeneralAnalysisTransactionDecision
-        5. Transactions
+        5. TransactionsWallets (przed transakcjami)
+        6. Transactions
+        7. TransactionsWallets (po transakcjach)
         """
         try:
             logger.info("🚀 ROZPOCZĘCIE PEŁNEGO WORKFLOW SYNCHRONIZACJI 🚀")
@@ -318,13 +357,23 @@ class SyncController:
                 logger.info("🎯 KROK 4: Decyzja generalna LLM")
                 llm_general_success = await self._run_llm_general_decision_sync()
                 
-                # KROK 5: Transakcje (tylko jeśli decyzja generalna się udała)
+                # KROK 5: Synchronizacja portfeli PRZED transakcjami (tylko jeśli decyzja generalna się udała)
                 if llm_general_success:
-                    logger.info("💰 KROK 5: Synchronizacja transakcji")
+                    logger.info("💼 KROK 5: Synchronizacja portfeli przed transakcjami")
+                    wallets_pre_success = await self._run_transactions_wallets_sync(phase="pre")
+                    
+                    # KROK 6: Transakcje (kontynuuj niezależnie od wyniku synchronizacji portfeli)
+                    logger.info("💰 KROK 6: Synchronizacja transakcji")
                     transactions_success = await self._run_transactions_sync()
+                    
+                    # KROK 7: Synchronizacja portfeli PO transakcjach
+                    logger.info("💼 KROK 7: Synchronizacja portfeli po transakcjach")
+                    wallets_post_success = await self._run_transactions_wallets_sync(phase="post")
                     
                     if transactions_success:
                         logger.info("✅ PEŁNY WORKFLOW ZAKOŃCZONY POMYŚLNIE")
+                        if not wallets_pre_success or not wallets_post_success:
+                            logger.warning("⚠️ Workflow zakończony z błędami w synchronizacji portfeli")
                     else:
                         logger.warning("⚠️ Workflow zakończony z błędami w transakcjach")
                 else:
@@ -344,7 +393,9 @@ class SyncController:
             logger.info(f"🤖 LLM Fundamental: {'✅' if llm_fundamental_success else '❌'}")
             logger.info(f"🤖 LLM Technical: {'✅' if llm_technical_success else '❌'}")
             logger.info(f"🎯 LLM General: {'✅' if self.workflow_status['llm_general_completed'] else '❌'}")
+            logger.info(f"💼 Wallets Pre: {'✅' if self.workflow_status['transactions_wallets_pre_completed'] else '❌'}")
             logger.info(f"💰 Transactions: {'✅' if self.workflow_status['transactions_completed'] else '❌'}")
+            logger.info(f"💼 Wallets Post: {'✅' if self.workflow_status['transactions_wallets_post_completed'] else '❌'}")
             
         except Exception as e:
             logger.error(f"❌ Krytyczny błąd w workflow synchronizacji: {e}")
