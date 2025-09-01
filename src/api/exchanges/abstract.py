@@ -242,7 +242,7 @@ class AbstractAPI:
         """
         pass
 
-    def _get_wallet_information(self) -> List[Dict[str, Union[bool, str, float]]]:
+    def _get_wallet_information(self) -> List[Dict[str, Union[str, float]]]:
         """
         Pobiera informacje o portfelu/koncie.
         
@@ -250,13 +250,15 @@ class AbstractAPI:
             Lista zawierająca informacje o balansach:
             [
                 {
-                    "is_enabled": bool,
                     "type": str,
                     "currency": str,
                     "amount": float,
                 },
                 ...
             ]
+            
+        Note: 
+            is_enabled field is calculated automatically by sync layer
         """
         pass
 
