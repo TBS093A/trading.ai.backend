@@ -99,7 +99,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_fundamental_analysis_sync(self) -> bool:
+    async def _run_fundamental_analysis_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację analizy fundamentalnej.
         
@@ -108,7 +108,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY FUNDAMENTALNEJ ===")
-            await self.fundamental_analysis.sync_news(limit=50, offset=0)
+            await self.fundamental_analysis.sync_news(limit=limit, offset=offset)
             self.workflow_status['fundamental_analysis_completed'] = True
             logger.info("=== SYNCHRONIZACJA ANALIZY FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -117,7 +117,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_technical_analysis_sync(self) -> bool:
+    async def _run_technical_analysis_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację analizy technicznej.
         
@@ -126,7 +126,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY TECHNICZNEJ ===")
-            await self.technical_analysis.sync_technical_analysis(limit=1, offset=0)
+            await self.technical_analysis.sync_technical_analysis(limit=limit, offset=offset)
             self.workflow_status['technical_analysis_completed'] = True
             logger.info("=== SYNCHRONIZACJA ANALIZY TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -135,7 +135,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_llm_fundamental_interpretation_sync(self) -> bool:
+    async def _run_llm_fundamental_interpretation_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację interpretacji LLM analizy fundamentalnej.
         
@@ -144,7 +144,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM FUNDAMENTALNEJ ===")
-            await self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations(limit=50, offset=0)
+            await self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations(limit=limit, offset=offset)
             self.workflow_status['llm_fundamental_completed'] = True
             logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -153,7 +153,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_llm_technical_interpretation_sync(self) -> bool:
+    async def _run_llm_technical_interpretation_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację interpretacji LLM analizy technicznej.
         
@@ -162,7 +162,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM TECHNICZNEJ ===")
-            await self.llm_technical.sync(limit=10, offset=0)
+            await self.llm_technical.sync(limit=limit, offset=offset)
             self.workflow_status['llm_technical_completed'] = True
             logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -171,7 +171,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_llm_general_decision_sync(self) -> bool:
+    async def _run_llm_general_decision_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację decyzji transakcyjnych LLM.
         
@@ -180,7 +180,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI DECYZJI LLM GENERALNEJ ===")
-            await self.llm_general.sync(limit=10, offset=0)
+            await self.llm_general.sync(limit=limit, offset=offset)
             self.workflow_status['llm_general_completed'] = True
             logger.info("=== SYNCHRONIZACJA DECYZJI LLM GENERALNEJ ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -189,7 +189,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_transactions_sync(self) -> bool:
+    async def _run_transactions_sync(self, limit: int = 500, offset: int = 0) -> bool:
         """
         Uruchamia synchronizację transakcji.
         
@@ -198,7 +198,7 @@ class SyncController:
         """
         try:
             logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI TRANSAKCJI ===")
-            await self.transactions.sync(limit=50, offset=0)
+            await self.transactions.sync(limit=limit, offset=offset)
             self.workflow_status['transactions_completed'] = True
             logger.info("=== SYNCHRONIZACJA TRANSAKCJI ZAKOŃCZONA POMYŚLNIE ===")
             return True
@@ -207,7 +207,7 @@ class SyncController:
             logger.error(traceback.format_exc())
             return False
     
-    async def _run_parallel_analysis(self) -> tuple[bool, bool]:
+    async def _run_parallel_analysis(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
         Uruchamia równolegle analizę fundamentalną i techniczną.
         
@@ -218,8 +218,8 @@ class SyncController:
         
         # Uruchom równolegle obie analizy używając asyncio.gather
         results = await asyncio.gather(
-            self._run_fundamental_analysis_sync(),
-            self._run_technical_analysis_sync(),
+            self._run_fundamental_analysis_sync(limit=limit, offset=offset),
+            self._run_technical_analysis_sync(limit=limit, offset=offset),
             return_exceptions=True
         )
         
@@ -234,7 +234,7 @@ class SyncController:
         logger.info(f"=== RÓWNOLEGŁE ANALIZY ZAKOŃCZONE: Fundamental={fundamental_success}, Technical={technical_success} ===")
         return fundamental_success, technical_success
     
-    async def _run_parallel_llm_interpretations(self) -> tuple[bool, bool]:
+    async def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
         Uruchamia równolegle interpretacje LLM (po ukończeniu odpowiadających im analiz).
         
@@ -249,9 +249,9 @@ class SyncController:
         
         tasks = []
         if fundamental_ready:
-            tasks.append(self._run_llm_fundamental_interpretation_sync())
+            tasks.append(self._run_llm_fundamental_interpretation_sync(limit=limit, offset=offset))
         if technical_ready:
-            tasks.append(self._run_llm_technical_interpretation_sync())
+            tasks.append(self._run_llm_technical_interpretation_sync(limit=limit, offset=offset))
         
         if not tasks:
             logger.warning("Brak gotowych analiz do interpretacji LLM")
