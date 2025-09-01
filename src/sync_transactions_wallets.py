@@ -12,6 +12,8 @@ class TransactionsWallets:
     Klasa odpowiedzialna za synchronizację portfeli/walletów z giełd z bazą danych.
     Pobiera aktualne stany kont z API exchanges i aktualizuje bazę danych.
     """
+
+    __enabled_wallets = ['SPOT']
     
     def __init__(self, test_mode: bool = False):
         """
@@ -177,10 +179,13 @@ class TransactionsWallets:
                         
                         try:
                             # Walidacja danych portfela
-                            required_fields = ['type', 'currency', 'amount', 'is_enabled']
+                            required_fields = ['type', 'currency', 'amount']
                             for field in required_fields:
                                 if field not in wallet_info:
                                     raise ValueError(f"Brak wymaganego pola w danych portfela: {field}")
+                            
+                            # Dodaj is_enabled na podstawie typu konta (scentralizowana logika)
+                            wallet_info['is_enabled'] = wallet_info['type'] in self.__enabled_wallets
                             
                             # Aktualizuj lub utwórz rekord w bazie
                             success = await self._update_or_create_wallet_record(exchange_id, wallet_info)
