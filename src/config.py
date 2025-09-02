@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import logging
-from typing import Optional
+from typing import Optional, List
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -29,6 +29,28 @@ class Config:
         self.telethon_api_hash = os.getenv("TELETHON_API_HASH")
         self.telethon_user_id = os.getenv("TELETHON_USER_ID")
         self.telethon_bot_id = os.getenv("TELETHON_BOT_ID")
+        
+        # Telethon Controller - dodatkowa konfiguracja
+        # TELEGRAM_SESSION_NAME: Nazwa sesji Telethon (plik .session)
+        # Domyślnie: "pump_bot_session" - używane do przechowywania stanu sesji klienta
+        self.telegram_session_name = os.getenv("TELEGRAM_SESSION_NAME", "pump_bot_session")
+        
+        # TELEGRAM_ADMIN_USERS: Lista ID użytkowników z uprawnieniami administratorskimi
+        # Format: "123456789,987654321,555666777" (oddzielone przecinkami)
+        # Opcjonalne - jeśli nie ustawione, brak administratorów będzie dostępnych
+        self.telegram_admin_users_str = os.getenv("TELEGRAM_ADMIN_USERS", "")
+        
+        # ENABLE_ERROR_RESPONSES: Czy bot powinien wysyłać wiadomości o błędach użytkownikom
+        # Wartości: "true"/"false" (domyślnie: "true")
+        # true: Użytkownicy otrzymują komunikaty o błędach w wiadomościach
+        # false: Błędy są tylko logowane, bez informowania użytkowników
+        self.enable_error_responses = os.getenv("ENABLE_ERROR_RESPONSES", "true").lower() == "true"
+        
+        # ENABLE_HANDLER_LOGGING: Czy włączyć szczegółowe logowanie handlerów
+        # Wartości: "true"/"false" (domyślnie: "true") 
+        # true: Loguje każde wywołanie handlera z informacjami o użytkowniku
+        # false: Podstawowe logowanie bez szczegółów handlerów
+        self.enable_handler_logging = os.getenv("ENABLE_HANDLER_LOGGING", "true").lower() == "true"
         
         # KuCoin API konfiguracja
         self.kucoin_api_secret = os.getenv("KUCOIN_API_SECRET")
@@ -112,10 +134,44 @@ class Config:
         
         if not self.test_database_url:
             logger.warning("Nie znaleziono TEST_DATABASE_URL w zmiennych środowiskowych.")
+        
+        # Informacje o opcjonalnych zmiennych Telethon Controller
+        if not self.telegram_admin_users_str:
+            logger.info("TELEGRAM_ADMIN_USERS nie ustawione - brak administratorów")
+        else:
+            admin_count = len(self.get_telegram_admin_users())
+            logger.info(f"Załadowano {admin_count} administratorów z TELEGRAM_ADMIN_USERS")
+            
+        logger.info(f"Konfiguracja Telegram Controller: error_responses={self.enable_error_responses}, handler_logging={self.enable_handler_logging}")
+    
+    def get_telegram_admin_users(self) -> List[int]:
+        """
+        Parsuje i zwraca listę ID administratorów Telegram.
+        
+        Returns:
+            List[int]: Lista ID użytkowników-administratorów
+            
+        Raises:
+            ValueError: Jeśli format ID jest nieprawidłowy
+        """
+        if not self.telegram_admin_users_str:
+            return []
+        
+        try:
+            admin_ids = []
+            for user_id in self.telegram_admin_users_str.split(","):
+                user_id = user_id.strip()
+                if user_id:  # Pomijaj puste stringi
+                    admin_ids.append(int(user_id))
+            return admin_ids
+        except ValueError as e:
+            logger.error(f"Błąd parsowania TELEGRAM_ADMIN_USERS: {e}")
+            logger.error(f"Oczekiwany format: '123456789,987654321' - otrzymano: '{self.telegram_admin_users_str}'")
+            raise ValueError(f"Nieprawidłowy format TELEGRAM_ADMIN_USERS: {e}")
     
     @property
     def telethon_config(self) -> dict:
-        """Konfiguracja Telethon jako słownik"""
+        """Konfiguracja Telethon jako słownik (podstawowa konfiguracja API)"""
         return {
             'bot_name': self.telethon_bot_name,
             'bot_token': self.telethon_bot_token,
@@ -124,6 +180,16 @@ class Config:
             'api_hash': self.telethon_api_hash,
             'user_id': self.telethon_user_id,
             'bot_id': self.telethon_bot_id
+        }
+    
+    @property
+    def telegram_controller_config(self) -> dict:
+        """Konfiguracja TelegramController jako słownik (rozszerzona konfiguracja)"""
+        return {
+            'session_name': self.telegram_session_name,
+            'admin_users': self.get_telegram_admin_users(),
+            'enable_error_responses': self.enable_error_responses,
+            'enable_handler_logging': self.enable_handler_logging
         }
     
     @property

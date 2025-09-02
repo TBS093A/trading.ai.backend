@@ -20,7 +20,7 @@ import logging
 import traceback
 import os
 import sys
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from datetime import datetime
 
 # Dodaj katalog src do ścieżki Python
@@ -92,14 +92,17 @@ class TelegramController:
         # Używamy istniejącej konfiguracji
         self.config = config
         
-        # Dodatkowe zmienne konfiguracyjne specyficzne dla TelegramController
-        self.session_name = os.getenv("TELEGRAM_SESSION_NAME", "pump_bot_session")
-        self.admin_users = self._parse_admin_users()
-        self.enable_error_responses = os.getenv("ENABLE_ERROR_RESPONSES", "true").lower() == "true"
-        self.enable_logging = os.getenv("ENABLE_HANDLER_LOGGING", "true").lower() == "true"
+        # Pobieramy konfigurację TelegramController z Config
+        controller_config = self.config.telegram_controller_config
+        
+        self.session_name = controller_config['session_name']
+        self.admin_users = controller_config['admin_users']
+        self.enable_error_responses = controller_config['enable_error_responses']
+        self.enable_logging = controller_config['enable_handler_logging']
         
         logger.info(f"🚀 Inicjalizacja TelegramController (test_mode={test_mode})")
         logger.info(f"📋 Konfiguracja załadowana z klasy Config")
+        logger.info(f"🗂️ Sesja: {self.session_name}")
         logger.info(f"👥 Administratorów: {len(self.admin_users)}")
         logger.info(f"🔧 Error responses: {self.enable_error_responses}")
         logger.info(f"📝 Handler logging: {self.enable_logging}")
@@ -120,23 +123,6 @@ class TelegramController:
                 raise ValueError("TELETHON_API_ID musi być liczbą")
         
         logger.info("✅ Konfiguracja Telethon zwalidowana pomyślnie")
-    
-    def _parse_admin_users(self) -> List[int]:
-        """
-        Parsuje listę administratorów z zmiennej środowiskowej.
-        
-        Returns:
-            Lista ID użytkowników-administratorów
-        """
-        admin_users_str = os.getenv("TELEGRAM_ADMIN_USERS", "")
-        if not admin_users_str:
-            return []
-        
-        try:
-            return [int(user_id.strip()) for user_id in admin_users_str.split(",") if user_id.strip()]
-        except ValueError as e:
-            logger.warning(f"⚠️ Błąd parsowania administratorów: {e}")
-            return []
     
     async def _init_client(self) -> TelegramClient:
         """
