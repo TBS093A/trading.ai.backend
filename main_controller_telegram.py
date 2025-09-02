@@ -40,6 +40,9 @@ from src.controller_router_telegram import ClassRouter, DomainBase
 # Import przykładowej domeny
 from src.controller_telegram_example import PumpBotExampleDomain
 
+# Import istniejącej konfiguracji
+from src.config import config
+
 # Konfiguracja logowania
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -86,52 +89,37 @@ class TelegramController:
             "uptime_seconds": 0
         }
         
-        # Konfiguracja z zmiennych środowiskowych
-        self.config = self._load_config()
+        # Używamy istniejącej konfiguracji
+        self.config = config
+        
+        # Dodatkowe zmienne konfiguracyjne specyficzne dla TelegramController
+        self.session_name = os.getenv("TELEGRAM_SESSION_NAME", "pump_bot_session")
+        self.admin_users = self._parse_admin_users()
+        self.enable_error_responses = os.getenv("ENABLE_ERROR_RESPONSES", "true").lower() == "true"
+        self.enable_logging = os.getenv("ENABLE_HANDLER_LOGGING", "true").lower() == "true"
         
         logger.info(f"🚀 Inicjalizacja TelegramController (test_mode={test_mode})")
+        logger.info(f"📋 Konfiguracja załadowana z klasy Config")
+        logger.info(f"👥 Administratorów: {len(self.admin_users)}")
+        logger.info(f"🔧 Error responses: {self.enable_error_responses}")
+        logger.info(f"📝 Handler logging: {self.enable_logging}")
     
-    def _load_config(self) -> Dict[str, Any]:
+    def _validate_telegram_config(self) -> None:
         """
-        Ładuje konfigurację z zmiennych środowiskowych.
-        
-        Returns:
-            Dict z konfiguracją aplikacji
+        Waliduje konfigurację Telethon z klasy Config.
         """
-        config = {
-            "api_id": os.getenv("TELEGRAM_API_ID"),
-            "api_hash": os.getenv("TELEGRAM_API_HASH"), 
-            "bot_token": os.getenv("TELEGRAM_BOT_TOKEN"),
-            "session_name": os.getenv("TELEGRAM_SESSION_NAME", "pump_bot_session"),
-            "admin_users": self._parse_admin_users(),
-            "enable_error_responses": os.getenv("ENABLE_ERROR_RESPONSES", "true").lower() == "true",
-            "enable_logging": os.getenv("ENABLE_HANDLER_LOGGING", "true").lower() == "true"
-        }
+        # Klasa Config już wykonuje podstawową walidację,
+        # ale dodajemy dodatkowe sprawdzenia specyficzne dla TelegramController
+        telethon_config = self.config.telethon_config
         
-        # Walidacja wymaganych zmiennych
-        missing_vars = []
-        if not config["api_id"]:
-            missing_vars.append("TELEGRAM_API_ID")
-        if not config["api_hash"]:
-            missing_vars.append("TELEGRAM_API_HASH")
-        if not config["bot_token"]:
-            missing_vars.append("TELEGRAM_BOT_TOKEN")
+        # Sprawdź czy API ID jest liczbą
+        if telethon_config['api_id']:
+            try:
+                int(telethon_config['api_id'])
+            except (ValueError, TypeError):
+                raise ValueError("TELETHON_API_ID musi być liczbą")
         
-        if missing_vars:
-            logger.error(f"❌ Brakujące zmienne środowiskowe: {', '.join(missing_vars)}")
-            logger.error("💡 Przykład konfiguracji:")
-            logger.error("   export TELEGRAM_API_ID='your_api_id'")
-            logger.error("   export TELEGRAM_API_HASH='your_api_hash'")
-            logger.error("   export TELEGRAM_BOT_TOKEN='your_bot_token'")
-            raise ValueError(f"Brakujące zmienne środowiskowe: {missing_vars}")
-        
-        try:
-            config["api_id"] = int(config["api_id"])
-        except ValueError:
-            raise ValueError("TELEGRAM_API_ID musi być liczbą")
-        
-        logger.info("✅ Konfiguracja załadowana pomyślnie")
-        return config
+        logger.info("✅ Konfiguracja Telethon zwalidowana pomyślnie")
     
     def _parse_admin_users(self) -> List[int]:
         """
@@ -163,15 +151,20 @@ class TelegramController:
         try:
             logger.info("🔌 Inicjalizacja klienta Telethon...")
             
+            # Walidacja konfiguracji przed utworzeniem klienta
+            self._validate_telegram_config()
+            
+            telethon_config = self.config.telethon_config
+            
             client = TelegramClient(
-                session=self.config["session_name"],
-                api_id=self.config["api_id"],
-                api_hash=self.config["api_hash"]
+                session=self.session_name,
+                api_id=int(telethon_config['api_id']),
+                api_hash=telethon_config['api_hash']
             )
             
             # Uruchomienie jako bot
             logger.info("🤖 Logowanie jako bot...")
-            await client.start(bot_token=self.config["bot_token"])
+            await client.start(bot_token=telethon_config['bot_token'])
             
             # Sprawdzenie czy bot jest aktywny
             me = await client.get_me()
@@ -197,8 +190,8 @@ class TelegramController:
         logger.info("🛤️ Inicjalizacja systemu routingu...")
         
         router = ClassRouter(
-            enable_logging=self.config["enable_logging"],
-            enable_error_responses=self.config["enable_error_responses"]
+            enable_logging=self.enable_logging,
+            enable_error_responses=self.enable_error_responses
         )
         
         logger.info("✅ System routingu zainicjalizowany")
@@ -212,7 +205,7 @@ class TelegramController:
         
         # Przykładowa domena - PumpBotExampleDomain
         example_domain = PumpBotExampleDomain(
-            admin_users=self.config["admin_users"],
+            admin_users=self.admin_users,
             test_mode=self.test_mode
         )
         self.router.mount(example_domain)
@@ -224,7 +217,7 @@ class TelegramController:
         # self.router.mount(trading_domain)
         # self.domains["trading"] = trading_domain
         
-        # admin_domain = AdminDomain(admin_users=self.config["admin_users"])
+        # admin_domain = AdminDomain(admin_users=self.admin_users)
         # self.router.mount(admin_domain)
         # self.domains["admin"] = admin_domain
         
@@ -260,7 +253,7 @@ class TelegramController:
         async def system_info_handler(event):
             """Handler informacji systemowych - tylko dla adminów."""
             user = await event.get_sender()
-            if user.id not in self.config["admin_users"]:
+            if user.id not in self.admin_users:
                 await event.respond("⛔️ Brak uprawnień")
                 return
             
@@ -391,10 +384,10 @@ if __name__ == "__main__":
     """
     Punkt startowy aplikacji Telegram Bot.
     
-    Zmienne środowiskowe wymagane:
-    - TELEGRAM_API_ID: ID aplikacji z my.telegram.org
-    - TELEGRAM_API_HASH: Hash aplikacji z my.telegram.org  
-    - TELEGRAM_BOT_TOKEN: Token bota od @BotFather
+    Zmienne środowiskowe wymagane (zarządzane przez src.config.Config):
+    - TELETHON_API_ID: ID aplikacji z my.telegram.org
+    - TELETHON_API_HASH: Hash aplikacji z my.telegram.org  
+    - TELETHON_BOT_TOKEN: Token bota od @BotFather
     
     Zmienne środowiskowe opcjonalne:
     - TELEGRAM_ADMIN_USERS: Lista ID administratorów (przecinek jako separator)
@@ -402,6 +395,9 @@ if __name__ == "__main__":
     - ENABLE_ERROR_RESPONSES: Czy wysyłać błędy użytkownikom (domyślnie: true)
     - ENABLE_HANDLER_LOGGING: Czy logować handlery (domyślnie: true)
     - TEST_MODE: Tryb testowy (domyślnie: false)
+    
+    Uwaga: Główna konfiguracja jest zarządzana przez klasę Config (src/config.py),
+    która ładuje zmienne z pliku .env oraz waliduje wszystkie wymagane ustawienia.
     
     Użycie:
     python main_controller_telegram.py [--test]
