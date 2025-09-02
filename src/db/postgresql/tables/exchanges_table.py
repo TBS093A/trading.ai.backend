@@ -191,15 +191,16 @@ class ExchangesTable(AbstractTable):
             limit, offset
         )
     
-    async def get_active(self) -> List[Dict[str, Any]]:
+    async def get_active(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie aktywne exchanges."""
         return await self.fetch_all(
-            "SELECT id, name, display_name, is_active, created_at FROM exchanges WHERE is_active = TRUE ORDER BY name"
+            "SELECT id, name, display_name, is_active, created_at FROM exchanges WHERE is_active = TRUE ORDER BY name LIMIT $1 OFFSET $2",
+            limit, offset
         )
     
-    async def search_by_name(self, name: str) -> List[Dict[str, Any]]:
+    async def search_by_name(self, name: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje exchanges po nazwie."""
         return await self.fetch_all(
-            "SELECT id, name, display_name, is_active, created_at FROM exchanges WHERE name ILIKE $1 ORDER BY name",
-            f"%{name}%"
+            "SELECT id, name, display_name, is_active, created_at FROM exchanges WHERE name ILIKE $1 ORDER BY name LIMIT $2 OFFSET $3",
+            f"%{name}%", limit, offset
         ) 

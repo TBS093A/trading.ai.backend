@@ -105,7 +105,7 @@ class AssetExchangesTable(AbstractTable):
             ORDER BY e.name
         """, asset_id)
     
-    async def get_by_exchange_id(self, exchange_id: int) -> List[Dict[str, Any]]:
+    async def get_by_exchange_id(self, exchange_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie assety dla danego exchange."""
         return await self.fetch_all("""
             SELECT ae.id, ae.asset_id, ae.exchange_id, ae.created_at,
@@ -114,8 +114,8 @@ class AssetExchangesTable(AbstractTable):
             JOIN assets a ON ae.asset_id = a.id
             JOIN exchanges e ON ae.exchange_id = e.id
             WHERE ae.exchange_id = $1
-            ORDER BY a.asset, a.quote
-        """, exchange_id)
+            ORDER BY a.asset, a.quote LIMIT $2 OFFSET $3
+        """, exchange_id, limit, offset)
     
     async def get_by_asset_and_exchange(self, asset_id: int, exchange_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera konkretną relację asset-exchange."""
