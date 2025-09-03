@@ -68,6 +68,34 @@ class Transactions:
             logger.error(f"Błąd podczas parsowania transaction_decision z interpretacji {general_interpretation['id']}: {e}")
             return None
     
+    async def _get_exchange_id_for_asset(self, exchange_name: str, asset_id: int, asset_exchanges_table) -> Optional[int]:
+        """
+        Pobiera exchange_id dla danej giełdy i assetu.
+        
+        Args:
+            exchange_name: Nazwa giełdy
+            asset_id: ID assetu
+            asset_exchanges_table: Tabela powiązań asset-exchange
+            
+        Returns:
+            exchange_id lub None jeśli nie znaleziono powiązania
+        """
+        try:
+            # Pobierz wszystkie powiązania asset-exchange dla tego assetu
+            asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
+            
+            # Znajdź exchange dla tego assetu
+            for asset_exchange in asset_exchanges:
+                if asset_exchange['exchange_name'] == exchange_name:
+                    return asset_exchange['exchange_id']
+            
+            # Nie znaleziono powiązania
+            return None
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania exchange_id dla {exchange_name} i asset_id {asset_id}: {e}")
+            return None
+
     def _calculate_transaction_amount(self, strategy: Dict[str, Any], account_state: Dict[str, Any]) -> float:
         """
         Oblicza kwotę przeznaczoną na transakcję na podstawie strategii i stanu konta.
@@ -294,18 +322,9 @@ class Transactions:
                             logger.info(f"Przetwarzam giełdę: {exchange_name}")
                             
                             # KROK 1.1.1: Sprawdź czy asset jest powiązany z tą giełdą
-                            asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
+                            exchange_id = await self._get_exchange_id_for_asset(exchange_name, asset_id, asset_exchanges_table)
                             
-                            # Znajdź exchange dla tego assetu
-                            matching_exchange = None
-                            exchange_id = None
-                            for asset_exchange in asset_exchanges:
-                                if asset_exchange['exchange_name'] == exchange_name:
-                                    matching_exchange = asset_exchange
-                                    exchange_id = asset_exchange['exchange_id']
-                                    break
-                            
-                            if not matching_exchange:
+                            if exchange_id is None:
                                 logger.debug(f"Asset {asset_name} nie jest powiązany z giełdą {exchange_name}")
                                 continue
                             

@@ -13,18 +13,18 @@ class TransactionsTable(AbstractTable):
             id SERIAL PRIMARY KEY,
             asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            exchange_id INTEGER NOT NULL REFERENCES exchanges(id) ON DELETE CASCADE,
             timestamp TEXT NOT NULL,
-            exchange TEXT NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         """
     
-    async def create(self, asset_id: int, user_id: int, timestamp: str, exchange: str) -> Optional[int]:
+    async def create(self, asset_id: int, user_id: int, exchange_id: int, timestamp: str) -> Optional[int]:
         """Tworzy nową transakcję i zwraca jej ID."""
         try:
             transaction_id = await self.fetch_val(
-                "INSERT INTO transactions (asset_id, user_id, timestamp, exchange) VALUES ($1, $2, $3, $4) RETURNING id",
-                asset_id, user_id, timestamp, exchange
+                "INSERT INTO transactions (asset_id, user_id, exchange_id, timestamp) VALUES ($1, $2, $3, $4) RETURNING id",
+                asset_id, user_id, exchange_id, timestamp
             )
             logger.info(f"Utworzono transakcję z ID: {transaction_id}")
             return transaction_id
@@ -35,11 +35,12 @@ class TransactionsTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera transakcję po ID."""
         return await self.fetch_one("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
         WHERE t.id = $1
         """, record_id)
     
@@ -65,9 +66,9 @@ class TransactionsTable(AbstractTable):
                 values.append(kwargs['timestamp'])
                 param_count += 1
             
-            if 'exchange' in kwargs:
-                update_fields.append(f"exchange = ${param_count}")
-                values.append(kwargs['exchange'])
+            if 'exchange_id' in kwargs:
+                update_fields.append(f"exchange_id = ${param_count}")
+                values.append(kwargs['exchange_id'])
                 param_count += 1
             
             if not update_fields:
@@ -96,22 +97,24 @@ class TransactionsTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie transakcje z limitem i offsetem."""
         return await self.fetch_all("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
         ORDER BY t.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
     
     async def get_by_user_id(self, user_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje użytkownika."""
         return await self.fetch_all("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
         WHERE t.user_id = $1
         ORDER BY t.id DESC LIMIT $2 OFFSET $3
         """, user_id, limit, offset)
@@ -119,35 +122,51 @@ class TransactionsTable(AbstractTable):
     async def get_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje dla asset."""
         return await self.fetch_all("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
         WHERE t.asset_id = $1
         ORDER BY t.id DESC LIMIT $2 OFFSET $3
         """, asset_id, limit, offset)
     
-    async def get_by_exchange(self, exchange: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    async def get_by_exchange_id(self, exchange_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje z określonej giełdy."""
         return await self.fetch_all("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
-        WHERE t.exchange = $1
+        JOIN exchanges e ON t.exchange_id = e.id
+        WHERE t.exchange_id = $1
         ORDER BY t.id DESC LIMIT $2 OFFSET $3
-        """, exchange, limit, offset)
+        """, exchange_id, limit, offset)
+    
+    async def get_by_exchange_name(self, exchange_name: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera transakcje z określonej giełdy według nazwy (dla wstecznej kompatybilności)."""
+        return await self.fetch_all("""
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
+        FROM transactions t
+        JOIN assets a ON t.asset_id = a.id
+        JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
+        WHERE e.name = $1
+        ORDER BY t.id DESC LIMIT $2 OFFSET $3
+        """, exchange_name, limit, offset)
     
     async def get_by_timestamp_range(self, start_timestamp: str, end_timestamp: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje z określonego zakresu czasowego."""
         return await self.fetch_all("""
-        SELECT t.id, t.asset_id, t.user_id, t.timestamp, t.exchange, t.created_at,
-               a.asset, a.quote, u.username
+        SELECT t.id, t.asset_id, t.user_id, t.exchange_id, t.timestamp, t.created_at,
+               a.asset, a.quote, u.username, e.name as exchange_name, e.display_name as exchange_display_name
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         JOIN users u ON t.user_id = u.id
+        JOIN exchanges e ON t.exchange_id = e.id
         WHERE t.timestamp >= $1 AND t.timestamp <= $2
         ORDER BY t.id DESC LIMIT $3 OFFSET $4
         """, start_timestamp, end_timestamp, limit, offset) 
