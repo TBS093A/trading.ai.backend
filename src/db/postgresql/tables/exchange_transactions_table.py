@@ -14,19 +14,27 @@ class ExchangeTransactionsTable(AbstractTable):
             id SERIAL PRIMARY KEY,
             exchange_id INTEGER NOT NULL,
             asset_id INTEGER NOT NULL,
+            exchange_account_state_id INTEGER NOT NULL,
             general_interpretation_id INTEGER,
+            buy_strategy_id INTEGER,
+            sell_strategy_id INTEGER,
             type VARCHAR(4) NOT NULL CHECK (type IN ('BUY', 'SELL')),
             quote_amount DECIMAL(20,8) NOT NULL,
             asset_amount DECIMAL(20,8) NOT NULL,
             created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
             FOREIGN KEY (exchange_id) REFERENCES exchanges(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
-            FOREIGN KEY (general_interpretation_id) REFERENCES general_interpretation(id) ON DELETE SET NULL
+            FOREIGN KEY (exchange_account_state_id) REFERENCES exchange_account_state(id) ON DELETE CASCADE,
+            FOREIGN KEY (general_interpretation_id) REFERENCES general_interpretation(id) ON DELETE SET NULL,
+            FOREIGN KEY (buy_strategy_id) REFERENCES exchange_account_state_buy_strategies(id) ON DELETE SET NULL,
+            FOREIGN KEY (sell_strategy_id) REFERENCES exchange_account_state_sell_strategies(id) ON DELETE SET NULL
         );
         """
     
-    async def create(self, exchange_id: int, asset_id: int, type: str, quote_amount: float, 
-                    asset_amount: float, general_interpretation_id: Optional[int] = None, 
+    async def create(self, exchange_id: int, asset_id: int, exchange_account_state_id: int, 
+                    type: str, quote_amount: float, asset_amount: float, 
+                    general_interpretation_id: Optional[int] = None, 
+                    buy_strategy_id: Optional[int] = None, sell_strategy_id: Optional[int] = None,
                     created_at: Optional[int] = None) -> Optional[int]:
         """
         Tworzy nową transakcję i zwraca jej ID.
@@ -34,10 +42,13 @@ class ExchangeTransactionsTable(AbstractTable):
         Args:
             exchange_id: ID giełdy
             asset_id: ID asseta
+            exchange_account_state_id: ID stanu konta na giełdzie
             type: Typ transakcji ('BUY' lub 'SELL')
             quote_amount: Ilość waluty bazowej (quote)
             asset_amount: Ilość asseta
             general_interpretation_id: Opcjonalne ID interpretacji generalnej
+            buy_strategy_id: Opcjonalne ID strategii kupna
+            sell_strategy_id: Opcjonalne ID strategii sprzedaży
             created_at: Opcjonalny timestamp (domyślnie bieżący czas w ms)
         """
         try:
@@ -49,18 +60,13 @@ class ExchangeTransactionsTable(AbstractTable):
             if created_at is None:
                 created_at = int(datetime.now().timestamp() * 1000)
             
-            if general_interpretation_id is not None:
-                transaction_id = await self.fetch_val("""
-                    INSERT INTO exchange_transactions 
-                    (exchange_id, asset_id, general_interpretation_id, type, quote_amount, asset_amount, created_at) 
-                    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-                """, exchange_id, asset_id, general_interpretation_id, type, quote_amount, asset_amount, created_at)
-            else:
-                transaction_id = await self.fetch_val("""
-                    INSERT INTO exchange_transactions 
-                    (exchange_id, asset_id, type, quote_amount, asset_amount, created_at) 
-                    VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-                """, exchange_id, asset_id, type, quote_amount, asset_amount, created_at)
+            transaction_id = await self.fetch_val("""
+                INSERT INTO exchange_transactions 
+                (exchange_id, asset_id, exchange_account_state_id, general_interpretation_id, 
+                 buy_strategy_id, sell_strategy_id, type, quote_amount, asset_amount, created_at) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
+            """, exchange_id, asset_id, exchange_account_state_id, general_interpretation_id, 
+                buy_strategy_id, sell_strategy_id, type, quote_amount, asset_amount, created_at)
             
             logger.info(f"Utworzono transakcję: {type} {asset_amount} na giełdzie {exchange_id} z ID: {transaction_id}")
             return transaction_id
@@ -73,8 +79,8 @@ class ExchangeTransactionsTable(AbstractTable):
         Tworzy wiele transakcji jednym zapytaniem.
         
         Args:
-            transactions: Lista słowników z kluczami: 'exchange_id', 'asset_id', 'type', 
-                         'quote_amount', 'asset_amount', opcjonalnie 'general_interpretation_id', 'created_at'
+            transactions: Lista słowników z kluczami: 'exchange_id', 'asset_id', 'exchange_account_state_id', 'type', 
+                         'quote_amount', 'asset_amount', opcjonalnie 'general_interpretation_id', 'buy_strategy_id', 'sell_strategy_id', 'created_at'
                          
         Returns:
             Dict[str, int]: Słownik mapujący klucz transakcji na jej ID
@@ -92,7 +98,7 @@ class ExchangeTransactionsTable(AbstractTable):
             
             for transaction in transactions:
                 # Walidacja obowiązkowych pól
-                required_fields = ['exchange_id', 'asset_id', 'type', 'quote_amount', 'asset_amount']
+                required_fields = ['exchange_id', 'asset_id', 'exchange_account_state_id', 'type', 'quote_amount', 'asset_amount']
                 for field in required_fields:
                     if field not in transaction:
                         raise ValueError(f"Brak wymaganego pola: {field}")
@@ -103,21 +109,25 @@ class ExchangeTransactionsTable(AbstractTable):
                 
                 exchange_id = transaction['exchange_id']
                 asset_id = transaction['asset_id']
+                exchange_account_state_id = transaction['exchange_account_state_id']
                 general_interpretation_id = transaction.get('general_interpretation_id')
+                buy_strategy_id = transaction.get('buy_strategy_id')
+                sell_strategy_id = transaction.get('sell_strategy_id')
                 type_val = transaction['type']
                 quote_amount = transaction['quote_amount']
                 asset_amount = transaction['asset_amount']
                 created_at = transaction.get('created_at', current_timestamp)
                 
-                values_list.append(f"(${param_counter}, ${param_counter + 1}, ${param_counter + 2}, ${param_counter + 3}, ${param_counter + 4}, ${param_counter + 5}, ${param_counter + 6})")
-                params.extend([exchange_id, asset_id, general_interpretation_id, type_val, quote_amount, asset_amount, created_at])
-                param_counter += 7
+                values_list.append(f"(${param_counter}, ${param_counter + 1}, ${param_counter + 2}, ${param_counter + 3}, ${param_counter + 4}, ${param_counter + 5}, ${param_counter + 6}, ${param_counter + 7}, ${param_counter + 8}, ${param_counter + 9})")
+                params.extend([exchange_id, asset_id, exchange_account_state_id, general_interpretation_id, buy_strategy_id, sell_strategy_id, type_val, quote_amount, asset_amount, created_at])
+                param_counter += 10
             
             query = f"""
                 INSERT INTO exchange_transactions 
-                (exchange_id, asset_id, general_interpretation_id, type, quote_amount, asset_amount, created_at) 
+                (exchange_id, asset_id, exchange_account_state_id, general_interpretation_id, 
+                 buy_strategy_id, sell_strategy_id, type, quote_amount, asset_amount, created_at) 
                 VALUES {', '.join(values_list)}
-                RETURNING id, exchange_id, asset_id, type, quote_amount, asset_amount
+                RETURNING id, exchange_id, asset_id, exchange_account_state_id, type, quote_amount, asset_amount
             """
             
             results = await self.fetch_all(query, *params)
@@ -139,14 +149,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera transakcję po ID wraz z informacjami o powiązanych rekordach."""
         return await self.fetch_one("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.id = $1
         """, record_id)
@@ -154,14 +170,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie transakcje dla danego asseta."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.asset_id = $1
             ORDER BY et.created_at DESC
@@ -171,14 +193,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_by_exchange_id(self, exchange_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie transakcje dla danej giełdy."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.exchange_id = $1
             ORDER BY et.created_at DESC
@@ -188,14 +216,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_by_interpretation_id(self, interpretation_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie transakcje dla danej interpretacji."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.general_interpretation_id = $1
             ORDER BY et.created_at DESC
@@ -208,14 +242,20 @@ class ExchangeTransactionsTable(AbstractTable):
             raise ValueError(f"Nieprawidłowy typ transakcji: {transaction_type}")
             
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.type = $1
             ORDER BY et.created_at DESC
@@ -225,14 +265,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_by_date_range(self, start_timestamp: int, end_timestamp: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje z określonego zakresu czasowego."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             WHERE et.created_at >= $1 AND et.created_at <= $2
             ORDER BY et.created_at DESC
@@ -242,13 +288,19 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_transactions_without_interpretation(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera transakcje które nie mają przypisanej interpretacji."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
-                   a.asset, a.quote
+                   a.asset, a.quote,
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             WHERE et.general_interpretation_id IS NULL
             ORDER BY et.created_at DESC
             LIMIT $1 OFFSET $2
@@ -258,7 +310,8 @@ class ExchangeTransactionsTable(AbstractTable):
         """Aktualizuje transakcję o podanym ID."""
         try:
             # Sprawdź jakie pola są dostępne do aktualizacji
-            allowed_fields = ['exchange_id', 'asset_id', 'general_interpretation_id', 'type', 'quote_amount', 'asset_amount']
+            allowed_fields = ['exchange_id', 'asset_id', 'exchange_account_state_id', 'general_interpretation_id', 
+                             'buy_strategy_id', 'sell_strategy_id', 'type', 'quote_amount', 'asset_amount']
             update_fields = []
             params = []
             param_counter = 1
@@ -305,14 +358,20 @@ class ExchangeTransactionsTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie transakcje z limitem i offsetem."""
         return await self.fetch_all("""
-            SELECT et.id, et.exchange_id, et.asset_id, et.general_interpretation_id,
-                   et.type, et.quote_amount, et.asset_amount, et.created_at,
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
                    e.name as exchange_name, e.display_name as exchange_display_name,
                    a.asset, a.quote,
-                   gi.title as interpretation_title
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
             FROM exchange_transactions et
             JOIN exchanges e ON et.exchange_id = e.id
             JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
             LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
             ORDER BY et.created_at DESC
             LIMIT $1 OFFSET $2
@@ -385,3 +444,72 @@ class ExchangeTransactionsTable(AbstractTable):
                    COALESCE(SUM(CASE WHEN et.type = 'SELL' THEN et.asset_amount END), 0) != 0
             ORDER BY a.asset
         """, exchange_id)
+    
+    async def get_by_exchange_account_state_id(self, exchange_account_state_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera transakcje dla określonego stanu konta."""
+        return await self.fetch_all("""
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
+                   e.name as exchange_name, e.display_name as exchange_display_name,
+                   a.asset, a.quote,
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
+            FROM exchange_transactions et
+            JOIN exchanges e ON et.exchange_id = e.id
+            JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
+            LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
+            WHERE et.exchange_account_state_id = $1
+            ORDER BY et.created_at DESC
+            LIMIT $2 OFFSET $3
+        """, exchange_account_state_id, limit, offset)
+    
+    async def get_by_buy_strategy_id(self, buy_strategy_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera transakcje wykorzystujące określoną strategię kupna."""
+        return await self.fetch_all("""
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
+                   e.name as exchange_name, e.display_name as exchange_display_name,
+                   a.asset, a.quote,
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
+            FROM exchange_transactions et
+            JOIN exchanges e ON et.exchange_id = e.id
+            JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
+            LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
+            WHERE et.buy_strategy_id = $1
+            ORDER BY et.created_at DESC
+            LIMIT $2 OFFSET $3
+        """, buy_strategy_id, limit, offset)
+    
+    async def get_by_sell_strategy_id(self, sell_strategy_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera transakcje wykorzystujące określoną strategię sprzedaży."""
+        return await self.fetch_all("""
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
+                   e.name as exchange_name, e.display_name as exchange_display_name,
+                   a.asset, a.quote,
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
+            FROM exchange_transactions et
+            JOIN exchanges e ON et.exchange_id = e.id
+            JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
+            LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
+            WHERE et.sell_strategy_id = $1
+            ORDER BY et.created_at DESC
+            LIMIT $2 OFFSET $3
+        """, sell_strategy_id, limit, offset)

@@ -4,7 +4,7 @@ from .exchanges_table import ExchangesTable
 from .asset_exchanges_table import AssetExchangesTable
 from .users_table import UsersTable
 from .user_secrets_table import UserSecretsTable
-from .transactions_table import TransactionsTable
+
 from .fundamental_analysis_table import FundamentalAnalysisTable
 from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
 from .technical_analysis_harmonic_patterns_table import TechnicalAnalysisHarmonicPatternsTable
@@ -29,7 +29,7 @@ __all__ = [
     'AssetExchangesTable',
     'UsersTable',
     'UserSecretsTable',
-    'TransactionsTable',
+
     'FundamentalAnalysisTable',
     'FundamentalAnalysisInterpretationTable',
     'TechnicalAnalysisHarmonicPatternsTable',

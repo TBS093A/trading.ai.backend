@@ -205,18 +205,23 @@ class Transactions:
             logger.error(f"Błąd podczas wykonywania transakcji: {e}")
             return None
     
-    async def _save_transaction_to_database(self, exchange_id: int, asset_id: int, general_interpretation_id: int,
-                                          transaction_side: str, quote_amount: float, asset_amount: float) -> Optional[int]:
+    async def _save_transaction_to_database(self, exchange_id: int, asset_id: int, exchange_account_state_id: int,
+                                          general_interpretation_id: int, transaction_side: str, quote_amount: float, 
+                                          asset_amount: float, buy_strategy_id: Optional[int] = None, 
+                                          sell_strategy_id: Optional[int] = None) -> Optional[int]:
         """
         Zapisuje transakcję w bazie danych.
         
         Args:
             exchange_id: ID giełdy
             asset_id: ID assetu
+            exchange_account_state_id: ID stanu konta na giełdzie
             general_interpretation_id: ID interpretacji generalnej
             transaction_side: BUY lub SELL
             quote_amount: Kwota quote
             asset_amount: Kwota asset
+            buy_strategy_id: ID strategii kupna (opcjonalne)
+            sell_strategy_id: ID strategii sprzedaży (opcjonalne)
             
         Returns:
             ID zapisanej transakcji lub None w przypadku błędu
@@ -227,10 +232,13 @@ class Transactions:
             transaction_id = await exchange_transactions_table.create(
                 exchange_id=exchange_id,
                 asset_id=asset_id,
+                exchange_account_state_id=exchange_account_state_id,
                 general_interpretation_id=general_interpretation_id,
                 type=transaction_side,
                 quote_amount=quote_amount,
-                asset_amount=asset_amount
+                asset_amount=asset_amount,
+                buy_strategy_id=buy_strategy_id if transaction_side == 'BUY' else None,
+                sell_strategy_id=sell_strategy_id if transaction_side == 'SELL' else None
             )
             
             if transaction_id:
@@ -406,10 +414,13 @@ class Transactions:
                                     transaction_id = await self._save_transaction_to_database(
                                         exchange_id=exchange_id,
                                         asset_id=asset_id,
+                                        exchange_account_state_id=account_state_id,
                                         general_interpretation_id=general_interpretation['id'],
                                         transaction_side=transaction_action,
                                         quote_amount=quote_amount,
-                                        asset_amount=asset_amount
+                                        asset_amount=asset_amount,
+                                        buy_strategy_id=strategy['id'] if transaction_action == 'BUY' else None,
+                                        sell_strategy_id=strategy['id'] if transaction_action == 'SELL' else None
                                     )
                                     
                                     if transaction_id:
