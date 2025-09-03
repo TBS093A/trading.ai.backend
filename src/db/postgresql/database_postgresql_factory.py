@@ -14,7 +14,7 @@ class DatabasePostgreSQLFactory:
         'asset_exchanges': AssetExchangesTable,
         'users': UsersTable,
         'user_secrets': UserSecretsTable,
-        'transactions': TransactionsTable,
+
         'fundamental_analysis': FundamentalAnalysisTable,
         'fundamental_analysis_interpretation': FundamentalAnalysisInterpretationTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
@@ -69,9 +69,7 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę UserSecrets."""
         return self.get_table('user_secrets')
     
-    def get_transactions_table(self) -> TransactionsTable:
-        """Zwraca tabelę Transactions."""
-        return self.get_table('transactions')
+
     
     def get_fundamental_analysis_table(self) -> FundamentalAnalysisTable:
         """Zwraca tabelę FundamentalAnalysis."""
