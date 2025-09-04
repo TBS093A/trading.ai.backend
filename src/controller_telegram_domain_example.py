@@ -16,7 +16,7 @@ from typing import List, Optional
 from telethon import Button
 from telethon.tl.types import User
 
-from .controller_router_telegram import DomainBase, RD
+from .controller_telegram_utils_router import DomainBase, RD
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from telethon import Button
 
-from .controller_base_telegram import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
 from ..main_controller_sync import SyncController
 
 logger = logging.getLogger(__name__)
