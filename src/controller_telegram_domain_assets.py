@@ -110,26 +110,27 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
             await self.init_database()
             assets_table = self.db.get_factory().get_assets_table()
             
-            # Oblicz offset dla paginacji
+            # Oblicz offset dla paginacji bazy danych
             offset = (page - 1) * self.default_page_size
             
-            # Pobierz assety z bazą danych
+            # Pobierz assety z dodatkowym rekordem dla sprawdzenia następnej strony
             assets = await assets_table.get_all(limit=self.default_page_size + 1, offset=offset)
+            
+            if not assets:
+                await event.respond("💎 **Lista Assets**\n\n❌ Brak assetów do wyświetlenia.")
+                return
             
             # Sprawdź czy są następne strony
             has_next = len(assets) > self.default_page_size
-            display_assets = assets[:self.default_page_size]
-            
-            if not display_assets:
-                await event.respond("💎 **Lista Assets**\n\n❌ Brak assetów do wyświetlenia.")
-                return
+            page_assets = assets[:self.default_page_size]
             
             # Formatuj odpowiedź
             assets_text = f"💎 **Lista Assets - Strona {page}**\n\n"
             
-            for i, asset in enumerate(display_assets, 1):
+            for i, asset in enumerate(page_assets, 1):
                 asset_symbol = f"{asset['asset']}/{asset['quote']}"
-                assets_text += f"{offset + i}. `{asset_symbol}` (ID: {asset['id']})\n"
+                item_number = offset + i
+                assets_text += f"{item_number}. `{asset_symbol}` (ID: {asset['id']})\n"
             
             # Dodaj informację o paginacji
             if page > 1 or has_next:
@@ -137,21 +138,26 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
                 if has_next:
                     assets_text += f" (więcej dostępne)"
             
-            # Przyciski
-            buttons = []
+            # Stwórz pagination_info dla PaginationHelper.create_pagination_buttons
+            # Nie znamy total_items więc użyjemy estimacji
+            estimated_total = offset + len(page_assets) + (100 if has_next else 0)  # Estymacja
+            pagination_info = {
+                'current_page': page,
+                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
+                'total_items': estimated_total,
+                'items_on_page': len(page_assets),
+                'has_previous': page > 1,
+                'has_next': has_next,
+                'start_idx': offset,
+                'end_idx': offset + len(page_assets)
+            }
             
-            # Paginacja
-            nav_row = []
-            if page > 1:
-                nav_row.append(Button.inline("◀️ Wstecz", f"assets:page:{page-1}".encode()))
-            
-            nav_row.append(Button.inline(f"📄 {page}", b"assets:page_info"))
-            
-            if has_next:
-                nav_row.append(Button.inline("Dalej ▶️", f"assets:page:{page+1}".encode()))
-            
-            if nav_row:
-                buttons.append(nav_row)
+            # Użyj PaginationHelper do utworzenia przycisków paginacji
+            buttons = PaginationHelper.create_pagination_buttons(
+                pagination_info, 
+                "assets", 
+                ""
+            )
             
             # Dodatkowe opcje
             buttons.extend([
@@ -427,6 +433,28 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
     async def assets_page_info_callback(self, event):
         """Informacje o aktualnej stronie."""
         await event.answer("ℹ️ Nawigacja po stronach - użyj przycisków ◀️ ▶️", alert=False)
+    
+    @RD.cb(b"assets:jump")
+    async def assets_jump_callback(self, event):
+        """Obsługa przycisku jump to page z PaginationHelper."""
+        jump_help = (
+            "🔢 **Przejdź do strony**\n\n"
+            "Aby przejść do konkretnej strony, wyślij:\n"
+            "`/assets [numer_strony]`\n\n"
+            "**Przykłady:**\n"
+            "• `/assets 5` - przejdź do strony 5\n"
+            "• `/assets 1` - powrót do pierwszej strony\n\n"
+            "**Wskazówki:**\n"
+            "• Użyj liczb większych od 1\n"
+            "• Jeśli strona nie istnieje, zostaniesz przekierowany do ostatniej dostępnej"
+        )
+        
+        buttons = [
+            [Button.inline("📋 Strona 1", b"assets:page:1")],
+            [Button.inline("🔙 Wstecz", b"assets:page:1")]
+        ]
+        
+        await event.edit(jump_help, buttons=buttons)
     
     # ===================
     # CALLBACK QUERIES - EXCHANGE FILTERING
