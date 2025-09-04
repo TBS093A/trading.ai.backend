@@ -40,6 +40,7 @@ from src.controller_telegram_utils_router import ClassRouter, DomainBase
 # Import domen
 from src.controller_telegram_domain_example import PumpBotExampleDomain
 from src.controller_telegram_domain_sync_system import SystemTelegramControllerDomain
+from src.controller_telegram_domain_assets import AssetsTelegramControllerDomain
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
@@ -211,6 +212,13 @@ class TelegramController:
         )
         self._register_single_domain(example_domain, "pump_example")
         
+        # Domena assetów - AssetsTelegramControllerDomain
+        assets_domain = AssetsTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(assets_domain, "assets")
+        
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
         # self._register_single_domain(trading_domain, "trading")
@@ -367,6 +375,11 @@ class TelegramController:
             logger.info("   /health - health check komponentów")
             logger.info("   /logs [level] - logi systemu (admin)")
             logger.info("   /system_info - szczegółowe info systemowe (admin)")
+            logger.info("")
+            logger.info("💎 KOMENDY ASSETS:")
+            logger.info("   /assets [page] - lista wszystkich assetów")
+            logger.info("   /assets_search [nazwa] - wyszukiwanie assetu")
+            logger.info("   /asset_info [symbol] - szczegóły assetu")
             logger.info("")
             logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
             logger.info("   ✅ Domain Management - zarządzanie domenami")
