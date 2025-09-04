@@ -37,8 +37,13 @@ except ImportError as e:
 # Import systemu routingu
 from src.controller_router_telegram import ClassRouter, DomainBase
 
-# Import przykładowej domeny
+# Import domen
 from src.controller_telegram_example import PumpBotExampleDomain
+from src.controller_telegram_system import SystemTelegramControllerDomain
+
+# Import utilities
+from src.telegram_ui_utils import TelegramUIUtils
+from src.controller_base_telegram import BaseTelegramControllerDomain, UserPermissionLevel
 
 # Import istniejącej konfiguracji
 from src.config import config
@@ -79,7 +84,10 @@ class TelegramController:
         self.test_mode = test_mode
         self.client: Optional[TelegramClient] = None
         self.router: Optional[ClassRouter] = None
-        self.domains: Dict[str, DomainBase] = {}
+        self.domains: Dict[str, BaseTelegramControllerDomain] = {}
+        
+        # UI Utils integration
+        self.ui_utils = TelegramUIUtils()
         
         # Statistyki aplikacji
         self.stats = {
@@ -189,26 +197,60 @@ class TelegramController:
         """
         logger.info("📚 Rejestracja domen handlerów...")
         
+        # Domena systemowa - SystemTelegramControllerDomain
+        system_domain = SystemTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(system_domain, "system")
+        
         # Przykładowa domena - PumpBotExampleDomain
         example_domain = PumpBotExampleDomain(
             admin_users=self.admin_users,
             test_mode=self.test_mode
         )
-        self.router.mount(example_domain)
-        self.domains["pump_example"] = example_domain
-        logger.info("✅ Domena 'pump_example' zarejestrowana")
+        self._register_single_domain(example_domain, "pump_example")
         
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
-        # self.router.mount(trading_domain)
-        # self.domains["trading"] = trading_domain
+        # self._register_single_domain(trading_domain, "trading")
         
         # admin_domain = AdminDomain(admin_users=self.admin_users)
-        # self.router.mount(admin_domain)
-        # self.domains["admin"] = admin_domain
+        # self._register_single_domain(admin_domain, "admin")
         
         self.stats["domains_loaded"] = len(self.domains)
         logger.info(f"📊 Zarejestrowano {self.stats['domains_loaded']} domen")
+    
+    def _register_single_domain(self, domain_instance: BaseTelegramControllerDomain, domain_name: str) -> bool:
+        """
+        Rejestruje pojedynczą domenę z proper error handling i database setup.
+        
+        Args:
+            domain_instance: Instancja domeny do zarejestrowania
+            domain_name: Nazwa domeny
+            
+        Returns:
+            bool: True jeśli rejestracja się udała
+        """
+        try:
+            # Inicjalizuj bazę danych dla domeny (jeśli ma taką możliwość)
+            if hasattr(domain_instance, 'init_database'):
+                try:
+                    asyncio.create_task(domain_instance.init_database())
+                    logger.info(f"🗃️ Baza danych dla domeny '{domain_name}' zostanie zainicjalizowana")
+                except Exception as e:
+                    logger.warning(f"⚠️ Nie można zainicjalizować bazy danych dla domeny '{domain_name}': {e}")
+            
+            # Zarejestruj w routerze
+            self.router.mount(domain_instance)
+            self.domains[domain_name] = domain_instance
+            
+            logger.info(f"✅ Domena '{domain_name}' zarejestrowana ({type(domain_instance).__name__})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Błąd rejestracji domeny '{domain_name}': {e}")
+            return False
     
     def _attach_router(self) -> None:
         """Załącza router do klienta Telethon."""
@@ -243,18 +285,41 @@ class TelegramController:
                 await event.respond("⛔️ Brak uprawnień")
                 return
             
-            uptime = datetime.now() - self.stats["start_time"]
-            info = f"🖥️ **Informacje Systemowe**\n\n"
-            info += f"⏱️ **Uptime:** {uptime}\n"
-            info += f"📚 **Domeny:** {self.stats['domains_loaded']}\n"
-            info += f"🛤️ **Routy:** {self.stats['routes_registered']}\n"
-            info += f"📊 **Statystyki Routera:**\n"
-            
-            router_stats = self.router.get_stats()
-            for key, value in router_stats.items():
-                info += f"   • {key}: {value}\n"
-            
-            await event.respond(info)
+            try:
+                # Pobierz comprehensive statistics
+                stats = await self.get_user_statistics()
+                health = await self.health_check_all_domains()
+                
+                uptime = datetime.now() - self.stats["start_time"]
+                info = f"🖥️ **Informacje Systemowe**\n\n"
+                info += f"⏱️ **Uptime:** {str(uptime).split('.')[0]}\n"
+                info += f"🧪 **Test Mode:** {'✅ Tak' if self.test_mode else '❌ Nie'}\n"
+                info += f"📚 **Domeny:** {stats['total_domains']}\n"
+                info += f"🛤️ **Routy:** {stats['router_stats'].get('messages_processed', 0) + stats['router_stats'].get('callbacks_processed', 0)}\n\n"
+                
+                # Domain health summary
+                info += f"🏥 **Health Check:**\n"
+                healthy_domains = sum(1 for h in health.values() if h.get('healthy', False))
+                info += f"   ✅ Healthy: {healthy_domains}/{len(health)}\n"
+                
+                for domain_name, health_info in health.items():
+                    status_emoji = "✅" if health_info.get('healthy', False) else "❌"
+                    info += f"   {status_emoji} {domain_name}: {health_info.get('domain_type', 'Unknown')}\n"
+                
+                info += f"\n📊 **Router Stats:**\n"
+                router_stats = stats['router_stats']
+                for key, value in router_stats.items():
+                    info += f"   • {key}: {value}\n"
+                
+                # UI utility info
+                info += f"\n🎨 **UI Utils:** ✅ Dostępne ({type(self.ui_utils).__name__})\n"
+                
+                await event.respond(info)
+                
+            except Exception as e:
+                error_msg = f"❌ **Błąd pobierania informacji systemowych:**\n\n`{str(e)}`"
+                await event.respond(error_msg)
+                logger.error(f"Error in system_info_handler: {e}", exc_info=True)
         
         logger.info("✅ Dodatkowe handlery systemowe skonfigurowane")
     
@@ -294,6 +359,21 @@ class TelegramController:
             logger.info("=" * 50)
             logger.info("🚀 BOT URUCHOMIONY POMYŚLNIE!")
             logger.info("💡 Użyj /start aby przetestować funkcjonalność")
+            logger.info("")
+            logger.info("🔧 DOSTĘPNE KOMENDY SYSTEMOWE:")
+            logger.info("   /status - status systemu i bota")
+            logger.info("   /sync_all - pełna synchronizacja")
+            logger.info("   /sync_exchanges - synchronizacja giełd")
+            logger.info("   /health - health check komponentów")
+            logger.info("   /logs [level] - logi systemu (admin)")
+            logger.info("   /system_info - szczegółowe info systemowe (admin)")
+            logger.info("")
+            logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
+            logger.info("   ✅ Domain Management - zarządzanie domenami")
+            logger.info("   ✅ User Permissions - system uprawnień użytkowników") 
+            logger.info("   ✅ Statistics & Health - monitorowanie i statystyki")
+            logger.info("   ✅ UI Utils Integration - zaawansowane formatowanie")
+            logger.info("")
             logger.info("📱 Bot nasłuchuje wiadomości...")
             logger.info("🛑 Naciśnij Ctrl+C aby zatrzymać")
             logger.info("=" * 50)
@@ -337,6 +417,156 @@ class TelegramController:
             
         except Exception as e:
             logger.error(f"⚠️ Błąd podczas zatrzymywania: {e}")
+    
+    # ===================
+    # DOMAIN MANAGEMENT
+    # ===================
+    
+    async def setup_user_permissions(self, telegram_id: int, 
+                                   permission_level: str = UserPermissionLevel.USER) -> bool:
+        """
+        Konfiguruje uprawnienia użytkownika.
+        
+        Args:
+            telegram_id: ID Telegram użytkownika
+            permission_level: Poziom uprawnień
+            
+        Returns:
+            bool: True jeśli konfiguracja się udała
+        """
+        try:
+            # Pobierz system domain dla operacji na bazie danych
+            system_domain = self.domains.get('system')
+            if not system_domain or not hasattr(system_domain, 'db') or not system_domain.db:
+                logger.error("System domain lub baza danych niedostępna")
+                return False
+            
+            # Inicjalizuj bazę danych jeśli trzeba
+            await system_domain.init_database()
+            
+            # Utwórz/zaktualizuj użytkownika
+            users_table = system_domain.db.get_factory().get_users_table()
+            user_id = await users_table.create_telegram_user(
+                telegram_id=telegram_id,
+                permission_level=permission_level
+            )
+            
+            if user_id:
+                logger.info(f"✅ Skonfigurowano uprawnienia dla użytkownika {telegram_id}: {permission_level}")
+                return True
+            else:
+                logger.error(f"❌ Błąd konfiguracji uprawnień dla użytkownika {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Błąd konfiguracji uprawnień: {e}")
+            return False
+    
+    async def get_user_statistics(self) -> Dict[str, Any]:
+        """
+        Pobiera statystyki użytkowników ze wszystkich domen.
+        
+        Returns:
+            Dict[str, Any]: Zagregowane statystyki
+        """
+        stats = {
+            'total_domains': len(self.domains),
+            'domain_stats': {},
+            'controller_stats': self.stats.copy(),
+            'router_stats': self.router.get_stats() if self.router else {}
+        }
+        
+        for domain_name, domain in self.domains.items():
+            try:
+                if hasattr(domain, 'get_domain_specific_stats'):
+                    domain_stats = await domain.get_domain_specific_stats()
+                    stats['domain_stats'][domain_name] = domain_stats
+                else:
+                    # Podstawowe statystyki jeśli domena nie ma specyficznych
+                    stats['domain_stats'][domain_name] = {
+                        'domain_type': type(domain).__name__,
+                        'has_database': hasattr(domain, 'db') and domain.db is not None,
+                        'test_mode': getattr(domain, 'test_mode', None)
+                    }
+            except Exception as e:
+                logger.error(f"Błąd pobierania statystyk domeny {domain_name}: {e}")
+                stats['domain_stats'][domain_name] = {'error': str(e)}
+        
+        return stats
+    
+    async def health_check_all_domains(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Przeprowadza health check wszystkich domen.
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: Wyniki health checku
+        """
+        results = {}
+        
+        for domain_name, domain in self.domains.items():
+            try:
+                # Sprawdź podstawowe funkcje domeny
+                health_info = {
+                    'healthy': True,
+                    'domain_type': type(domain).__name__,
+                    'checks': {}
+                }
+                
+                # Database check
+                if hasattr(domain, 'db') and domain.db:
+                    try:
+                        db_status = await domain.init_database()
+                        health_info['checks']['database'] = 'OK' if db_status else 'ERROR'
+                    except Exception as db_e:
+                        health_info['checks']['database'] = f'ERROR: {str(db_e)}'
+                        health_info['healthy'] = False
+                else:
+                    health_info['checks']['database'] = 'N/A'
+                
+                # Domain-specific health check
+                if hasattr(domain, '_perform_health_check'):
+                    try:
+                        domain_health = await domain._perform_health_check()
+                        health_info['checks']['domain_specific'] = domain_health
+                    except Exception as health_e:
+                        health_info['checks']['domain_specific'] = f'ERROR: {str(health_e)}'
+                        health_info['healthy'] = False
+                
+                # Stats check
+                if hasattr(domain, 'stats'):
+                    health_info['stats'] = domain.stats
+                
+                results[domain_name] = health_info
+                
+            except Exception as e:
+                results[domain_name] = {
+                    'healthy': False,
+                    'error': str(e),
+                    'domain_type': type(domain).__name__ if domain else 'Unknown'
+                }
+        
+        return results
+    
+    def get_domain(self, domain_name: str) -> Optional[BaseTelegramControllerDomain]:
+        """
+        Pobiera domenę po nazwie.
+        
+        Args:
+            domain_name: Nazwa domeny
+            
+        Returns:
+            Optional[BaseTelegramControllerDomain]: Instancja domeny lub None
+        """
+        return self.domains.get(domain_name)
+    
+    def list_domains(self) -> Dict[str, str]:
+        """
+        Zwraca listę wszystkich domen z ich typami.
+        
+        Returns:
+            Dict[str, str]: Mapa nazwa_domeny -> typ_klasy
+        """
+        return {name: type(domain).__name__ for name, domain in self.domains.items()}
 
 
 async def main():
