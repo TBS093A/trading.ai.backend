@@ -7,7 +7,7 @@ Kompletny system integracji Telegram z aplikacją pump bot, implementujący zaaw
 ### 🏗️ Struktura Abstrakcyjna
 
 #### `BaseTelegramControllerDomain` - Klasa Abstrakcyjna
-**Lokalizacja:** `src/controller_base_telegram.py`
+**Lokalizacja:** `src/controller_telegram_utils_abstract_base.py`
 
 **Wspólne funkcjonalności:**
 - ✅ `format_table_response()` - formatowanie tabelaryczne wyników
@@ -30,7 +30,7 @@ Kompletny system integracji Telegram z aplikacją pump bot, implementujący zaaw
 ### 🎯 Domeny i Funkcjonalności
 
 #### `SystemTelegramControllerDomain` ⚙️
-**Lokalizacja:** `src/controller_system_telegram.py`
+**Lokalizacja:** `src/controller_telegram_domain_sync_system.py`
 
 **Zaimplementowane Commands:**
 - ✅ `/status` - status systemu i bota
@@ -81,7 +81,7 @@ Kompletny system integracji Telegram z aplikacją pump bot, implementujący zaaw
 ### 🎨 UX/UI Utilities
 
 #### `TelegramUIUtils` - Zaawansowane Formatowanie
-**Lokalizacja:** `src/telegram_ui_utils.py`
+**Lokalizacja:** `src/controller_telegram_utils_ui.py`
 
 **Funkcjonalności:**
 - ✅ `format_currency()` - formatowanie walut (USD, EUR, PLN)
@@ -254,12 +254,13 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
 
 ```
 src/
-├── controller_base_telegram.py        # Klasa abstrakcyjna
-├── controller_system_telegram.py      # System domain (sync, health)
-├── telegram_ui_utils.py              # UI utilities i helpers
-├── telegram_integration_example.py    # Przykłady integracji
+├── controller_telegram_utils_abstract_base.py   # Klasa abstrakcyjna
+├── controller_telegram_utils_router.py          # System routingu
+├── controller_telegram_utils_ui.py              # UI utilities i helpers  
+├── controller_telegram_domain_sync_system.py    # System domain (sync, health)
+├── controller_telegram_domain_example.py        # Example domain
 └── db/postgresql/tables/
-    └── users_table.py                # Rozszerzona tabela użytkowników
+    └── users_table.py                           # Rozszerzona tabela użytkowników
 ```
 
 ## 🔄 Next Steps - Gotowe do Rozszerzenia

@@ -22,7 +22,7 @@ from datetime import datetime
 from telethon import Button
 from telethon.tl.types import User
 
-from .controller_router_telegram import DomainBase, RD
+from .controller_telegram_utils_router import DomainBase, RD
 from .db.database_facade import DatabaseFacade
 
 logger = logging.getLogger(__name__)

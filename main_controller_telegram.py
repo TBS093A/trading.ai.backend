@@ -35,15 +35,15 @@ except ImportError as e:
     sys.exit(1)
 
 # Import systemu routingu
-from src.controller_router_telegram import ClassRouter, DomainBase
+from src.controller_telegram_utils_router import ClassRouter, DomainBase
 
 # Import domen
-from src.controller_telegram_example import PumpBotExampleDomain
-from src.controller_telegram_system import SystemTelegramControllerDomain
+from src.controller_telegram_domain_example import PumpBotExampleDomain
+from src.controller_telegram_domain_sync_system import SystemTelegramControllerDomain
 
 # Import utilities
-from src.telegram_ui_utils import TelegramUIUtils
-from src.controller_base_telegram import BaseTelegramControllerDomain, UserPermissionLevel
+from src.controller_telegram_utils_ui import TelegramUIUtils
+from src.controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel
 
 # Import istniejącej konfiguracji
 from src.config import config
