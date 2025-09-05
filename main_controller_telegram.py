@@ -43,6 +43,7 @@ from src.controller_telegram_domain_sync_system import SystemTelegramControllerD
 from src.controller_telegram_domain_assets import AssetsTelegramControllerDomain
 from src.controller_telegram_domain_exchanges import ExchangesTelegramControllerDomain
 from src.controller_telegram_domain_wallets import WalletsTelegramControllerDomain
+from src.controller_telegram_domain_strategies import StrategiesTelegramControllerDomain
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
@@ -235,6 +236,13 @@ class TelegramController:
         )
         self._register_single_domain(wallets_domain, "wallets")
         
+        # Domena strategii - StrategiesTelegramControllerDomain
+        strategies_domain = StrategiesTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(strategies_domain, "strategies")
+        
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
         # self._register_single_domain(trading_domain, "trading")
@@ -406,6 +414,13 @@ class TelegramController:
             logger.info("   /wallets [page] - lista wszystkich portfeli")
             logger.info("   /wallets_active - tylko aktywne portfele")
             logger.info("   /wallet_balance [giełda] - salda na konkretnej giełdzie")
+            logger.info("")
+            logger.info("📊 KOMENDY STRATEGIES:")
+            logger.info("   /investment_strategies [page] - lista strategii inwestycyjnych")
+            logger.info("   /buy_strategies [page] - lista strategii kupna")
+            logger.info("   /sell_strategies [page] - lista strategii sprzedaży")
+            logger.info("   /investment_strategy_search [nazwa] - wyszukiwanie strategii")
+            logger.info("   /strategy_create - kreator nowej strategii (interactive)")
             logger.info("")
             logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
             logger.info("   ✅ Domain Management - zarządzanie domenami")
