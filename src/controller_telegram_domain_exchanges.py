@@ -145,6 +145,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
                     exchanges_text += f" (więcej dostępne)"
             
             # Stwórz pagination_info dla PaginationHelper.create_pagination_buttons
+            # Nie znamy total_items więc użyjemy estimacji
             estimated_total = offset + len(page_exchanges) + (100 if has_next else 0)  # Estymacja
             pagination_info = {
                 'current_page': page,

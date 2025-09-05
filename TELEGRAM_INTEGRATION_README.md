@@ -267,11 +267,12 @@ src/
 
 System jest przygotowany na łatwe dodawanie nowych domen:
 
-1. **AssetsTelegramControllerDomain** - zarządzanie assetami
-2. **ExchangesTelegramControllerDomain** - zarządzanie giełdami  
-3. **TransactionsTelegramControllerDomain** - transakcje i trading
-4. **AnalysisTelegramControllerDomain** - analizy i interpretacje
-5. **AdminTelegramControllerDomain** - panel administratora
+1. **AssetsTelegramControllerDomain** - zarządzanie assetami ✅
+2. **ExchangesTelegramControllerDomain** - zarządzanie giełdami ✅ 
+3. **WalletsTelegramControllerDomain** - zarządzanie portfelami ✅
+4. **TransactionsTelegramControllerDomain** - transakcje i trading
+5. **AnalysisTelegramControllerDomain** - analizy i interpretacje
+6. **AdminTelegramControllerDomain** - panel administratora
 
 Każda nowa domena dziedziczy z `BaseTelegramControllerDomain` i automatycznie otrzymuje:
 - System uprawnień

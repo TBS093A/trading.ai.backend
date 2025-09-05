@@ -42,6 +42,7 @@ from src.controller_telegram_domain_example import PumpBotExampleDomain
 from src.controller_telegram_domain_sync_system import SystemTelegramControllerDomain
 from src.controller_telegram_domain_assets import AssetsTelegramControllerDomain
 from src.controller_telegram_domain_exchanges import ExchangesTelegramControllerDomain
+from src.controller_telegram_domain_wallets import WalletsTelegramControllerDomain
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
@@ -227,6 +228,13 @@ class TelegramController:
         )
         self._register_single_domain(exchanges_domain, "exchanges")
         
+        # Domena portfeli - WalletsTelegramControllerDomain
+        wallets_domain = WalletsTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(wallets_domain, "wallets")
+        
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
         # self._register_single_domain(trading_domain, "trading")
@@ -393,6 +401,11 @@ class TelegramController:
             logger.info("   /exchanges [page] - lista wszystkich giełd")
             logger.info("   /exchanges_active - tylko aktywne giełdy")
             logger.info("   /exchange_info [nazwa] - szczegóły giełdy")
+            logger.info("")
+            logger.info("💰 KOMENDY WALLETS:")
+            logger.info("   /wallets [page] - lista wszystkich portfeli")
+            logger.info("   /wallets_active - tylko aktywne portfele")
+            logger.info("   /wallet_balance [giełda] - salda na konkretnej giełdzie")
             logger.info("")
             logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
             logger.info("   ✅ Domain Management - zarządzanie domenami")
