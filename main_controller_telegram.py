@@ -44,6 +44,7 @@ from src.controller_telegram_domain_assets import AssetsTelegramControllerDomain
 from src.controller_telegram_domain_exchanges import ExchangesTelegramControllerDomain
 from src.controller_telegram_domain_wallets import WalletsTelegramControllerDomain
 from src.controller_telegram_domain_strategies import StrategiesTelegramControllerDomain
+from src.controller_telegram_domain_transactions import TransactionsTelegramControllerDomain
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
@@ -243,6 +244,13 @@ class TelegramController:
         )
         self._register_single_domain(strategies_domain, "strategies")
         
+        # Domena transakcji - TransactionsTelegramControllerDomain
+        transactions_domain = TransactionsTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(transactions_domain, "transactions")
+        
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
         # self._register_single_domain(trading_domain, "trading")
@@ -421,6 +429,12 @@ class TelegramController:
             logger.info("   /sell_strategies [page] - lista strategii sprzedaży")
             logger.info("   /investment_strategy_search [nazwa] - wyszukiwanie strategii")
             logger.info("   /strategy_create - kreator nowej strategii (interactive)")
+            logger.info("")
+            logger.info("💸 KOMENDY TRANSACTIONS:")
+            logger.info("   /transactions [limit] - lista ostatnich transakcji")
+            logger.info("   /transactions_pending - transakcje bez interpretacji")
+            logger.info("   /transaction_create - kreator nowej transakcji (interactive)")
+            logger.info("   /transaction_info [id] - szczegóły transakcji")
             logger.info("")
             logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
             logger.info("   ✅ Domain Management - zarządzanie domenami")
