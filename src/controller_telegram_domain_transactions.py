@@ -1203,7 +1203,7 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
     # MESSAGE HANDLER FOR WIZARD INPUT
     # ===================
     
-    @RD.msg()
+    @RD.msg(r".*")
     async def process_wizard_input(self, event):
         """Przetwarza input użytkownika w trakcie wizarda transakcji."""
         user = await self.get_user_info(event)
