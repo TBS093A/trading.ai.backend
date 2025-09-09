@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from telethon import Button
 
 from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
-from ..main_controller_sync import SyncController
+from main_controller_sync import SyncController
 
 logger = logging.getLogger(__name__)
 

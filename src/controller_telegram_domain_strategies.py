@@ -1567,7 +1567,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
     # MESSAGE HANDLERS - WIZARD INPUT PROCESSING
     # ===================
     
-    @RD.on_msg(incoming=True, func=lambda self, event: hasattr(event, 'sender_id') and event.sender_id in self.strategy_wizards)
+    @RD.msg(r".*")
     async def process_wizard_input(self, event):
         """Przetwarza input użytkownika w trakcie kreatora strategii."""
         user = await self.get_user_info(event)

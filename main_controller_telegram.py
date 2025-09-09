@@ -45,6 +45,7 @@ from src.controller_telegram_domain_exchanges import ExchangesTelegramController
 from src.controller_telegram_domain_wallets import WalletsTelegramControllerDomain
 from src.controller_telegram_domain_strategies import StrategiesTelegramControllerDomain
 from src.controller_telegram_domain_transactions import TransactionsTelegramControllerDomain
+from src.controller_telegram_domain_analysis import AnalysisTelegramControllerDomain
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
@@ -251,6 +252,13 @@ class TelegramController:
         )
         self._register_single_domain(transactions_domain, "transactions")
         
+        # Domena analiz - AnalysisTelegramControllerDomain
+        analysis_domain = AnalysisTelegramControllerDomain(
+            admin_users=self.admin_users,
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(analysis_domain, "analysis")
+        
         # Tutaj można dodać kolejne domeny:
         # trading_domain = TradingDomain()
         # self._register_single_domain(trading_domain, "trading")
@@ -435,6 +443,13 @@ class TelegramController:
             logger.info("   /transactions_pending - transakcje bez interpretacji")
             logger.info("   /transaction_create - kreator nowej transakcji (interactive)")
             logger.info("   /transaction_info [id] - szczegóły transakcji")
+            logger.info("")
+            logger.info("🔍 KOMENDY ANALIZ:")
+            logger.info("   /analysis [page] - przegląd dostępnych analiz")
+            logger.info("   /analysis_fundamental [page] - przegląd analiz fundamentalnych")
+            logger.info("   /analysis_technical [page] - przegląd analiz technicznych")
+            logger.info("   /analysis_patterns [page] - przegląd wzorców harmonicznych")
+            logger.info("   /analysis_interpretations [page] - przegląd interpretacji")
             logger.info("")
             logger.info("🆕 NOWE FUNKCJE PRODUKCYJNE:")
             logger.info("   ✅ Domain Management - zarządzanie domenami")
