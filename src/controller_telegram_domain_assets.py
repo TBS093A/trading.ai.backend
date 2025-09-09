@@ -16,7 +16,7 @@ import traceback
 from typing import List, Dict, Any, Optional
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from .controller_telegram_utils_ui import PaginationHelper
 
 logger = logging.getLogger(__name__)

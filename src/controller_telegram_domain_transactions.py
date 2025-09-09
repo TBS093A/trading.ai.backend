@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from .controller_telegram_utils_ui import PaginationHelper, ConfirmationDialog, ValidationHelper, TelegramUIUtils
 from .sync_transactions import Transactions
 
@@ -319,7 +319,7 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.respond("🔒 Brak uprawnień do tworzenia transakcji!\n\nWymagany poziom: **Trader**")
             return
         
@@ -570,7 +570,7 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do tworzenia transakcji!", alert=True)
             return
         
@@ -1288,7 +1288,7 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
             await event.answer("❌ Sesja wizarda wygasła", alert=True)
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do wykonania transakcji!", alert=True)
             return
         

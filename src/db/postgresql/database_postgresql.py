@@ -51,9 +51,6 @@ class DatabasePostgreSQL:
                 'exchange_account_state_buy_strategies',
                 'exchange_account_state_sell_strategies',
                 'asset_exchanges',
-                'users', 
-                'user_secrets',
-                'transactions',
                 'fundamental_analysis',
                 'fundamental_analysis_assets',  # Tabela pośrednia
                 'fundamental_analysis_interpretation',
@@ -66,9 +63,6 @@ class DatabasePostgreSQL:
                 'investment_strategies',
                 'general_interpretation',
                 'exchange_transactions',
-                'telegram_signal_channels',
-                'telegram_signals',
-                'telegram_signal_interpretation',
                 'chart_images_harmonic_patterns'
             ]
             
@@ -110,9 +104,6 @@ class DatabasePostgreSQL:
                 'chart_images_harmonic_patterns',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'chart_images',
-                'telegram_signal_interpretation',
-                'telegram_signals',
-                'telegram_signal_channels',
                 'general_interpretation',
                 'investment_strategies',
                 'technical_analysis_interpretation',
@@ -122,11 +113,8 @@ class DatabasePostgreSQL:
                 'technical_analysis_harmonic_patterns',
                 'fundamental_analysis_assets',  # Tabela pośrednia
                 'fundamental_analysis',
-                'transactions',
                 'asset_exchanges',
                 'exchanges',
-                'user_secrets',
-                'users',
                 'assets'
             ]
             

@@ -35,17 +35,14 @@ class PumpBotExampleDomain(DomainBase):
     
     DOMAIN = "pump_example"
     
-    def __init__(self, admin_users: Optional[List[int]] = None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Inicjalizacja domeny przykładowej.
         
         Args:
-            admin_users: Lista ID użytkowników z uprawnieniami administracyjnymi
             **kwargs: Dodatkowe parametry konfiguracyjne
         """
         super().__init__(**kwargs)
-        self.admin_users = set(admin_users or [])
-        self.user_sessions = {}  # Przechowywanie sesji użytkowników
         
     async def is_user_allowed(self, user_id: int) -> bool:
         """Sprawdza podstawowe uprawnienia użytkownika."""
@@ -53,8 +50,8 @@ class PumpBotExampleDomain(DomainBase):
         return True
     
     def is_admin(self, user_id: int) -> bool:
-        """Sprawdza czy użytkownik jest administratorem."""
-        return user_id in self.admin_users
+        """Sprawdza czy użytkownik jest administratorem - zawsze True."""
+        return True
     
     async def before_handle(self, event) -> bool:
         """Hook wykonywany przed każdym handlerem."""

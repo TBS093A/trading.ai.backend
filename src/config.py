@@ -38,7 +38,7 @@ class Config:
         # TELEGRAM_ADMIN_USERS: Lista ID użytkowników z uprawnieniami administratorskimi
         # Format: "123456789,987654321,555666777" (oddzielone przecinkami)
         # Opcjonalne - jeśli nie ustawione, brak administratorów będzie dostępnych
-        self.telegram_admin_users_str = os.getenv("TELEGRAM_ADMIN_USERS", "")
+        # Usunięto system admin users
         
         # ENABLE_ERROR_RESPONSES: Czy bot powinien wysyłać wiadomości o błędach użytkownikom
         # Wartości: "true"/"false" (domyślnie: "true")
@@ -136,11 +136,7 @@ class Config:
             logger.warning("Nie znaleziono TEST_DATABASE_URL w zmiennych środowiskowych.")
         
         # Informacje o opcjonalnych zmiennych Telethon Controller
-        if not self.telegram_admin_users_str:
-            logger.info("TELEGRAM_ADMIN_USERS nie ustawione - brak administratorów")
-        else:
-            admin_count = len(self.get_telegram_admin_users())
-            logger.info(f"Załadowano {admin_count} administratorów z TELEGRAM_ADMIN_USERS")
+        # Usunięto sprawdzanie admin users
             
         logger.info(f"Konfiguracja Telegram Controller: error_responses={self.enable_error_responses}, handler_logging={self.enable_handler_logging}")
     
@@ -187,7 +183,7 @@ class Config:
         """Konfiguracja TelegramController jako słownik (rozszerzona konfiguracja)"""
         return {
             'session_name': self.telegram_session_name,
-            'admin_users': self.get_telegram_admin_users(),
+            # Usunięto admin_users
             'enable_error_responses': self.enable_error_responses,
             'enable_handler_logging': self.enable_handler_logging
         }
