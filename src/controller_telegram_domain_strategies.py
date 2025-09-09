@@ -17,7 +17,7 @@ import traceback
 from typing import List, Dict, Any, Optional
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from .controller_telegram_utils_ui import PaginationHelper, ConfirmationDialog, InteractiveWizard, ValidationHelper, TelegramUIUtils
 
 logger = logging.getLogger(__name__)
@@ -709,7 +709,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Sprawdź uprawnienia do tworzenia strategii
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.respond("🔒 **Brak uprawnień**\n\nTworzenie strategii wymaga uprawnień TRADER lub wyższych.")
             return
         
@@ -1000,9 +1000,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         wizard_step = callback_data.split(":")[-1]
         
         # Sprawdź uprawnienia
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
-            await event.answer("🔒 Brak uprawnień do tworzenia strategii!", alert=True)
-            return
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
         
         if wizard_step == "cancel":
             # Anuluj wizard
@@ -1158,7 +1156,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1206,7 +1204,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1253,7 +1251,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1295,7 +1293,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1346,7 +1344,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1397,7 +1395,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1473,7 +1471,8 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina
             admin_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 if strategy.get('enabled'):
                     admin_buttons.append(Button.inline("🔴 Wyłącz", f"strat:disable:{strategy_id}".encode()))
                 else:
@@ -2116,7 +2115,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do tworzenia strategii!", alert=True)
             return
         
@@ -2191,7 +2190,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do tworzenia strategii!", alert=True)
             return
         
@@ -2290,13 +2289,15 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina/trader
             action_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 action_buttons.extend([
                     Button.inline("✏️ Edytuj kwotę", f"buy_strat:edit:{strategy_id}:amount".encode()),
                     Button.inline("🔄 Edytuj typ", f"buy_strat:edit:{strategy_id}:type".encode())
                 ])
             
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 action_buttons.append(Button.inline("🗑️ Usuń", f"buy_strat:delete:{strategy_id}".encode()))
             
             # Przyciski
@@ -2354,13 +2355,15 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina/trader
             action_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 action_buttons.extend([
                     Button.inline("✏️ Edytuj kwotę", f"sell_strat:edit:{strategy_id}:amount".encode()),
                     Button.inline("🔄 Edytuj typ", f"sell_strat:edit:{strategy_id}:type".encode())
                 ])
             
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 action_buttons.append(Button.inline("🗑️ Usuń", f"sell_strat:delete:{strategy_id}".encode()))
             
             # Przyciski
@@ -2458,7 +2461,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do edycji strategii!", alert=True)
             return
         
@@ -2531,7 +2534,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do edycji strategii!", alert=True)
             return
         
@@ -2628,7 +2631,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.TRADER):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień do edycji strategii!", alert=True)
             return
         
@@ -2770,7 +2773,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -2815,7 +2818,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -2860,7 +2863,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -2918,7 +2921,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         

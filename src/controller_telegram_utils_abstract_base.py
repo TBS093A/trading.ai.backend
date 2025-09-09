@@ -28,13 +28,7 @@ from .db.database_facade import DatabaseFacade
 logger = logging.getLogger(__name__)
 
 
-class UserPermissionLevel:
-    """Enum-like klasa dla poziomów uprawnień użytkowników."""
-    GUEST = "guest"
-    USER = "user" 
-    TRADER = "trader"
-    ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
+# Usunięto system uprawnień użytkowników
 
 
 class BaseTelegramControllerDomain(DomainBase, ABC):
@@ -50,20 +44,16 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
     - User action logging
     """
     
-    def __init__(self, test_mode: bool = False, admin_users: Optional[List[int]] = None, **kwargs):
+    def __init__(self, test_mode: bool = False, **kwargs):
         """
         Inicjalizacja klasy bazowej.
         
         Args:
             test_mode: Czy uruchamiać w trybie testowym
-            admin_users: Lista ID użytkowników z uprawnieniami administratora
             **kwargs: Dodatkowe parametry konfiguracyjne
         """
         super().__init__(**kwargs)
         self.test_mode = test_mode
-        self.admin_users = set(admin_users or [])
-        self.user_sessions = {}  # Cache sesji użytkowników
-        self.user_permissions_cache = {}  # Cache uprawnień użytkowników
         
         # Inicjalizacja bazy danych
         try:
@@ -79,7 +69,6 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
         self.stats = {
             "actions_count": 0,
             "errors_count": 0,
-            "users_interacted": set(),
             "commands_executed": {},
             "callbacks_handled": {}
         }
@@ -101,81 +90,26 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
             return False
     
     # ===================
-    # PERMISSIONS SYSTEM
+    # SIMPLIFIED PERMISSIONS (no database)
     # ===================
-    
-    async def get_user_permission_level(self, user_id: int) -> str:
-        """
-        Pobiera poziom uprawnień użytkownika.
-        
-        Args:
-            user_id: ID użytkownika
-            
-        Returns:
-            str: Poziom uprawnień (guest/user/trader/admin/super_admin)
-        """
-        # Sprawdź cache
-        if user_id in self.user_permissions_cache:
-            return self.user_permissions_cache[user_id]
-        
-        try:
-            # Sprawdź w bazie danych
-            if self.db:
-                users_table = self.db.get_factory().get_users_table()
-                user = await users_table.get_by_telegram_id(user_id)
-                
-                if user:
-                    permission_level = user.get('permission_level', UserPermissionLevel.USER)
-                else:
-                    # Nowy użytkownik - stwórz wpis
-                    permission_level = UserPermissionLevel.GUEST
-                    await users_table.create_telegram_user(
-                        telegram_id=user_id,
-                        permission_level=permission_level
-                    )
-            else:
-                permission_level = UserPermissionLevel.GUEST
-            
-            # Cache wynik
-            self.user_permissions_cache[user_id] = permission_level
-            return permission_level
-            
-        except Exception as e:
-            self.logger.error(f"Błąd pobierania uprawnień użytkownika {user_id}: {e}")
-            return UserPermissionLevel.GUEST
     
     async def validate_permissions(self, user_id: int, required_level: str) -> bool:
         """
         Sprawdza czy użytkownik ma wymagany poziom uprawnień.
+        Uproszczona wersja - zawsze zwraca True (brak systemu uprawnień).
         
         Args:
-            user_id: ID użytkownika
-            required_level: Wymagany poziom uprawnień
+            user_id: ID użytkownika (ignorowany)
+            required_level: Wymagany poziom uprawnień (ignorowany)
             
         Returns:
-            bool: True jeśli użytkownik ma odpowiednie uprawnienia
+            bool: Zawsze True
         """
-        user_level = await self.get_user_permission_level(user_id)
-        
-        # Hierarchia uprawnień
-        levels_hierarchy = [
-            UserPermissionLevel.GUEST,
-            UserPermissionLevel.USER,
-            UserPermissionLevel.TRADER,
-            UserPermissionLevel.ADMIN,
-            UserPermissionLevel.SUPER_ADMIN
-        ]
-        
-        try:
-            user_level_index = levels_hierarchy.index(user_level)
-            required_level_index = levels_hierarchy.index(required_level)
-            return user_level_index >= required_level_index
-        except ValueError:
-            return False
+        return True
     
     def is_admin(self, user_id: int) -> bool:
-        """Sprawdza czy użytkownik jest administratorem (backward compatibility)."""
-        return user_id in self.admin_users
+        """Sprawdza czy użytkownik jest administratorem - zawsze True."""
+        return True
     
     # ===================
     # FORMATTING SYSTEM

@@ -17,7 +17,7 @@ import traceback
 from typing import List, Dict, Any, Optional
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from .controller_telegram_utils_ui import PaginationHelper, ConfirmationDialog, TelegramUIUtils
 
 logger = logging.getLogger(__name__)
@@ -418,7 +418,8 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina
             admin_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 admin_buttons.append(Button.inline("🔄 Odśwież wszystkie", f"wallet:refresh_exchange:{exchange['id']}".encode()))
                 
                 if spot_balances or futures_balances:
@@ -801,7 +802,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Sprawdź uprawnienia administratora
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -853,7 +854,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Sprawdź uprawnienia administratora
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -907,7 +908,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -964,7 +965,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1025,7 +1026,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1101,7 +1102,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -1268,7 +1269,8 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina
             admin_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 if wallet.get('is_enabled'):
                     admin_buttons.append(Button.inline("🔴 Wyłącz", f"wallet:disable:{wallet_id}".encode()))
                 else:

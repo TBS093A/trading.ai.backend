@@ -2,8 +2,6 @@ from .abstract_table import AbstractTable
 from .assets_table import AssetsTable
 from .exchanges_table import ExchangesTable
 from .asset_exchanges_table import AssetExchangesTable
-from .users_table import UsersTable
-from .user_secrets_table import UserSecretsTable
 
 from .fundamental_analysis_table import FundamentalAnalysisTable
 from .fundamental_analysis_interpretation_table import FundamentalAnalysisInterpretationTable
@@ -14,9 +12,6 @@ from .chart_images_table import ChartImagesTable
 from .chart_images_harmonic_patterns_table import ChartImagesHarmonicPatternsTable
 from .general_interpretation_table import GeneralInterpretationTable
 from .investment_strategies_table import InvestmentStrategiesTable
-from .telegram_signal_channels_table import TelegramSignalChannelsTable
-from .telegram_signals_table import TelegramSignalsTable
-from .telegram_signal_interpretation_table import TelegramSignalInterpretationTable
 from .exchange_transactions_table import ExchangeTransactionsTable
 from .exchange_account_state_table import ExchangeAccountStateTable
 from .exchange_account_state_buy_strategies_table import ExchangeAccountStateBuyStrategiesTable
@@ -27,8 +22,6 @@ __all__ = [
     'AssetsTable',
     'ExchangesTable',
     'AssetExchangesTable',
-    'UsersTable',
-    'UserSecretsTable',
 
     'FundamentalAnalysisTable',
     'FundamentalAnalysisInterpretationTable',
@@ -39,9 +32,6 @@ __all__ = [
     'ChartImagesHarmonicPatternsTable',
     'GeneralInterpretationTable',
     'InvestmentStrategiesTable',
-    'TelegramSignalChannelsTable',
-    'TelegramSignalsTable',
-    'TelegramSignalInterpretationTable',
     'ExchangeTransactionsTable',
     'ExchangeAccountStateTable',
     'ExchangeAccountStateBuyStrategiesTable',

@@ -12,8 +12,6 @@ class DatabasePostgreSQLFactory:
         'assets': AssetsTable,
         'exchanges': ExchangesTable,
         'asset_exchanges': AssetExchangesTable,
-        'users': UsersTable,
-        'user_secrets': UserSecretsTable,
 
         'fundamental_analysis': FundamentalAnalysisTable,
         'fundamental_analysis_interpretation': FundamentalAnalysisInterpretationTable,
@@ -22,9 +20,6 @@ class DatabasePostgreSQLFactory:
         'technical_analysis_interpretation_chart_images': TechnicalAnalysisInterpretationChartImagesTable,
         'general_interpretation': GeneralInterpretationTable,
         'investment_strategies': InvestmentStrategiesTable,
-        'telegram_signal_channels': TelegramSignalChannelsTable,
-        'telegram_signals': TelegramSignalsTable,
-        'telegram_signal_interpretation': TelegramSignalInterpretationTable,
         'chart_images': ChartImagesTable,
         'chart_images_harmonic_patterns': ChartImagesHarmonicPatternsTable,
         'exchange_transactions': ExchangeTransactionsTable,
@@ -61,13 +56,6 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę AssetExchanges."""
         return self.get_table('asset_exchanges')
     
-    def get_users_table(self) -> UsersTable:
-        """Zwraca tabelę Users."""
-        return self.get_table('users')
-    
-    def get_user_secrets_table(self) -> UserSecretsTable:
-        """Zwraca tabelę UserSecrets."""
-        return self.get_table('user_secrets')
     
 
     
@@ -99,17 +87,6 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę InvestmentStrategies."""
         return self.get_table('investment_strategies')
     
-    def get_telegram_signal_channels_table(self) -> TelegramSignalChannelsTable:
-        """Zwraca tabelę TelegramSignalChannels."""
-        return self.get_table('telegram_signal_channels')
-    
-    def get_telegram_signals_table(self) -> TelegramSignalsTable:
-        """Zwraca tabelę TelegramSignals."""
-        return self.get_table('telegram_signals')
-    
-    def get_telegram_signal_interpretation_table(self) -> TelegramSignalInterpretationTable:
-        """Zwraca tabelę TelegramSignalInterpretation."""
-        return self.get_table('telegram_signal_interpretation')
 
     def get_chart_images_table(self) -> ChartImagesTable:
         """Zwraca tabelę ChartImages."""

@@ -49,7 +49,7 @@ from src.controller_telegram_domain_analysis import AnalysisTelegramControllerDo
 
 # Import utilities
 from src.controller_telegram_utils_ui import TelegramUIUtils
-from src.controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel
+from src.controller_telegram_utils_abstract_base import BaseTelegramControllerDomain
 
 # Import istniejącej konfiguracji
 from src.config import config
@@ -110,14 +110,14 @@ class TelegramController:
         controller_config = self.config.telegram_controller_config
         
         self.session_name = controller_config['session_name']
-        self.admin_users = controller_config['admin_users']
+        # Usunięto system admin_users
         self.enable_error_responses = controller_config['enable_error_responses']
         self.enable_logging = controller_config['enable_handler_logging']
         
         logger.info(f"🚀 Inicjalizacja TelegramController (test_mode={test_mode})")
         logger.info(f"📋 Konfiguracja załadowana z klasy Config")
         logger.info(f"🗂️ Sesja: {self.session_name}")
-        logger.info(f"👥 Administratorów: {len(self.admin_users)}")
+        # Usunięto logowanie administratorów
         logger.info(f"🔧 Error responses: {self.enable_error_responses}")
         logger.info(f"📝 Handler logging: {self.enable_logging}")
     
@@ -205,56 +205,56 @@ class TelegramController:
         
         # Domena systemowa - SystemTelegramControllerDomain
         system_domain = SystemTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(system_domain, "system")
         
         # Przykładowa domena - PumpBotExampleDomain
         example_domain = PumpBotExampleDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(example_domain, "pump_example")
         
         # Domena assetów - AssetsTelegramControllerDomain
         assets_domain = AssetsTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(assets_domain, "assets")
         
         # Domena giełd - ExchangesTelegramControllerDomain
         exchanges_domain = ExchangesTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(exchanges_domain, "exchanges")
         
         # Domena portfeli - WalletsTelegramControllerDomain
         wallets_domain = WalletsTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(wallets_domain, "wallets")
         
         # Domena strategii - StrategiesTelegramControllerDomain
         strategies_domain = StrategiesTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(strategies_domain, "strategies")
         
         # Domena transakcji - TransactionsTelegramControllerDomain
         transactions_domain = TransactionsTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(transactions_domain, "transactions")
         
         # Domena analiz - AnalysisTelegramControllerDomain
         analysis_domain = AnalysisTelegramControllerDomain(
-            admin_users=self.admin_users,
+            # Usunięto admin_users
             test_mode=self.test_mode
         )
         self._register_single_domain(analysis_domain, "analysis")
@@ -329,7 +329,8 @@ class TelegramController:
         async def system_info_handler(event):
             """Handler informacji systemowych - tylko dla adminów."""
             user = await event.get_sender()
-            if user.id not in self.admin_users:
+            # Usunięto sprawdzanie admin_users - wszyscy mają dostęp
+            if False:  # Nigdy nie blokuj
                 await event.respond("⛔️ Brak uprawnień")
                 return
             
@@ -506,7 +507,7 @@ class TelegramController:
     # ===================
     
     async def setup_user_permissions(self, telegram_id: int, 
-                                   permission_level: str = UserPermissionLevel.USER) -> bool:
+                                   permission_level: str = "user") -> bool:
         """
         Konfiguruje uprawnienia użytkownika.
         
@@ -517,33 +518,9 @@ class TelegramController:
         Returns:
             bool: True jeśli konfiguracja się udała
         """
-        try:
-            # Pobierz system domain dla operacji na bazie danych
-            system_domain = self.domains.get('system')
-            if not system_domain or not hasattr(system_domain, 'db') or not system_domain.db:
-                logger.error("System domain lub baza danych niedostępna")
-                return False
-            
-            # Inicjalizuj bazę danych jeśli trzeba
-            await system_domain.init_database()
-            
-            # Utwórz/zaktualizuj użytkownika
-            users_table = system_domain.db.get_factory().get_users_table()
-            user_id = await users_table.create_telegram_user(
-                telegram_id=telegram_id,
-                permission_level=permission_level
-            )
-            
-            if user_id:
-                logger.info(f"✅ Skonfigurowano uprawnienia dla użytkownika {telegram_id}: {permission_level}")
-                return True
-            else:
-                logger.error(f"❌ Błąd konfiguracji uprawnień dla użytkownika {telegram_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Błąd konfiguracji uprawnień: {e}")
-            return False
+        # Usunięto system uprawnień - wszystkie funkcje dostępne dla wszystkich
+        logger.info(f"✅ System uprawnień został usunięty - wszystkie funkcje dostępne dla użytkownika {telegram_id}")
+        return True
     
     async def get_user_statistics(self) -> Dict[str, Any]:
         """

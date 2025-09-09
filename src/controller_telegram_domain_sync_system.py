@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from main_controller_sync import SyncController
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         Returns:
             bool: True jeśli użytkownik ma uprawnienia
         """
-        return await self.validate_permissions(user_id, UserPermissionLevel.ADMIN)
+        return True  # Usunięto sprawdzanie uprawnień - dostępne dla wszystkich
     
     # ===================
     # STATUS & HEALTH
@@ -130,7 +130,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             status_text += f"🔄 **Aktywne operacje:** {len(self.running_operations)}\n"
             
             # Permissions info
-            user_level = await self.get_user_permission_level(user.id)
+            # Usunięto sprawdzanie poziomu uprawnień
             status_text += f"🔑 **Uprawnienia:** `{user_level}`\n"
             
             # Maintenance mode info
@@ -153,7 +153,8 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             status_text += f"🔄 **Sync Controller:** {sync_status}\n"
             
             # Admin-only info
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 status_text += f"\n👑 **Status Admin:**\n"
                 status_text += f"📈 **Akcje wykonane:** {self.stats['actions_count']}\n"
                 status_text += f"❌ **Błędy:** {self.stats['errors_count']}\n"
@@ -875,7 +876,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień!", alert=True)
             return
         
@@ -898,7 +899,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień!", alert=True)
             return
         
@@ -920,7 +921,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.respond("🔒 **Brak uprawnień**\n\nTylko administratorzy mają dostęp do logów.")
             return
         

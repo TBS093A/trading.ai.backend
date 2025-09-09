@@ -16,7 +16,7 @@ import traceback
 from typing import List, Dict, Any, Optional
 from telethon import Button
 
-from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, UserPermissionLevel, RD
+from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
 from .controller_telegram_utils_ui import PaginationHelper, ConfirmationDialog
 
 logger = logging.getLogger(__name__)
@@ -350,7 +350,8 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina
             admin_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 if exchange.get('is_active'):
                     admin_buttons.append(Button.inline("🔴 Wyłącz", f"ex:disable:{exchange['id']}".encode()))
                 else:
@@ -498,7 +499,8 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Przyciski dla admina
             admin_buttons = []
-            if await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+            # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
+            if True:  # Zawsze dostępne
                 if exchange.get('is_active'):
                     admin_buttons.append(Button.inline("🔴 Wyłącz", f"ex:disable:{exchange['id']}".encode()))
                 else:
@@ -543,7 +545,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Sprawdź uprawnienia administratora
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -594,7 +596,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Sprawdź uprawnienia administratora
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -651,7 +653,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -704,7 +706,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
@@ -761,7 +763,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
         if not user:
             return
         
-        if not await self.validate_permissions(user.id, UserPermissionLevel.ADMIN):
+        # Usunięto sprawdzanie uprawnień - funkcja dostępna dla wszystkich
             await event.answer("🔒 Brak uprawnień administratora!", alert=True)
             return
         
