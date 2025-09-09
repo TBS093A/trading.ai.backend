@@ -131,6 +131,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Permissions info
             # Usunięto sprawdzanie poziomu uprawnień
+            user_level = "user"  # Domyślny poziom - system uprawnień został usunięty
             status_text += f"🔑 **Uprawnienia:** `{user_level}`\n"
             
             # Maintenance mode info
