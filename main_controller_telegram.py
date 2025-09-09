@@ -210,13 +210,6 @@ class TelegramController:
         )
         self._register_single_domain(system_domain, "system")
         
-        # Przykładowa domena - PumpBotExampleDomain
-        example_domain = PumpBotExampleDomain(
-            # Usunięto admin_users
-            test_mode=self.test_mode
-        )
-        self._register_single_domain(example_domain, "pump_example")
-        
         # Domena assetów - AssetsTelegramControllerDomain
         assets_domain = AssetsTelegramControllerDomain(
             # Usunięto admin_users

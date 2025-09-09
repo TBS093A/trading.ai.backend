@@ -70,7 +70,8 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
             "actions_count": 0,
             "errors_count": 0,
             "commands_executed": {},
-            "callbacks_handled": {}
+            "callbacks_handled": {},
+            "users_interacted": set()
         }
     
     async def init_database(self) -> bool:
@@ -424,14 +425,6 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
         }
         
         self.logger.info(f"User action: {json.dumps(log_entry, default=str)}")
-        
-        # Opcjonalnie zapisz do bazy danych
-        try:
-            if self.db:
-                users_table = self.db.get_factory().get_users_table()
-                await users_table.log_action(user_id, action, details)
-        except Exception as e:
-            self.logger.warning(f"Nie udało się zapisać logu akcji do bazy danych: {e}")
     
     # ===================
     # UI UTILITIES
