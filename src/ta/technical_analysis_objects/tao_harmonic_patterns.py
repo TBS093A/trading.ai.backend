@@ -11,14 +11,8 @@ import traceback
 from abc import ABC, abstractmethod
 
 # Import pyharmonics
-try:
-    from pyharmonics.marketdata import BinanceCandleData
-    from pyharmonics.technicals import Technicals
-    from pyharmonics.search import HarmonicSearch
-    PYHARMONICS_AVAILABLE = True
-except ImportError:
-    PYHARMONICS_AVAILABLE = False
-    logging.warning("pyharmonics nie jest zainstalowane. Użyj: pip install pyharmonics")
+from pyharmonics.technicals import Technicals
+from pyharmonics.search import HarmonicSearch
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -151,9 +145,6 @@ class HarmonicPatterns(
         Returns:
             Liczba znalezionych wzorców
         """
-        if not PYHARMONICS_AVAILABLE:
-            logger.error("pyharmonics nie jest dostępne. Zainstaluj: pip install pyharmonics")
-            return 0
         
         if len(klines) < min_points:
             logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_points}")
