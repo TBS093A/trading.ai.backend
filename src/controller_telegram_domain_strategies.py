@@ -1566,12 +1566,17 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
     # MESSAGE HANDLERS - WIZARD INPUT PROCESSING
     # ===================
     
-    @RD.msg(r".*")
+    @RD.msg(r"^[^/].*")  # Tylko wiadomości które NIE zaczynają się od / (nie są komendami)
     async def process_wizard_input(self, event):
         """Przetwarza input użytkownika w trakcie kreatora strategii."""
         user = await self.get_user_info(event)
+        # SPRAWDZENIE: Czy użytkownik jest w trybie wizard?
         if not user or user.id not in self.strategy_wizards:
+            # Nie przetwarzamy - użytkownik nie jest w trybie wizard
             return
+        
+        # Loguj tylko gdy rzeczywiście przetwarzamy wizard input
+        await self.log_action(user.id, event.raw_text, {"result": True, "error": None})
         
         wizard_state = self.strategy_wizards[user.id]
         
