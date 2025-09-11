@@ -1190,6 +1190,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     @RD.cb(b"interp:general")
     async def interpretations_general_callback(self, event):
         """Pokazuje interpretacje generalne."""
+        # Ustawić raw_text dla callback query, aby analysis_interpretations_command mogło parsować argumenty
+        event.raw_text = "/analysis_interpretations 1"
         await self.analysis_interpretations_command(event)
     
     @RD.cb(b"interp:asset:")
@@ -1784,26 +1786,40 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     @RD.cb(b"analysis:fund_overview")
     async def analysis_fund_overview_callback(self, event):
         """Przekierowanie do przeglądu analiz fundamentalnych."""
+        # Ustawić raw_text dla callback query, aby analysis_fundamental_command mogło parsować argumenty
+        event.raw_text = "/analysis_fundamental 1"
         await self.analysis_fundamental_command(event)
     
     @RD.cb(b"analysis:tech_overview")
     async def analysis_tech_overview_callback(self, event):
         """Przekierowanie do przeglądu analiz technicznych."""
+        # Ustawić raw_text dla callback query, aby analysis_technical_command mogło parsować argumenty
+        event.raw_text = "/analysis_technical 1"
         await self.analysis_technical_command(event)
     
     @RD.cb(b"analysis:patterns_overview")
     async def analysis_patterns_overview_callback(self, event):
         """Przekierowanie do przeglądu wzorców harmonicznych."""
+        # Ustawić raw_text dla callback query, aby analysis_harmonic_patterns_command mogło parsować argumenty
+        event.raw_text = "/analysis_technical_harmonic_patterns 1"
         await self.analysis_harmonic_patterns_command(event)
     
     @RD.cb(b"analysis:overview")
     async def analysis_overview_callback(self, event):
         """Przekierowanie do głównego przeglądu analiz."""
+        # analysis_command nie wymaga raw_text, więc nie trzeba go ustawiać
         await self.analysis_command(event)
     
     @RD.cb(b"analysis:refresh")
     async def analysis_refresh_callback(self, event):
         """Odświeżenie przeglądu analiz."""
+        # analysis_command nie wymaga raw_text, więc nie trzeba go ustawiać
+        await self.analysis_command(event)
+    
+    @RD.cb(b"nav:home")
+    async def nav_home_callback(self, event):
+        """Powrót do menu głównego analiz."""
+        # analysis_command nie wymaga raw_text, więc nie trzeba go ustawiać
         await self.analysis_command(event)
     
     # ===================
