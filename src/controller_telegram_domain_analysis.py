@@ -882,24 +882,96 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 )
                 return
             
-            # Formatuj wyniki
+            # Formatuj wyniki z pełnym formatowaniem jak w głównych komendach
             results_text = f"{title} - {asset_symbol}\n\n"
-            results_text += f"✅ Znaleziono {len(analyses)} analiz:\n\n"
             
-            for i, analysis in enumerate(analyses[:10], 1):  # Limit 10 dla czytelności
+            # Zastosuj paginację - maksymalnie 5 elementów
+            max_display = min(len(analyses), 5)
+            results_text += f"✅ Pokazuję {max_display} z {len(analyses)} analiz:\n\n"
+            
+            for i, analysis in enumerate(analyses[:max_display], 1):
                 results_text += f"{i}. 📊 Analiza #{analysis['id']}\n"
-                results_text += f"    📅 Data: {self._format_datetime(analysis.get('created_at', ''))}\n"
                 
-                # Dodatkowe informacje specyficzne dla typu
-                if analysis_type == "patterns" and 'pattern_type' in analysis:
-                    results_text += f"    🎯 Wzorzec: {analysis['pattern_type']}\n"
-                elif analysis_type == "technical" and 'analysis_type' in analysis:
-                    results_text += f"    🔍 Typ: {analysis['analysis_type']}\n"
+                # Formatowanie specyficzne dla typu analizy
+                if analysis_type == "fundamental":
+                    # Formatowanie jak w analysis_fundamental_command
+                    for key, value in analysis.items():
+                        if key in ['id', 'assets', 'quotes', 'asset_ids', 'content']:
+                            continue
+                        if value is not None and value != '' and value != []:
+                            if key == 'created_at':
+                                results_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                            elif key == 'timestamp':
+                                results_text += f"    ⏰ {key}: {value}\n"
+                            else:
+                                if isinstance(value, str) and len(value) > 50:
+                                    value_display = value[:50] + "..."
+                                else:
+                                    value_display = value
+                                results_text += f"    📋 {key}: {value_display}\n"
+                    
+                    # Content dict dla fundamental
+                    content = analysis.get('content', {})
+                    if isinstance(content, dict) and content:
+                        results_text += f"    📄 **CONTENT:**\n"
+                        displayed_keys = 0
+                        for key, value in content.items():
+                            if displayed_keys >= 10:
+                                results_text += f"      • ... (i {len(content) - displayed_keys} więcej kluczy)\n"
+                                break
+                            if value is not None and value != '' and value != []:
+                                if isinstance(value, str) and len(value) > 150:
+                                    value_display = value[:150] + "..."
+                                elif isinstance(value, (list, dict)):
+                                    value_display = str(value)[:150] + "..." if len(str(value)) > 150 else str(value)
+                                else:
+                                    value_display = str(value)
+                                results_text += f"      • {key}: {value_display}\n"
+                                displayed_keys += 1
+                
+                elif analysis_type in ["technical", "patterns"]:
+                    # Formatowanie jak w analysis_technical_command/patterns_command
+                    for key, value in analysis.items():
+                        if key in ['id', 'asset', 'quote', 'ta_object_json']:
+                            continue
+                        if value is not None and value != '' and value != []:
+                            if 'timestamp' in key.lower():
+                                from datetime import datetime
+                                try:
+                                    dt = datetime.fromtimestamp(value / 1000 if value > 1e10 else value)
+                                    results_text += f"    📅 {key}: {dt.strftime('%Y-%m-%d %H:%M')}\n"
+                                except (ValueError, OSError):
+                                    results_text += f"    📅 {key}: {value}\n"
+                            else:
+                                if isinstance(value, str) and len(value) > 50:
+                                    value_display = value[:50] + "..."
+                                else:
+                                    value_display = value
+                                results_text += f"    📋 {key}: {value_display}\n"
+                    
+                    # TA_OBJECT_JSON dict dla technical/patterns
+                    ta_object = analysis.get('ta_object_json', {})
+                    if isinstance(ta_object, dict) and ta_object:
+                        results_text += f"    📄 **TA_OBJECT_JSON:**\n"
+                        displayed_keys = 0
+                        for key, value in ta_object.items():
+                            if displayed_keys >= 10:
+                                results_text += f"      • ... (i {len(ta_object) - displayed_keys} więcej kluczy)\n"
+                                break
+                            if value is not None and value != '' and value != []:
+                                if isinstance(value, str) and len(value) > 150:
+                                    value_display = value[:150] + "..."
+                                elif isinstance(value, (list, dict)):
+                                    value_display = str(value)[:150] + "..." if len(str(value)) > 150 else str(value)
+                                else:
+                                    value_display = str(value)
+                                results_text += f"      • {key}: {value_display}\n"
+                                displayed_keys += 1
                 
                 results_text += "\n"
             
-            if len(analyses) > 10:
-                results_text += f"... i {len(analyses) - 10} więcej"
+            if len(analyses) > max_display:
+                results_text += f"📄 Więcej analiz dostępne (razem: {len(analyses)})"
             
             # Przyciski szczegółów
             buttons = []
