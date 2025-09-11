@@ -262,18 +262,20 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 
                 analysis_text += "\n"
             
+            # Pobierz dokładną liczbę wszystkich rekordów dla poprawnej paginacji
+            total_count = await fundamental_table.count_all()
+            
             # Informacja o paginacji
             if page > 1 or has_next:
                 analysis_text += f"📄 Strona {page}"
                 if has_next:
                     analysis_text += f" (więcej dostępne)"
             
-            # Pagination info
-            estimated_total = offset + len(page_analyses) + (100 if has_next else 0)
+            # Pagination info z dokładną liczbą
             pagination_info = {
                 'current_page': page,
-                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
-                'total_items': estimated_total,
+                'total_pages': PaginationHelper.calculate_pages(total_count, self.default_page_size),
+                'total_items': total_count,
                 'items_on_page': len(page_analyses),
                 'has_previous': page > 1,
                 'has_next': has_next,
@@ -1119,18 +1121,24 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 
                 results_text += "\n"
             
+            # Pobierz dokładną liczbę rekordów dla tego assetu dla poprawnej paginacji
+            if analysis_type == "fundamental":
+                total_count = await table.count_by_asset(asset_id)
+            else:
+                # Dla technical/patterns używamy szacowania (bo nie mamy jeszcze count_by_asset)
+                total_count = offset + len(page_analyses) + (100 if has_next else 0)
+            
             # Informacja o paginacji
             if page > 1 or has_next:
                 results_text += f"📄 Strona {page}"
                 if has_next:
                     results_text += f" (więcej dostępne)"
             
-            # Pagination info
-            estimated_total = offset + len(page_analyses) + (100 if has_next else 0)
+            # Pagination info z dokładną liczbą (dla fundamental) lub szacowaną (dla tech/patterns)
             pagination_info = {
                 'current_page': page,
-                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
-                'total_items': estimated_total,
+                'total_pages': PaginationHelper.calculate_pages(total_count, self.default_page_size),
+                'total_items': total_count,
                 'items_on_page': len(page_analyses),
                 'has_previous': page > 1,
                 'has_next': has_next,

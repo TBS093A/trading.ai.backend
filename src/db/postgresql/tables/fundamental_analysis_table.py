@@ -401,6 +401,27 @@ class FundamentalAnalysisTable(AbstractTable):
         
         return results
     
+    async def count_all(self) -> int:
+        """Zlicza wszystkie analizy fundamentalne."""
+        result = await self.fetch_val("""
+        SELECT COUNT(DISTINCT fa.id)
+        FROM fundamental_analysis fa
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        """)
+        
+        return result or 0
+    
+    async def count_by_asset(self, asset_id: int) -> int:
+        """Zlicza analizy fundamentalne dla konkretnego assetu."""
+        result = await self.fetch_val("""
+        SELECT COUNT(DISTINCT fa.id)
+        FROM fundamental_analysis fa
+        JOIN fundamental_analysis_assets faa ON fa.id = faa.fundamental_analysis_id
+        WHERE faa.asset_id = $1
+        """, asset_id)
+        
+        return result or 0
+    
     async def get_analyses_without_interpretation_by_asset_id(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera analizy fundamentalne bez interpretacji dla konkretnego asset."""
         results = await self.fetch_all("""
