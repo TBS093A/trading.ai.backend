@@ -483,4 +483,20 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             else:
                 result['chart_images'] = []
         
-        return results 
+        return results
+    
+    async def count_all(self) -> int:
+        """Zlicza wszystkie analizy techniczne wzorców harmonicznych."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM technical_analysis_harmonic_patterns
+        """)
+        
+        return result or 0
+    
+    async def count_by_asset(self, asset_id: int) -> int:
+        """Zlicza analizy techniczne wzorców harmonicznych dla konkretnego assetu."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM technical_analysis_harmonic_patterns WHERE asset_id = $1
+        """, asset_id)
+        
+        return result or 0 

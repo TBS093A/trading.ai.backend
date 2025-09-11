@@ -265,4 +265,20 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
             WHERE gi.technical_analysis_interpretation_id = tai.id
         )
         ORDER BY tai.id DESC LIMIT $2 OFFSET $3
-        """, asset_id, limit, offset) 
+        """, asset_id, limit, offset)
+    
+    async def count_all(self) -> int:
+        """Zlicza wszystkie interpretacje analiz technicznych."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM technical_analysis_interpretation
+        """)
+        
+        return result or 0
+    
+    async def count_by_asset(self, asset_id: int) -> int:
+        """Zlicza interpretacje analiz technicznych dla konkretnego assetu."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM technical_analysis_interpretation WHERE asset_id = $1
+        """, asset_id)
+        
+        return result or 0 

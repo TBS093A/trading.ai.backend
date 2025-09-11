@@ -458,4 +458,25 @@ class FundamentalAnalysisInterpretationTable(AbstractTable):
         for result in results:
             result['content'] = json.loads(result['content'])
         
-        return results 
+        return results
+    
+    async def count_all(self) -> int:
+        """Zlicza wszystkie interpretacje analiz fundamentalnych."""
+        result = await self.fetch_val("""
+        SELECT COUNT(DISTINCT fai.id)
+        FROM fundamental_analysis_interpretation fai
+        LEFT JOIN fundamental_analysis_interpretation_assets faia ON fai.id = faia.fundamental_analysis_interpretation_id
+        """)
+        
+        return result or 0
+    
+    async def count_by_asset(self, asset_id: int) -> int:
+        """Zlicza interpretacje analiz fundamentalnych dla konkretnego assetu."""
+        result = await self.fetch_val("""
+        SELECT COUNT(DISTINCT fai.id)
+        FROM fundamental_analysis_interpretation fai
+        JOIN fundamental_analysis_interpretation_assets faia ON fai.id = faia.fundamental_analysis_interpretation_id
+        WHERE faia.asset_id = $1
+        """, asset_id)
+        
+        return result or 0 

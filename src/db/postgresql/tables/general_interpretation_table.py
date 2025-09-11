@@ -279,4 +279,20 @@ class GeneralInterpretationTable(AbstractTable):
             
         except Exception as e:
             logger.error(f"Błąd podczas pobierania interpretacji bez transakcji: {e}", exc_info=True)
-            return [] 
+            return []
+    
+    async def count_all(self) -> int:
+        """Zlicza wszystkie interpretacje generalne."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM general_interpretation
+        """)
+        
+        return result or 0
+    
+    async def count_by_asset(self, asset_id: int) -> int:
+        """Zlicza interpretacje generalne dla konkretnego assetu."""
+        result = await self.fetch_val("""
+        SELECT COUNT(*) FROM general_interpretation WHERE asset_id = $1
+        """, asset_id)
+        
+        return result or 0 
