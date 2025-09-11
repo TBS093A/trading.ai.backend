@@ -1203,11 +1203,13 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
     # MESSAGE HANDLER FOR WIZARD INPUT
     # ===================
     
-    @RD.msg(r".*")
+    @RD.msg(r"^[^/].*")  # Tylko wiadomości które NIE zaczynają się od / (nie są komendami)
     async def process_wizard_input(self, event):
         """Przetwarza input użytkownika w trakcie wizarda transakcji."""
         user = await self.get_user_info(event)
+        # SPRAWDZENIE: Czy użytkownik jest w trybie wizard?
         if not user or user.id not in self.transaction_wizards:
+            # Nie przetwarzamy - użytkownik nie jest w trybie wizard
             return
         
         wizard_state = self.transaction_wizards[user.id]
