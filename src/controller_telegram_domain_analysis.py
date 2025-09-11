@@ -807,6 +807,136 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             await event.answer("❌ Błąd paginacji", alert=True)
             logger.error(f"Error in interpretations pagination: {e}")
     
+    @RD.cb(b"analysis:fund_asset_page:")
+    async def analysis_fund_asset_page_callback(self, event):
+        """Handler paginacji dla analiz fundamentalnych per asset."""
+        try:
+            callback_data = event.data.decode()
+            logger.debug(f"Fund asset pagination callback: {callback_data}")
+            
+            # Ignoruj kliknięcia na informację o stronie (page_info)
+            if "page_info" in callback_data:
+                await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
+                return
+            
+            parts = callback_data.split(":")
+            logger.debug(f"Callback parts: {parts}")
+            
+            # Format: analysis:fund_asset_page:page:2:123
+            # Ale mogą być też błędne formaty z podwójnymi dwukropkami
+            if len(parts) < 5:
+                logger.error(f"Invalid callback format: {callback_data}, parts: {parts}")
+                await event.answer("❌ Nieprawidłowy format callbacku", alert=True)
+                return
+            
+            # Parsowanie z zabezpieczeniem na puste stringi (podwójne dwukropki)
+            try:
+                page = int(parts[3]) if parts[3] else 1      # parts[3] = page number
+                asset_id = int(parts[4]) if parts[4] else (int(parts[5]) if len(parts) > 5 and parts[5] else None)  # parts[4] = asset_id
+                
+                if asset_id is None:
+                    logger.error(f"Cannot extract asset_id from callback: {callback_data}")
+                    await event.answer("❌ Nie można wyodrębnić ID assetu", alert=True)
+                    return
+                    
+            except (ValueError, IndexError) as parse_error:
+                logger.error(f"Error parsing callback: {callback_data}, error: {parse_error}")
+                await event.answer("❌ Błąd parsowania callbacku", alert=True)
+                return
+            
+            logger.debug(f"Parsed: page={page}, asset_id={asset_id}")
+            await self._show_analysis_for_asset(event, "fundamental", page, asset_id)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji", alert=True)
+            logger.error(f"Error in fund asset pagination: {e}, callback_data: {callback_data if 'callback_data' in locals() else 'N/A'}")
+    
+    @RD.cb(b"analysis:tech_asset_page:")
+    async def analysis_tech_asset_page_callback(self, event):
+        """Handler paginacji dla analiz technicznych per asset."""
+        try:
+            callback_data = event.data.decode()
+            logger.debug(f"Tech asset pagination callback: {callback_data}")
+            
+            # Ignoruj kliknięcia na informację o stronie (page_info)
+            if "page_info" in callback_data:
+                await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
+                return
+            
+            parts = callback_data.split(":")
+            logger.debug(f"Callback parts: {parts}")
+            
+            # Format: analysis:tech_asset_page:page:2:123
+            if len(parts) < 5:
+                logger.error(f"Invalid callback format: {callback_data}, parts: {parts}")
+                await event.answer("❌ Nieprawidłowy format callbacku", alert=True)
+                return
+            
+            # Parsowanie z zabezpieczeniem na puste stringi (podwójne dwukropki)
+            try:
+                page = int(parts[3]) if parts[3] else 1
+                asset_id = int(parts[4]) if parts[4] else (int(parts[5]) if len(parts) > 5 and parts[5] else None)
+                
+                if asset_id is None:
+                    logger.error(f"Cannot extract asset_id from callback: {callback_data}")
+                    await event.answer("❌ Nie można wyodrębnić ID assetu", alert=True)
+                    return
+                    
+            except (ValueError, IndexError) as parse_error:
+                logger.error(f"Error parsing callback: {callback_data}, error: {parse_error}")
+                await event.answer("❌ Błąd parsowania callbacku", alert=True)
+                return
+            
+            logger.debug(f"Parsed: page={page}, asset_id={asset_id}")
+            await self._show_analysis_for_asset(event, "technical", page, asset_id)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji", alert=True)
+            logger.error(f"Error in tech asset pagination: {e}, callback_data: {callback_data if 'callback_data' in locals() else 'N/A'}")
+    
+    @RD.cb(b"analysis:patterns_asset_page:")
+    async def analysis_patterns_asset_page_callback(self, event):
+        """Handler paginacji dla wzorców harmonicznych per asset."""
+        try:
+            callback_data = event.data.decode()
+            logger.debug(f"Patterns asset pagination callback: {callback_data}")
+            
+            # Ignoruj kliknięcia na informację o stronie (page_info)
+            if "page_info" in callback_data:
+                await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
+                return
+            
+            parts = callback_data.split(":")
+            logger.debug(f"Callback parts: {parts}")
+            
+            # Format: analysis:patterns_asset_page:page:2:123
+            if len(parts) < 5:
+                logger.error(f"Invalid callback format: {callback_data}, parts: {parts}")
+                await event.answer("❌ Nieprawidłowy format callbacku", alert=True)
+                return
+            
+            # Parsowanie z zabezpieczeniem na puste stringi (podwójne dwukropki)
+            try:
+                page = int(parts[3]) if parts[3] else 1
+                asset_id = int(parts[4]) if parts[4] else (int(parts[5]) if len(parts) > 5 and parts[5] else None)
+                
+                if asset_id is None:
+                    logger.error(f"Cannot extract asset_id from callback: {callback_data}")
+                    await event.answer("❌ Nie można wyodrębnić ID assetu", alert=True)
+                    return
+                    
+            except (ValueError, IndexError) as parse_error:
+                logger.error(f"Error parsing callback: {callback_data}, error: {parse_error}")
+                await event.answer("❌ Błąd parsowania callbacku", alert=True)
+                return
+            
+            logger.debug(f"Parsed: page={page}, asset_id={asset_id}")
+            await self._show_analysis_for_asset(event, "patterns", page, asset_id)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji", alert=True)
+            logger.error(f"Error in patterns asset pagination: {e}, callback_data: {callback_data if 'callback_data' in locals() else 'N/A'}")
+    
     # ===================
     # CALLBACK QUERIES - ANALYSIS BY ASSET
     # ===================
@@ -826,22 +956,37 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Pokazuje wzorce harmoniczne dla konkretnego assetu."""
         await self._show_analysis_for_asset(event, "patterns")
     
-    async def _show_analysis_for_asset(self, event, analysis_type: str):
+    async def _show_analysis_for_asset(self, event, analysis_type: str, page: int = 1, asset_id_override: int = None):
         """
         Helper method do wyświetlania analiz dla konkretnego assetu.
         
         Args:
             event: Event Telegram
             analysis_type: Typ analizy ('fundamental', 'technical', 'patterns')
+            page: Numer strony (domyślnie 1)
+            asset_id_override: Jeśli podane, używa tego asset_id zamiast parsowania z callback
         """
         user = await self.get_user_info(event)
         if not user:
             return
         
         try:
-            # Extract asset ID
-            callback_data = event.data.decode()
-            asset_id = int(callback_data.split(":")[-1])
+            if asset_id_override:
+                asset_id = asset_id_override
+            else:
+                # Extract asset ID z callback data
+                callback_data = event.data.decode()
+                parts = callback_data.split(":")
+                
+                # Różne formaty callbacków:
+                # Normal: analysis:fund:123 -> asset_id = parts[-1] = "123"
+                # Pagination: analysis:fund_asset_page:page:2:123 -> asset_id = parts[-1] = "123"  
+                if "page" in callback_data and len(parts) >= 5:
+                    # Format paginacji: analysis:fund_asset_page:page:2:123
+                    asset_id = int(parts[4])  # asset_id na pozycji 4
+                else:
+                    # Format zwykły: analysis:fund:123  
+                    asset_id = int(parts[-1])
             
             await self.init_database()
             assets_table = self.db.get_factory().get_assets_table()
@@ -869,12 +1014,15 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 title = "🔄 Wzorce Harmoniczne"
                 callback_prefix = "analysis:patterns"
             
-            # Pobierz analizy dla assetu
-            analyses = await table.get_by_asset_id(asset_id, limit=20)
+            # Oblicz offset dla paginacji
+            offset = (page - 1) * self.default_page_size
+            
+            # Pobierz analizy dla assetu z marginesem dla sprawdzenia następnej strony
+            analyses = await table.get_by_asset_id(asset_id, limit=self.default_page_size + 1, offset=offset)
             
             if not analyses:
                 await event.edit(
-                    f"{title} - {asset_symbol}\n\n❌ Brak analiz dla tego assetu.",
+                    f"{title} - {asset_symbol}\n\n❌ Brak analiz dla tego assetu na stronie {page}.",
                     buttons=[
                         [Button.inline("🔙 Wstecz", f"{callback_prefix}_overview".encode())],
                         [Button.inline("🏠 Menu główne", b"nav:home")]
@@ -882,15 +1030,16 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 )
                 return
             
+            # Sprawdź czy są następne strony
+            has_next = len(analyses) > self.default_page_size
+            page_analyses = analyses[:self.default_page_size]
+            
             # Formatuj wyniki z pełnym formatowaniem jak w głównych komendach
-            results_text = f"{title} - {asset_symbol}\n\n"
+            results_text = f"{title} - {asset_symbol} - Strona {page}\n\n"
             
-            # Zastosuj paginację - maksymalnie 5 elementów
-            max_display = min(len(analyses), 5)
-            results_text += f"✅ Pokazuję {max_display} z {len(analyses)} analiz:\n\n"
-            
-            for i, analysis in enumerate(analyses[:max_display], 1):
-                results_text += f"{i}. 📊 Analiza #{analysis['id']}\n"
+            for i, analysis in enumerate(page_analyses, 1):
+                item_number = offset + i
+                results_text += f"{item_number}. 📊 Analiza #{analysis['id']}\n"
                 
                 # Formatowanie specyficzne dla typu analizy
                 if analysis_type == "fundamental":
@@ -970,29 +1119,52 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 
                 results_text += "\n"
             
-            if len(analyses) > max_display:
-                results_text += f"📄 Więcej analiz dostępne (razem: {len(analyses)})"
+            # Informacja o paginacji
+            if page > 1 or has_next:
+                results_text += f"📄 Strona {page}"
+                if has_next:
+                    results_text += f" (więcej dostępne)"
             
-            # Przyciski szczegółów
-            buttons = []
-            details_buttons = []
+            # Pagination info
+            estimated_total = offset + len(page_analyses) + (100 if has_next else 0)
+            pagination_info = {
+                'current_page': page,
+                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
+                'total_items': estimated_total,
+                'items_on_page': len(page_analyses),
+                'has_previous': page > 1,
+                'has_next': has_next,
+                'start_idx': offset,
+                'end_idx': offset + len(page_analyses)
+            }
             
-            for analysis in analyses[:6]:  # Pierwsze 6 analiz
-                analysis_id = analysis['id']
-                details_buttons.append(
-                    Button.inline(f"📊 #{analysis_id}", f"{callback_prefix}_detail:{analysis_id}".encode())
-                )
+            # Przyciski paginacji
+            pagination_callback_prefix = f"analysis:{callback_prefix.split(':')[1]}_asset_page"
+            logger.debug(f"Creating pagination buttons with prefix: {pagination_callback_prefix}, asset_id: {asset_id}")
             
-            # Podziel na wiersze po 3 przyciski
-            for i in range(0, len(details_buttons), 3):
-                buttons.append(details_buttons[i:i+3])
+            buttons = PaginationHelper.create_pagination_buttons(
+                pagination_info, 
+                pagination_callback_prefix,
+                f"{asset_id}"  # Usunięto ':' na początku
+            )
             
+            # Dodatkowe opcje nawigacji
             buttons.extend([
                 [Button.inline("🔙 Wstecz", f"{callback_prefix}_overview".encode())],
                 [Button.inline("🏠 Menu główne", b"nav:home")]
             ])
             
-            await event.edit(results_text, buttons=buttons)
+            # Sprawdź czy treść się zmieniła (uniknięcie MessageNotModifiedError)
+            try:
+                await event.edit(results_text, buttons=buttons)
+            except Exception as edit_error:
+                if "Content of the message was not modified" in str(edit_error) or "MessageNotModifiedError" in str(edit_error):
+                    logger.debug(f"Message content unchanged for asset {asset_id}, page {page}")
+                    # Nie robimy nic - wiadomość już ma prawidłową treść
+                else:
+                    # Inne błędy - podnieś dalej
+                    raise
+            
             await self.log_action(user.id, f"{analysis_type}_analysis_for_asset", {
                 "asset_id": asset_id, 
                 "asset_symbol": asset_symbol,
