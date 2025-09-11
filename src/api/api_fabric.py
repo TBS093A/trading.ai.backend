@@ -64,8 +64,8 @@ class ApiFabric:
 
     def get_news_services_apis(self):
         return [
-            self.get_crypto_panic_api(),
-            self.get_gnews_api(),
+            #self.get_crypto_panic_api(),
+            #self.get_gnews_api(),
             self.get_coindesk_api()
         ]
 
@@ -73,7 +73,7 @@ class ApiFabric:
         return [
             self.get_binance_api(),
             self.get_mexc_api(),
-            self.get_kucoin_api()
+            # self.get_kucoin_api()
         ]
 
     def get_llm_apis(self):

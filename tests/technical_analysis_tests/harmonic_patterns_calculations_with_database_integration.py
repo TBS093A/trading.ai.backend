@@ -12,8 +12,8 @@ import pandas as pd
 import numpy as np
 import mplfinance as mpf
 
-from src.ta.technical_analysis_facade import TechnicalAnalysisFacade as TA
-from src.ta.technical_analysis_factory import TechnicalAnalysisFactory
+from src.technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade as TA
+from src.technical_analysis.technical_analysis_factory import TechnicalAnalysisFactory
 from src.db.postgresql import DatabasePostgreSQL
 from src.config import config
 from .technical_analysis_tests_utils import get_test_data

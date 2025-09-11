@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from .api import ApiFacade
 from .db.database_facade import DatabaseFacade
-from .ta.technical_analysis_facade import TechnicalAnalysisFacade
+from .technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade
 
 logger = logging.getLogger(__name__)
 
