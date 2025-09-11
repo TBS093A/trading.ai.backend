@@ -326,4 +326,9 @@ class AssetsTable(AbstractTable):
             
         except Exception as e:
             logger.error(f"Błąd podczas pobierania assetów z unprocessed chart images dla interval={interval}: {e}", exc_info=True)
-            return [] 
+            return []
+    
+    async def count_all(self) -> int:
+        """Zlicza wszystkie assety."""
+        result = await self.fetch_val("SELECT COUNT(*) FROM assets")
+        return result or 0 
