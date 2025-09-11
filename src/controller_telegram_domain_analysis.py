@@ -758,8 +758,28 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Handler paginacji dla analiz fundamentalnych."""
         try:
             callback_data = event.data.decode()
-            page = int(callback_data.split(":")[-1])
+            last_part = callback_data.split(":")[-1]
             
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony**\n\n"
+                    "Aby przejść do konkretnej strony analiz fundamentalnych, wyślij:\n"
+                    "`/analysis_fundamental [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_fundamental 3` - przejdź do strony 3\n"
+                    "• `/analysis_fundamental 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:fund_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:fund_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
             event.raw_text = f"/analysis_fundamental {page}"
             await self.analysis_fundamental_command(event)
             
@@ -772,8 +792,28 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Handler paginacji dla analiz technicznych."""
         try:
             callback_data = event.data.decode()
-            page = int(callback_data.split(":")[-1])
+            last_part = callback_data.split(":")[-1]
             
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony**\n\n"
+                    "Aby przejść do konkretnej strony analiz technicznych, wyślij:\n"
+                    "`/analysis_technical [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_technical 3` - przejdź do strony 3\n"
+                    "• `/analysis_technical 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:tech_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:tech_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
             event.raw_text = f"/analysis_technical {page}"
             await self.analysis_technical_command(event)
             
@@ -786,8 +826,28 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Handler paginacji dla wzorców harmonicznych."""
         try:
             callback_data = event.data.decode()
-            page = int(callback_data.split(":")[-1])
+            last_part = callback_data.split(":")[-1]
             
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony**\n\n"
+                    "Aby przejść do konkretnej strony wzorców harmonicznych, wyślij:\n"
+                    "`/analysis_technical_harmonic_patterns [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_technical_harmonic_patterns 3` - przejdź do strony 3\n"
+                    "• `/analysis_technical_harmonic_patterns 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:patterns_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:patterns_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
             event.raw_text = f"/analysis_technical_harmonic_patterns {page}"
             await self.analysis_harmonic_patterns_command(event)
             
@@ -800,8 +860,28 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Handler paginacji dla interpretacji generalnych."""
         try:
             callback_data = event.data.decode()
-            page = int(callback_data.split(":")[-1])
+            last_part = callback_data.split(":")[-1]
             
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony**\n\n"
+                    "Aby przejść do konkretnej strony interpretacji, wyślij:\n"
+                    "`/analysis_interpretations [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_interpretations 3` - przejdź do strony 3\n"
+                    "• `/analysis_interpretations 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"interp:general_page:1")],
+                    [Button.inline("🔙 Wstecz", b"interp:general_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
             event.raw_text = f"/analysis_interpretations {page}"
             await self.analysis_interpretations_command(event)
             
@@ -819,6 +899,33 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             # Ignoruj kliknięcia na informację o stronie (page_info)
             if "page_info" in callback_data:
                 await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
+                return
+            
+            # Sprawdź czy to przycisk jump
+            if ":jump:" in callback_data:
+                parts = callback_data.split(":")
+                asset_id = int(parts[-1])  # asset_id na końcu
+                
+                # Pobierz informacje o assecie dla instrukcji
+                await self.init_database()
+                assets_table = self.db.get_factory().get_assets_table()
+                asset = await assets_table.get_by_id(asset_id)
+                asset_symbol = f"{asset['asset']}/{asset['quote']}" if asset else f"Asset #{asset_id}"
+                
+                jump_help = (
+                    f"🔢 **Przejdź do strony - {asset_symbol}**\n\n"
+                    f"Analizy fundamentalne dla tego assetu możesz przeglądać używając przycisków paginacji.\n\n"
+                    f"**Alternatywnie:**\n"
+                    f"• Użyj przycisków ⬅️ Poprzednia / Następna ➡️\n"
+                    f"• Lub wróć do głównej listy i użyj `/analysis_fundamental [strona]`"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", f"analysis:fund_asset_page:page:1:{asset_id}".encode())],
+                    [Button.inline("🔙 Wstecz", b"analysis:fund_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
                 return
             
             parts = callback_data.split(":")
@@ -865,6 +972,33 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
                 return
             
+            # Sprawdź czy to przycisk jump
+            if ":jump:" in callback_data:
+                parts = callback_data.split(":")
+                asset_id = int(parts[-1])  # asset_id na końcu
+                
+                # Pobierz informacje o assecie dla instrukcji
+                await self.init_database()
+                assets_table = self.db.get_factory().get_assets_table()
+                asset = await assets_table.get_by_id(asset_id)
+                asset_symbol = f"{asset['asset']}/{asset['quote']}" if asset else f"Asset #{asset_id}"
+                
+                jump_help = (
+                    f"🔢 **Przejdź do strony - {asset_symbol}**\n\n"
+                    f"Analizy techniczne dla tego assetu możesz przeglądać używając przycisków paginacji.\n\n"
+                    f"**Alternatywnie:**\n"
+                    f"• Użyj przycisków ⬅️ Poprzednia / Następna ➡️\n"
+                    f"• Lub wróć do głównej listy i użyj `/analysis_technical [strona]`"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", f"analysis:tech_asset_page:page:1:{asset_id}".encode())],
+                    [Button.inline("🔙 Wstecz", b"analysis:tech_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
             parts = callback_data.split(":")
             logger.debug(f"Callback parts: {parts}")
             
@@ -906,6 +1040,33 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             # Ignoruj kliknięcia na informację o stronie (page_info)
             if "page_info" in callback_data:
                 await event.answer("ℹ️ To jest informacja o bieżącej stronie", alert=False)
+                return
+            
+            # Sprawdź czy to przycisk jump
+            if ":jump:" in callback_data:
+                parts = callback_data.split(":")
+                asset_id = int(parts[-1])  # asset_id na końcu
+                
+                # Pobierz informacje o assecie dla instrukcji
+                await self.init_database()
+                assets_table = self.db.get_factory().get_assets_table()
+                asset = await assets_table.get_by_id(asset_id)
+                asset_symbol = f"{asset['asset']}/{asset['quote']}" if asset else f"Asset #{asset_id}"
+                
+                jump_help = (
+                    f"🔢 **Przejdź do strony - {asset_symbol}**\n\n"
+                    f"Wzorce harmoniczne dla tego assetu możesz przeglądać używając przycisków paginacji.\n\n"
+                    f"**Alternatywnie:**\n"
+                    f"• Użyj przycisków ⬅️ Poprzednia / Następna ➡️\n"
+                    f"• Lub wróć do głównej listy i użyj `/analysis_technical_harmonic_patterns [strona]`"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", f"analysis:patterns_asset_page:page:1:{asset_id}".encode())],
+                    [Button.inline("🔙 Wstecz", b"analysis:patterns_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
                 return
             
             parts = callback_data.split(":")
