@@ -49,7 +49,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         super().__init__(**kwargs)
         
         # Konfiguracja paginacji
-        self.default_page_size = 10
+        self.default_page_size = 5  # Zmniejszone z 5 na 2 - zbyt długie komunikaty Telegram
         self.max_page_size = 25
         
         # Ścieżki do chart images (w przyszłości można skonfigurować)
@@ -65,15 +65,14 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Pobierz tabele
             fundamental_table = self.db.get_factory().get_fundamental_analysis_table()
-            technical_table = self.db.get_factory().get_technical_analysis_table()
             harmonic_patterns_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
+            tech_interp_table = self.db.get_factory().get_technical_analysis_interpretation_table()
             general_interp_table = self.db.get_factory().get_general_interpretation_table()
             fund_interp_table = self.db.get_factory().get_fundamental_analysis_interpretation_table()
-            tech_interp_table = self.db.get_factory().get_technical_analysis_interpretation_table()
             
             # Pobierz statystyki
             fundamental_count = len(await fundamental_table.get_all(limit=10000))
-            technical_count = len(await technical_table.get_all(limit=10000))
+            # Uwaga: Brak osobnej tabeli technical_analysis - używamy harmonic_patterns jako proxy
             harmonic_patterns_count = len(await harmonic_patterns_table.get_all(limit=10000))
             general_interp_count = len(await general_interp_table.get_all(limit=10000))
             fund_interp_count = len(await fund_interp_table.get_all(limit=10000))
@@ -81,12 +80,12 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             return {
                 "fundamental_analysis": fundamental_count,
-                "technical_analysis": technical_count,
+                "technical_analysis": harmonic_patterns_count,  # Używamy wzorców harmonicznych jako proxy
                 "harmonic_patterns": harmonic_patterns_count,
                 "general_interpretations": general_interp_count,
                 "fundamental_interpretations": fund_interp_count,
                 "technical_interpretations": tech_interp_count,
-                "total_analysis": fundamental_count + technical_count + harmonic_patterns_count,
+                "total_analysis": fundamental_count + harmonic_patterns_count,
                 "total_interpretations": general_interp_count + fund_interp_count + tech_interp_count,
                 "database_available": True
             }
@@ -211,23 +210,55 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             for i, analysis in enumerate(page_analyses, 1):
                 item_number = offset + i
                 
-                # Pobierz asset info jeśli asset_id dostępne
+                # Pobierz asset info z tablic assets i quotes (już w wyniku JOIN)
                 asset_info = ""
-                if 'asset_id' in analysis and analysis['asset_id']:
+                if 'assets' in analysis and 'quotes' in analysis and analysis['assets'] and analysis['quotes']:
                     try:
-                        asset = await assets_table.get_by_id(analysis['asset_id'])
-                        if asset:
-                            asset_info = f" ({asset['asset']}/{asset['quote']})"
-                    except:
+                        # Weź pierwszy asset jeśli jest więcej
+                        asset_name = analysis['assets'][0] if isinstance(analysis['assets'], list) else analysis['assets']
+                        quote_name = analysis['quotes'][0] if isinstance(analysis['quotes'], list) else analysis['quotes']
+                        asset_info = f" ({asset_name}/{quote_name})"
+                    except (IndexError, TypeError):
                         pass
                 
                 analysis_text += f"{item_number}. 📊 Analiza #{analysis['id']}{asset_info}\n"
-                analysis_text += f"    📅 Data: {self._format_datetime(analysis.get('created_at', ''))}\n"
                 
-                # Dodaj fragment analizy jeśli dostępny
-                if 'analysis_summary' in analysis and analysis['analysis_summary']:
-                    summary = analysis['analysis_summary'][:80] + "..." if len(analysis['analysis_summary']) > 80 else analysis['analysis_summary']
-                    analysis_text += f"    📝 {summary}\n"
+                # Wyświetl WSZYSTKIE kolumny z bazy danych (poza content i asset info)
+                for key, value in analysis.items():
+                    if key in ['id', 'assets', 'quotes', 'asset_ids', 'content']:  # Pomijamy już wyświetlone i content
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if key == 'created_at':
+                            analysis_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                        elif key == 'timestamp':
+                            analysis_text += f"    ⏰ {key}: {value}\n"
+                        else:
+                            # Ograniczenie długich wartości kolumn
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            analysis_text += f"    📋 {key}: {value_display}\n"
+                
+                # Wyświetl zawartość content dict (limit 5 pierwszych kluczy)
+                content = analysis.get('content', {})
+                if isinstance(content, dict) and content:
+                    analysis_text += f"    📄 **CONTENT:**\n"
+                    displayed_keys = 0
+                    for key, value in content.items():
+                        if displayed_keys >= 10:  # Limit do 10 kluczy
+                            analysis_text += f"      • ... (i {len(content) - displayed_keys} więcej kluczy)\n"
+                            break
+                        if value is not None and value != '' and value != []:
+                            # Skróć długie wartości
+                            if isinstance(value, str) and len(value) > 150:
+                                value_display = value[:150] + "..."
+                            elif isinstance(value, (list, dict)):
+                                value_display = str(value)[:150] + "..." if len(str(value)) > 150 else str(value)
+                            else:
+                                value_display = str(value)
+                            analysis_text += f"      • {key}: {value_display}\n"
+                            displayed_keys += 1
                 
                 analysis_text += "\n"
             
@@ -304,7 +335,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         
         try:
             await self.init_database()
-            technical_table = self.db.get_factory().get_technical_analysis_table()
+            # Uwaga: Używamy harmonic_patterns jako tabelę analiz technicznych
+            technical_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
             assets_table = self.db.get_factory().get_assets_table()
             
             # Oblicz offset dla paginacji
@@ -327,26 +359,53 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             for i, analysis in enumerate(page_analyses, 1):
                 item_number = offset + i
                 
-                # Pobierz asset info
+                # Pobierz asset info (już w wyniku JOIN)
                 asset_info = ""
-                if 'asset_id' in analysis and analysis['asset_id']:
-                    try:
-                        asset = await assets_table.get_by_id(analysis['asset_id'])
-                        if asset:
-                            asset_info = f" ({asset['asset']}/{asset['quote']})"
-                    except:
-                        pass
+                if 'asset' in analysis and 'quote' in analysis:
+                    asset_info = f" ({analysis['asset']}/{analysis['quote']})"
                 
-                analysis_text += f"{item_number}. 📊 Analiza #{analysis['id']}{asset_info}\n"
-                analysis_text += f"    📅 Data: {self._format_datetime(analysis.get('created_at', ''))}\n"
+                analysis_text += f"{item_number}. 📊 Wzorzec #{analysis['id']}{asset_info}\n"
                 
-                # Dodaj typ analizy jeśli dostępny
-                if 'analysis_type' in analysis and analysis['analysis_type']:
-                    analysis_text += f"    🔍 Typ: {analysis['analysis_type']}\n"
+                # Wyświetl WSZYSTKIE kolumny z bazy danych (poza ta_object_json i asset info)
+                for key, value in analysis.items():
+                    if key in ['id', 'asset', 'quote', 'ta_object_json']:  # Pomijamy już wyświetlone i ta_object_json
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if 'timestamp' in key.lower():
+                            # Konwertuj timestamp na datetime
+                            from datetime import datetime
+                            try:
+                                dt = datetime.fromtimestamp(value / 1000 if value > 1e10 else value)
+                                analysis_text += f"    📅 {key}: {dt.strftime('%Y-%m-%d %H:%M')}\n"
+                            except (ValueError, OSError):
+                                analysis_text += f"    📅 {key}: {value}\n"
+                        else:
+                            # Ograniczenie długich wartości kolumn
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            analysis_text += f"    📋 {key}: {value_display}\n"
                 
-                # Dodaj chart image info jeśli dostępne
-                if 'chart_image_path' in analysis and analysis['chart_image_path']:
-                    analysis_text += f"    📷 Chart: dostępny\n"
+                # Wyświetl zawartość ta_object_json dict (limit 5 pierwszych kluczy)
+                ta_object = analysis.get('ta_object_json', {})
+                if isinstance(ta_object, dict) and ta_object:
+                    analysis_text += f"    📄 **TA_OBJECT_JSON:**\n"
+                    displayed_keys = 0
+                    for key, value in ta_object.items():
+                        if displayed_keys >= 5:  # Limit do 5 kluczy
+                            analysis_text += f"      • ... (i {len(ta_object) - displayed_keys} więcej kluczy)\n"
+                            break
+                        if value is not None and value != '' and value != []:
+                            # Skróć długie wartości
+                            if isinstance(value, str) and len(value) > 30:
+                                value_display = value[:30] + "..."
+                            elif isinstance(value, (list, dict)):
+                                value_display = str(value)[:30] + "..." if len(str(value)) > 30 else str(value)
+                            else:
+                                value_display = str(value)
+                            analysis_text += f"      • {key}: {value_display}\n"
+                            displayed_keys += 1
                 
                 analysis_text += "\n"
             
@@ -449,27 +508,53 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             for i, pattern in enumerate(page_patterns, 1):
                 item_number = offset + i
                 
-                # Pobierz asset info
+                # Pobierz asset info (już w wyniku JOIN)
                 asset_info = ""
-                if 'asset_id' in pattern and pattern['asset_id']:
-                    try:
-                        asset = await assets_table.get_by_id(pattern['asset_id'])
-                        if asset:
-                            asset_info = f" ({asset['asset']}/{asset['quote']})"
-                    except:
-                        pass
+                if 'asset' in pattern and 'quote' in pattern:
+                    asset_info = f" ({pattern['asset']}/{pattern['quote']})"
                 
                 patterns_text += f"{item_number}. 🔄 Wzorzec #{pattern['id']}{asset_info}\n"
-                patterns_text += f"    📅 Data: {self._format_datetime(pattern.get('created_at', ''))}\n"
                 
-                # Dodaj typ wzorca jeśli dostępny
-                if 'pattern_type' in pattern and pattern['pattern_type']:
-                    patterns_text += f"    🎯 Typ: {pattern['pattern_type']}\n"
+                # Wyświetl WSZYSTKIE kolumny z bazy danych (poza ta_object_json i asset info)
+                for key, value in pattern.items():
+                    if key in ['id', 'asset', 'quote', 'ta_object_json']:  # Pomijamy już wyświetlone i ta_object_json
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if 'timestamp' in key.lower():
+                            # Konwertuj timestamp na datetime
+                            from datetime import datetime
+                            try:
+                                dt = datetime.fromtimestamp(value / 1000 if value > 1e10 else value)
+                                patterns_text += f"    📅 {key}: {dt.strftime('%Y-%m-%d %H:%M')}\n"
+                            except (ValueError, OSError):
+                                patterns_text += f"    📅 {key}: {value}\n"
+                        else:
+                            # Ograniczenie długich wartości kolumn
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            patterns_text += f"    📋 {key}: {value_display}\n"
                 
-                # Dodaj status jeśli dostępny
-                if 'status' in pattern and pattern['status']:
-                    status_emoji = "✅" if pattern['status'] == 'completed' else "⏳" if pattern['status'] == 'in_progress' else "📋"
-                    patterns_text += f"    {status_emoji} Status: {pattern['status']}\n"
+                # Wyświetl zawartość ta_object_json dict (limit 5 pierwszych kluczy)
+                ta_object = pattern.get('ta_object_json', {})
+                if isinstance(ta_object, dict) and ta_object:
+                    patterns_text += f"    📄 **TA_OBJECT_JSON:**\n"
+                    displayed_keys = 0
+                    for key, value in ta_object.items():
+                        if displayed_keys >= 5:  # Limit do 5 kluczy
+                            patterns_text += f"      • ... (i {len(ta_object) - displayed_keys} więcej kluczy)\n"
+                            break
+                        if value is not None and value != '' and value != []:
+                            # Skróć długie wartości
+                            if isinstance(value, str) and len(value) > 30:
+                                value_display = value[:30] + "..."
+                            elif isinstance(value, (list, dict)):
+                                value_display = str(value)[:30] + "..." if len(str(value)) > 30 else str(value)
+                            else:
+                                value_display = str(value)
+                            patterns_text += f"      • {key}: {value_display}\n"
+                            displayed_keys += 1
                 
                 patterns_text += "\n"
             
@@ -572,28 +657,45 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             for i, interp in enumerate(page_interpretations, 1):
                 item_number = offset + i
                 
-                # Pobierz asset info
+                # Pobierz asset info (już w wyniku JOIN)
                 asset_info = ""
-                if 'asset_id' in interp and interp['asset_id']:
-                    try:
-                        asset = await assets_table.get_by_id(interp['asset_id'])
-                        if asset:
-                            asset_info = f" ({asset['asset']}/{asset['quote']})"
-                    except:
-                        pass
+                if 'asset' in interp and 'quote' in interp:
+                    asset_info = f" ({interp['asset']}/{interp['quote']})"
                 
                 interp_text += f"{item_number}. 🧠 Interpretacja #{interp['id']}{asset_info}\n"
-                interp_text += f"    📅 Data: {self._format_datetime(interp.get('created_at', ''))}\n"
                 
-                # Dodaj fragment interpretacji jeśli dostępny
-                if 'interpretation_summary' in interp and interp['interpretation_summary']:
-                    summary = interp['interpretation_summary'][:100] + "..." if len(interp['interpretation_summary']) > 100 else interp['interpretation_summary']
-                    interp_text += f"    📝 {summary}\n"
-                
-                # Dodaj decision_action jeśli dostępne
-                if 'decision_action' in interp and interp['decision_action']:
-                    action_emoji = "🟢" if interp['decision_action'] == 'BUY' else "🔴" if interp['decision_action'] == 'SELL' else "🟡"
-                    interp_text += f"    {action_emoji} Rekomendacja: {interp['decision_action']}\n"
+                # Wyświetl WSZYSTKIE kolumny z bazy danych
+                for key, value in interp.items():
+                    if key in ['id', 'asset', 'quote']:  # Pomijamy już wyświetlone
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if key == 'created_at':
+                            interp_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                        elif key == 'content':
+                            # Skróć treść content bardziej agresywnie
+                            content_text = str(value)
+                            summary = content_text[:80] + "..." if len(content_text) > 80 else content_text
+                            interp_text += f"    📝 {key}: {summary}\n"
+                            
+                            # Spróbuj wykryć rekomendację z treści
+                            content_upper = content_text.upper()
+                            if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                                interp_text += f"      🟢 Sygnał: BUY\n"
+                            elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                                interp_text += f"      🔴 Sygnał: SELL\n"
+                            elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                                interp_text += f"      🟡 Sygnał: HOLD\n"
+                        elif key == 'investment_strategy_name':
+                            interp_text += f"    📊 {key}: {value}\n"
+                        elif 'id' in key and key != 'id':  # powiązane ID
+                            interp_text += f"    🔗 {key}: {value}\n"
+                        else:
+                            # Ograniczenie długich wartości kolumn
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            interp_text += f"    📋 {key}: {value_display}\n"
                 
                 interp_text += "\n"
             
@@ -758,7 +860,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 title = "💼 Analizy Fundamentalne"
                 callback_prefix = "analysis:fund"
             elif analysis_type == "technical":
-                table = self.db.get_factory().get_technical_analysis_table()
+                # Używamy harmonic_patterns jako tabelę analiz technicznych
+                table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
                 title = "📈 Analizy Techniczne"
                 callback_prefix = "analysis:tech"
             else:  # patterns
@@ -880,12 +983,39 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             for i, interp in enumerate(interpretations[:8], 1):
                 interp_text += f"{i}. 🧠 Interpretacja #{interp['id']}\n"
-                interp_text += f"    📅 Data: {self._format_datetime(interp.get('created_at', ''))}\n"
                 
-                # Dodaj rekomendację
-                if 'decision_action' in interp and interp['decision_action']:
-                    action_emoji = "🟢" if interp['decision_action'] == 'BUY' else "🔴" if interp['decision_action'] == 'SELL' else "🟡"
-                    interp_text += f"    {action_emoji} {interp['decision_action']}\n"
+                # Wyświetl WSZYSTKIE kolumny z bazy danych
+                for key, value in interp.items():
+                    if key in ['id']:  # Pomijamy już wyświetlone
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if key == 'created_at':
+                            interp_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                        elif key == 'content':
+                            # Skróć treść content bardziej agresywnie
+                            content_text = str(value)
+                            summary = content_text[:80] + "..." if len(content_text) > 80 else content_text
+                            interp_text += f"    📝 {key}: {summary}\n"
+                            
+                            # Spróbuj wykryć rekomendację z treści
+                            content_upper = content_text.upper()
+                            if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                                interp_text += f"      🟢 Sygnał: BUY\n"
+                            elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                                interp_text += f"      🔴 Sygnał: SELL\n"
+                            elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                                interp_text += f"      🟡 Sygnał: HOLD\n"
+                        elif key == 'investment_strategy_name':
+                            interp_text += f"    📊 {key}: {value}\n"
+                        elif 'id' in key and key != 'id':  # powiązane ID
+                            interp_text += f"    🔗 {key}: {value}\n"
+                        else:
+                            # Ograniczenie długich wartości kolumn
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            interp_text += f"    📋 {key}: {value_display}\n"
                 
                 interp_text += "\n"
             
@@ -960,12 +1090,19 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             # Formatuj szczegóły interpretacji generalnej
             details_text = f"🧠 **Interpretacja Generalna #{interp_id}**{asset_info}\n\n"
             
-            if 'decision_action' in interpretation and interpretation['decision_action']:
-                action_emoji = "🟢" if interpretation['decision_action'] == 'BUY' else "🔴" if interpretation['decision_action'] == 'SELL' else "🟡"
-                details_text += f"{action_emoji} **Rekomendacja:** {interpretation['decision_action']}\n\n"
+            # Wykryj rekomendację z content
+            if 'content' in interpretation and interpretation['content']:
+                content_upper = str(interpretation['content']).upper()
+                if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                    details_text += f"🟢 **Sygnał:** BUY wykryty w treści\n\n"
+                elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                    details_text += f"🔴 **Sygnał:** SELL wykryty w treści\n\n"
+                elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                    details_text += f"🟡 **Sygnał:** HOLD wykryty w treści\n\n"
             
-            if 'interpretation_summary' in interpretation and interpretation['interpretation_summary']:
-                details_text += f"📝 **Podsumowanie:**\n{interpretation['interpretation_summary'][:500]}\n\n"
+            # Używaj content zamiast interpretation_summary
+            if 'content' in interpretation and interpretation['content']:
+                details_text += f"📝 **Treść:**\n{str(interpretation['content'])[:500]}\n\n"
             
             details_text += f"📅 **Data utworzenia:** {self._format_datetime(interpretation.get('created_at', ''))}\n"
             
@@ -1036,18 +1173,20 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         
         details_text = f"🧠 **Interpretacja Generalna #{interp_id}**{asset_info}\n\n"
         
-        if 'decision_action' in interpretation and interpretation['decision_action']:
-            action_emoji = "🟢" if interpretation['decision_action'] == 'BUY' else "🔴" if interpretation['decision_action'] == 'SELL' else "🟡"
-            details_text += f"{action_emoji} **Rekomendacja:** {interpretation['decision_action']}\n\n"
+        # Wykryj rekomendację z treści
+        if 'content' in interpretation and interpretation['content']:
+            content_upper = str(interpretation['content']).upper()
+            if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                details_text += f"🟢 **Sygnał:** BUY wykryty w treści\n\n"
+            elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                details_text += f"🔴 **Sygnał:** SELL wykryty w treści\n\n"
+            elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                details_text += f"🟡 **Sygnał:** HOLD wykryty w treści\n\n"
         
-        if 'interpretation_summary' in interpretation and interpretation['interpretation_summary']:
-            details_text += f"📝 **Podsumowanie:**\n{interpretation['interpretation_summary'][:800]}\n\n"
+        if 'content' in interpretation and interpretation['content']:
+            details_text += f"📝 **Treść:**\n{str(interpretation['content'])[:800]}\n\n"
         
-        if 'confidence_score' in interpretation and interpretation['confidence_score']:
-            confidence_bar = TelegramUIUtils.create_progress_bar(
-                int(interpretation['confidence_score'] * 100), 100, length=15
-            )
-            details_text += f"🎯 **Pewność:** {confidence_bar}\n\n"
+        # Brak confidence_score w tabeli general_interpretation - usunięto tę sekcję
         
         details_text += f"📅 **Data:** {self._format_datetime(interpretation.get('created_at', ''))}"
         
@@ -1080,8 +1219,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             for i, fund_interp in enumerate(fund_interpretations, 1):
                 details_text += f"{i}. 📊 Interpretacja #{fund_interp['id']}\n"
-                if 'interpretation_summary' in fund_interp and fund_interp['interpretation_summary']:
-                    summary = fund_interp['interpretation_summary'][:100] + "..." if len(fund_interp['interpretation_summary']) > 100 else fund_interp['interpretation_summary']
+                if 'content' in fund_interp and fund_interp['content']:
+                    summary = str(fund_interp['content'])[:100] + "..." if len(str(fund_interp['content'])) > 100 else str(fund_interp['content'])
                     details_text += f"   {summary}\n"
                 details_text += f"   📅 {self._format_datetime(fund_interp.get('created_at', ''))}\n\n"
         
@@ -1114,8 +1253,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             for i, tech_interp in enumerate(tech_interpretations, 1):
                 details_text += f"{i}. 📊 Interpretacja #{tech_interp['id']}\n"
-                if 'interpretation_summary' in tech_interp and tech_interp['interpretation_summary']:
-                    summary = tech_interp['interpretation_summary'][:100] + "..." if len(tech_interp['interpretation_summary']) > 100 else tech_interp['interpretation_summary']
+                if 'content' in tech_interp and tech_interp['content']:
+                    summary = str(tech_interp['content'])[:100] + "..." if len(str(tech_interp['content'])) > 100 else str(tech_interp['content'])
                     details_text += f"   {summary}\n"
                 details_text += f"   📅 {self._format_datetime(tech_interp.get('created_at', ''))}\n\n"
         
@@ -1189,7 +1328,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 return
             
             # Pobierz analizy techniczne dla tego assetu (które mogą mieć chart images)
-            tech_table = self.db.get_factory().get_technical_analysis_table()
+            # Używamy harmonic_patterns jako proxy dla analiz technicznych
+            tech_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
             tech_analyses = await tech_table.get_by_asset_id(interpretation['asset_id'], limit=10)
             
             # Filtruj analizy które mają chart images
@@ -1451,6 +1591,137 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         ]
         
         await event.edit(search_help, buttons=buttons)
+    
+    # ===================
+    # CALLBACK QUERIES - MISSING HANDLERS
+    # ===================
+    
+    @RD.cb(b"analysis:fund_by_asset")
+    async def analysis_fund_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla analiz fundamentalnych."""
+        await self._show_assets_for_analysis_selection(event, "fundamental")
+    
+    @RD.cb(b"analysis:tech_by_asset")
+    async def analysis_tech_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla analiz technicznych.""" 
+        await self._show_assets_for_analysis_selection(event, "technical")
+    
+    @RD.cb(b"analysis:patterns_by_asset")
+    async def analysis_patterns_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla wzorców harmonicznych."""
+        await self._show_assets_for_analysis_selection(event, "patterns")
+    
+    @RD.cb(b"analysis:fund_details_menu")
+    async def analysis_fund_details_menu_callback(self, event):
+        """Pokazuje menu szczegółowych opcji dla analiz fundamentalnych."""
+        await self._show_analysis_details_menu(event, "fundamental")
+    
+    @RD.cb(b"analysis:tech_details_menu") 
+    async def analysis_tech_details_menu_callback(self, event):
+        """Pokazuje menu szczegółowych opcji dla analiz technicznych."""
+        await self._show_analysis_details_menu(event, "technical")
+    
+    @RD.cb(b"analysis:patterns_details_menu")
+    async def analysis_patterns_details_menu_callback(self, event):
+        """Pokazuje menu szczegółowych opcji dla wzorców harmonicznych."""
+        await self._show_analysis_details_menu(event, "patterns")
+    
+    async def _show_assets_for_analysis_selection(self, event, analysis_type: str):
+        """
+        Helper method do wyświetlenia listy assetów dla wybranego typu analiz.
+        
+        Args:
+            event: Event Telegram
+            analysis_type: Typ analizy ('fundamental', 'technical', 'patterns')
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        try:
+            await self.init_database()
+            assets_table = self.db.get_factory().get_assets_table()
+            
+            # Pobierz pierwsze 20 assetów
+            assets = await assets_table.get_all(limit=20)
+            
+            if not assets:
+                await event.edit(
+                    f"🔍 **Wyszukiwanie po assetach - {analysis_type}**\n\n❌ Brak dostępnych assetów.",
+                    buttons=[[Button.inline("🔙 Wstecz", f"analysis:{analysis_type.split('_')[0]}_overview".encode())]]
+                )
+                return
+            
+            # Formatuj listę assetów
+            type_emoji = "💼" if analysis_type == "fundamental" else "📈" if analysis_type == "technical" else "🔄"
+            title = f"{type_emoji} **Wybierz Asset dla Analiz {analysis_type.title()}**\n\n"
+            
+            # Przyciski z assetami (po 2 na rząd)
+            buttons = []
+            for i in range(0, min(len(assets), 12), 2):  # Maksymalnie 12 assetów, po 2 na rząd
+                row = []
+                for j in range(2):
+                    if i + j < len(assets):
+                        asset = assets[i + j]
+                        asset_symbol = f"{asset['asset']}/{asset['quote']}"
+                        callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+                        row.append(Button.inline(asset_symbol, f"analysis:{callback_type}:{asset['id']}".encode()))
+                buttons.append(row)
+            
+            # Przyciski nawigacji
+            buttons.extend([
+                [Button.inline("🔙 Wstecz", f"analysis:{analysis_type.split('_')[0]}_overview".encode())],
+                [Button.inline("🏠 Menu główne", b"nav:home")]
+            ])
+            
+            await event.edit(title, buttons=buttons)
+            await self.log_action(user.id, f"assets_selection_for_{analysis_type}", {"assets_count": len(assets)})
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, f"assets_selection_{analysis_type}")
+            await event.edit(error_msg)
+    
+    async def _show_analysis_details_menu(self, event, analysis_type: str):
+        """
+        Helper method do wyświetlenia menu szczegółowych opcji dla analiz.
+        
+        Args:
+            event: Event Telegram  
+            analysis_type: Typ analizy ('fundamental', 'technical', 'patterns')
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        try:
+            # Formatuj menu szczegółów
+            type_emoji = "💼" if analysis_type == "fundamental" else "📈" if analysis_type == "technical" else "🔄"
+            title = f"{type_emoji} **Szczegóły Analiz {analysis_type.title()}**\n\n"
+            title += f"Wybierz opcję szczegółową:"
+            
+            callback_prefix = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+            
+            buttons = [
+                [
+                    Button.inline("🔍 Po assetach", f"analysis:{callback_prefix}_by_asset".encode()),
+                    Button.inline("📊 Najnowsze", f"analysis:{callback_prefix}_latest".encode())
+                ],
+                [
+                    Button.inline("📈 Statystyki", f"analysis:{callback_prefix}_stats".encode()),
+                    Button.inline("🎯 Najlepsze", f"analysis:{callback_prefix}_best".encode())
+                ],
+                [
+                    Button.inline("🔙 Wstecz", f"analysis:{callback_prefix}_overview".encode()),
+                    Button.inline("🏠 Menu główne", b"nav:home")
+                ]
+            ]
+            
+            await event.edit(title, buttons=buttons)
+            await self.log_action(user.id, f"details_menu_{analysis_type}")
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, f"details_menu_{analysis_type}")
+            await event.edit(error_msg)
     
     # ===================
     # UTILITY METHODS
