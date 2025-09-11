@@ -310,6 +310,67 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             await event.respond(error_msg)
     
     # ===================
+    # COMMANDS - FUNDAMENTAL ANALYSIS BY ASSET
+    # ===================
+    
+    @RD.cmd("analysis_fundamental_asset", aliases=["fund_asset", "fa"])
+    async def analysis_fundamental_asset_command(self, event):
+        """
+        Komenda bezpośredniego dostępu do analiz fundamentalnych dla konkretnego assetu.
+        Format: /analysis_fundamental_asset SYMBOL [page]
+        Przykłady: /analysis_fundamental_asset BTC-USDT, /analysis_fundamental_asset ETH-USDT 2
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        # Parse argumentów
+        text_parts = event.raw_text.split()
+        if len(text_parts) < 2:
+            await event.respond(
+                "💼 **Analizy Fundamentalne po Asset**\n\n"
+                "**Format:** `/analysis_fundamental_asset SYMBOL [strona]`\n\n"
+                "**Przykłady:**\n"
+                "• `/analysis_fundamental_asset BTC-USDT`\n"
+                "• `/analysis_fundamental_asset ETH-USDT 2`\n\n"
+                "**Format symbolu:** ASSET-QUOTE (np. BTC-USDT, ETH-BTC)"
+            )
+            return
+        
+        symbol = text_parts[1].upper().replace('-', '/')  # BTC-USDT -> BTC/USDT
+        page = 1
+        
+        if len(text_parts) >= 3:
+            try:
+                page = int(text_parts[2])
+                page = max(1, page)
+            except ValueError:
+                pass
+        
+        try:
+            await self.init_database()
+            assets_table = self.db.get_factory().get_assets_table()
+            
+            # Parse asset/quote z symbolu
+            if '/' not in symbol:
+                await event.respond("❌ Nieprawidłowy format symbolu. Użyj: ASSET-QUOTE (np. BTC-USDT)")
+                return
+            
+            asset, quote = symbol.split('/', 1)
+            asset_record = await assets_table.get_by_asset_quote(asset, quote)
+            
+            if not asset_record:
+                await event.respond(f"❌ Asset {symbol} nie został znaleziony w bazie danych.")
+                return
+            
+            await self.log_action(user.id, "fundamental_analysis_by_asset_command", {"symbol": symbol, "page": page})
+            await self._show_analysis_for_asset(event, "fundamental", page, asset_record['id'])
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "fundamental_analysis_by_asset")
+            await event.respond(error_msg)
+    
+    # ===================
     # COMMANDS - TECHNICAL ANALYSIS
     # ===================
     
@@ -457,6 +518,67 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
         except Exception as e:
             error_msg = await self.handle_database_error(e, user.id, "technical_analysis")
+            await event.respond(error_msg)
+    
+    # ===================
+    # COMMANDS - TECHNICAL ANALYSIS BY ASSET
+    # ===================
+    
+    @RD.cmd("analysis_technical_asset", aliases=["tech_asset", "ta"])
+    async def analysis_technical_asset_command(self, event):
+        """
+        Komenda bezpośredniego dostępu do analiz technicznych dla konkretnego assetu.
+        Format: /analysis_technical_asset SYMBOL [page]
+        Przykłady: /analysis_technical_asset BTC-USDT, /analysis_technical_asset ETH-USDT 2
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        # Parse argumentów
+        text_parts = event.raw_text.split()
+        if len(text_parts) < 2:
+            await event.respond(
+                "📈 **Analizy Techniczne po Asset**\n\n"
+                "**Format:** `/analysis_technical_asset SYMBOL [strona]`\n\n"
+                "**Przykłady:**\n"
+                "• `/analysis_technical_asset BTC-USDT`\n"
+                "• `/analysis_technical_asset ETH-USDT 2`\n\n"
+                "**Format symbolu:** ASSET-QUOTE (np. BTC-USDT, ETH-BTC)"
+            )
+            return
+        
+        symbol = text_parts[1].upper().replace('-', '/')  # BTC-USDT -> BTC/USDT
+        page = 1
+        
+        if len(text_parts) >= 3:
+            try:
+                page = int(text_parts[2])
+                page = max(1, page)
+            except ValueError:
+                pass
+        
+        try:
+            await self.init_database()
+            assets_table = self.db.get_factory().get_assets_table()
+            
+            # Parse asset/quote z symbolu
+            if '/' not in symbol:
+                await event.respond("❌ Nieprawidłowy format symbolu. Użyj: ASSET-QUOTE (np. BTC-USDT)")
+                return
+            
+            asset, quote = symbol.split('/', 1)
+            asset_record = await assets_table.get_by_asset_quote(asset, quote)
+            
+            if not asset_record:
+                await event.respond(f"❌ Asset {symbol} nie został znaleziony w bazie danych.")
+                return
+            
+            await self.log_action(user.id, "technical_analysis_by_asset_command", {"symbol": symbol, "page": page})
+            await self._show_analysis_for_asset(event, "technical", page, asset_record['id'])
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "technical_analysis_by_asset")
             await event.respond(error_msg)
     
     # ===================
@@ -609,6 +731,67 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             await event.respond(error_msg)
     
     # ===================
+    # COMMANDS - HARMONIC PATTERNS BY ASSET
+    # ===================
+    
+    @RD.cmd("analysis_patterns_asset", aliases=["patterns_asset", "pa"])
+    async def analysis_patterns_asset_command(self, event):
+        """
+        Komenda bezpośredniego dostępu do wzorców harmonicznych dla konkretnego assetu.
+        Format: /analysis_patterns_asset SYMBOL [page]
+        Przykłady: /analysis_patterns_asset BTC-USDT, /analysis_patterns_asset ETH-USDT 2
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        # Parse argumentów
+        text_parts = event.raw_text.split()
+        if len(text_parts) < 2:
+            await event.respond(
+                "🔄 **Wzorce Harmoniczne po Asset**\n\n"
+                "**Format:** `/analysis_patterns_asset SYMBOL [strona]`\n\n"
+                "**Przykłady:**\n"
+                "• `/analysis_patterns_asset BTC-USDT`\n"
+                "• `/analysis_patterns_asset ETH-USDT 2`\n\n"
+                "**Format symbolu:** ASSET-QUOTE (np. BTC-USDT, ETH-BTC)"
+            )
+            return
+        
+        symbol = text_parts[1].upper().replace('-', '/')  # BTC-USDT -> BTC/USDT
+        page = 1
+        
+        if len(text_parts) >= 3:
+            try:
+                page = int(text_parts[2])
+                page = max(1, page)
+            except ValueError:
+                pass
+        
+        try:
+            await self.init_database()
+            assets_table = self.db.get_factory().get_assets_table()
+            
+            # Parse asset/quote z symbolu
+            if '/' not in symbol:
+                await event.respond("❌ Nieprawidłowy format symbolu. Użyj: ASSET-QUOTE (np. BTC-USDT)")
+                return
+            
+            asset, quote = symbol.split('/', 1)
+            asset_record = await assets_table.get_by_asset_quote(asset, quote)
+            
+            if not asset_record:
+                await event.respond(f"❌ Asset {symbol} nie został znaleziony w bazie danych.")
+                return
+            
+            await self.log_action(user.id, "patterns_analysis_by_asset_command", {"symbol": symbol, "page": page})
+            await self._show_analysis_for_asset(event, "patterns", page, asset_record['id'])
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "patterns_analysis_by_asset")
+            await event.respond(error_msg)
+    
+    # ===================
     # COMMANDS - INTERPRETATIONS
     # ===================
     
@@ -747,6 +930,63 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
         except Exception as e:
             error_msg = await self.handle_database_error(e, user.id, "interpretations")
+            await event.respond(error_msg)
+    
+    # ===================
+    # COMMANDS - INTERPRETATIONS BY ASSET
+    # ===================
+    
+    @RD.cmd("analysis_interpretations_asset", aliases=["interp_asset", "ia"])
+    async def analysis_interpretations_asset_command(self, event):
+        """
+        Komenda bezpośredniego dostępu do interpretacji dla konkretnego assetu.
+        Format: /analysis_interpretations_asset SYMBOL [page]
+        Przykłady: /analysis_interpretations_asset BTC-USDT, /analysis_interpretations_asset ETH-USDT 2
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        # Parse argumentów
+        text_parts = event.raw_text.split()
+        if len(text_parts) < 2:
+            await event.respond(
+                "🧠 **Interpretacje po Asset**\n\n"
+                "**Format:** `/analysis_interpretations_asset SYMBOL`\n\n"
+                "**Przykłady:**\n"
+                "• `/analysis_interpretations_asset BTC-USDT`\n"
+                "• `/analysis_interpretations_asset ETH-USDT`\n\n"
+                "**Format symbolu:** ASSET-QUOTE (np. BTC-USDT, ETH-BTC)"
+            )
+            return
+        
+        symbol = text_parts[1].upper().replace('-', '/')  # BTC-USDT -> BTC/USDT
+        
+        try:
+            await self.init_database()
+            assets_table = self.db.get_factory().get_assets_table()
+            
+            # Parse asset/quote z symbolu
+            if '/' not in symbol:
+                await event.respond("❌ Nieprawidłowy format symbolu. Użyj: ASSET-QUOTE (np. BTC-USDT)")
+                return
+            
+            asset, quote = symbol.split('/', 1)
+            asset_record = await assets_table.get_by_asset_quote(asset, quote)
+            
+            if not asset_record:
+                await event.respond(f"❌ Asset {symbol} nie został znaleziony w bazie danych.")
+                return
+            
+            await self.log_action(user.id, "interpretations_by_asset_command", {"symbol": symbol})
+            
+            # Przekieruj do istniejącego handlera interpretacji dla assetu
+            # Symuluj event callback z asset_id
+            event.data = f"interp:asset:{asset_record['id']}".encode()
+            await self.interpretations_asset_callback(event)
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "interpretations_by_asset")
             await event.respond(error_msg)
     
     # ===================
@@ -2028,17 +2268,22 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     @RD.cb(b"analysis:fund_by_asset")
     async def analysis_fund_by_asset_callback(self, event):
         """Pokazuje listę assetów dla analiz fundamentalnych."""
-        await self._show_assets_for_analysis_selection(event, "fundamental")
+        await self._show_assets_for_analysis_selection(event, "fundamental", page=1)
     
     @RD.cb(b"analysis:tech_by_asset")
     async def analysis_tech_by_asset_callback(self, event):
         """Pokazuje listę assetów dla analiz technicznych.""" 
-        await self._show_assets_for_analysis_selection(event, "technical")
+        await self._show_assets_for_analysis_selection(event, "technical", page=1)
     
     @RD.cb(b"analysis:patterns_by_asset")
     async def analysis_patterns_by_asset_callback(self, event):
         """Pokazuje listę assetów dla wzorców harmonicznych."""
-        await self._show_assets_for_analysis_selection(event, "patterns")
+        await self._show_assets_for_analysis_selection(event, "patterns", page=1)
+    
+    @RD.cb(b"interp:by_asset")
+    async def interpretations_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla interpretacji."""
+        await self._show_assets_for_analysis_selection(event, "interpretations", page=1)
     
     @RD.cb(b"analysis:fund_details_menu")
     async def analysis_fund_details_menu_callback(self, event):
@@ -2055,13 +2300,14 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         """Pokazuje menu szczegółowych opcji dla wzorców harmonicznych."""
         await self._show_analysis_details_menu(event, "patterns")
     
-    async def _show_assets_for_analysis_selection(self, event, analysis_type: str):
+    async def _show_assets_for_analysis_selection(self, event, analysis_type: str, page: int = 1):
         """
-        Helper method do wyświetlenia listy assetów dla wybranego typu analiz.
+        Helper method do wyświetlenia listy assetów dla wybranego typu analiz z paginacją.
         
         Args:
             event: Event Telegram
             analysis_type: Typ analizy ('fundamental', 'technical', 'patterns')
+            page: Numer strony (domyślnie 1)
         """
         user = await self.get_user_info(event)
         if not user:
@@ -2071,44 +2317,226 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             await self.init_database()
             assets_table = self.db.get_factory().get_assets_table()
             
-            # Pobierz pierwsze 20 assetów
-            assets = await assets_table.get_all(limit=20)
+            # Paginacja: 12 assetów na stronę (6 rzędów po 2)
+            assets_per_page = 12
+            offset = (page - 1) * assets_per_page
+            
+            # Pobierz dokładną liczbę wszystkich assetów dla paginacji
+            total_assets = await assets_table.count_all()
+            total_pages = (total_assets + assets_per_page - 1) // assets_per_page  # Ceil division
+            
+            # Pobierz assety z marginesem dla sprawdzenia następnej strony
+            assets = await assets_table.get_all(limit=assets_per_page + 1, offset=offset)
             
             if not assets:
                 await event.edit(
-                    f"🔍 **Wyszukiwanie po assetach - {analysis_type}**\n\n❌ Brak dostępnych assetów.",
+                    f"🔍 **Wyszukiwanie po assetach - {analysis_type} - Strona {page}**\n\n❌ Brak assetów na tej stronie.",
                     buttons=[[Button.inline("🔙 Wstecz", f"analysis:{analysis_type.split('_')[0]}_overview".encode())]]
                 )
                 return
             
+            # Sprawdź czy są następne strony
+            has_next = len(assets) > assets_per_page
+            page_assets = assets[:assets_per_page]
+            
             # Formatuj listę assetów
-            type_emoji = "💼" if analysis_type == "fundamental" else "📈" if analysis_type == "technical" else "🔄"
-            title = f"{type_emoji} **Wybierz Asset dla Analiz {analysis_type.title()}**\n\n"
+            type_emoji = "💼" if analysis_type == "fundamental" else "📈" if analysis_type == "technical" else "🔄" if analysis_type == "patterns" else "🧠"
+            type_name = "Fundamentalne" if analysis_type == "fundamental" else "Techniczne" if analysis_type == "technical" else "Wzorce Harmoniczne" if analysis_type == "patterns" else "Interpretacje"
+            title = f"{type_emoji} **Wybierz Asset dla Analiz {type_name}**"
+            if total_pages > 1:
+                title += f" - Strona {page} z {total_pages}"
+            title += "\n\n"
             
             # Przyciski z assetami (po 2 na rząd)
             buttons = []
-            for i in range(0, min(len(assets), 12), 2):  # Maksymalnie 12 assetów, po 2 na rząd
+            for i in range(0, len(page_assets), 2):  # Po 2 na rząd
                 row = []
                 for j in range(2):
-                    if i + j < len(assets):
-                        asset = assets[i + j]
+                    if i + j < len(page_assets):
+                        asset = page_assets[i + j]
                         asset_symbol = f"{asset['asset']}/{asset['quote']}"
-                        callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
-                        row.append(Button.inline(asset_symbol, f"analysis:{callback_type}:{asset['id']}".encode()))
+                        if analysis_type == "interpretations":
+                            callback_data = f"interp:asset:{asset['id']}"
+                        else:
+                            callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+                            callback_data = f"analysis:{callback_type}:{asset['id']}"
+                        row.append(Button.inline(asset_symbol, callback_data.encode()))
                 buttons.append(row)
             
+            # Dodaj przyciski paginacji jeśli potrzebne
+            if total_pages > 1:
+                pagination_row = []
+                
+                if page > 1:
+                    if analysis_type == "interpretations":
+                        pagination_row.append(Button.inline("⬅️ Poprzednia", f"interp:assets_page:{page-1}".encode()))
+                    else:
+                        callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+                        pagination_row.append(Button.inline("⬅️ Poprzednia", f"analysis:{callback_type}_assets_page:{page-1}".encode()))
+                
+                # Informacja o stronie
+                pagination_row.append(Button.inline(f"📄 {page}/{total_pages}", f"analysis:assets_page_info:{page}".encode()))
+                
+                if page < total_pages:
+                    if analysis_type == "interpretations":
+                        pagination_row.append(Button.inline("Następna ➡️", f"interp:assets_page:{page+1}".encode()))
+                    else:
+                        callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+                        pagination_row.append(Button.inline("Następna ➡️", f"analysis:{callback_type}_assets_page:{page+1}".encode()))
+                
+                buttons.append(pagination_row)
+                
+                # Dodaj przycisk "Idź do strony..." jeśli mamy więcej niż 1 stronę
+                if analysis_type == "interpretations":
+                    buttons.append([Button.inline("🔢 Idź do strony...", f"interp:assets_page:jump".encode())])
+                else:
+                    callback_type = "fund" if analysis_type == "fundamental" else "tech" if analysis_type == "technical" else "patterns"
+                    buttons.append([Button.inline("🔢 Idź do strony...", f"analysis:{callback_type}_assets_page:jump".encode())])
+            
             # Przyciski nawigacji
-            buttons.extend([
-                [Button.inline("🔙 Wstecz", f"analysis:{analysis_type.split('_')[0]}_overview".encode())],
-                [Button.inline("🏠 Menu główne", b"nav:home")]
-            ])
+            if analysis_type == "interpretations":
+                buttons.extend([
+                    [Button.inline("🔙 Wstecz", b"interp:general")],
+                    [Button.inline("🏠 Menu główne", b"nav:home")]
+                ])
+            else:
+                buttons.extend([
+                    [Button.inline("🔙 Wstecz", f"analysis:{analysis_type.split('_')[0]}_overview".encode())],
+                    [Button.inline("🏠 Menu główne", b"nav:home")]
+                ])
             
             await event.edit(title, buttons=buttons)
-            await self.log_action(user.id, f"assets_selection_for_{analysis_type}", {"assets_count": len(assets)})
+            await self.log_action(user.id, f"assets_selection_for_{analysis_type}", {
+                "assets_count": len(page_assets), 
+                "page": page,
+                "has_next": has_next
+            })
             
         except Exception as e:
             error_msg = await self.handle_database_error(e, user.id, f"assets_selection_{analysis_type}")
             await event.edit(error_msg)
+    
+    # ===================
+    # CALLBACK QUERIES - ASSETS SELECTION PAGINATION
+    # ===================
+    
+    @RD.cb(b"analysis:fund_assets_page:")
+    async def analysis_fund_assets_page_callback(self, event):
+        """Handler paginacji dla wyboru assetów analiz fundamentalnych."""
+        try:
+            callback_data = event.data.decode()
+            last_part = callback_data.split(":")[-1]
+            
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony assetów**\n\n"
+                    "Używaj przycisków ⬅️ Poprzednia / Następna ➡️ do nawigacji między stronami assetów.\n\n"
+                    "**Każda strona zawiera maksymalnie 12 assetów (6 rzędów po 2).**\n\n"
+                    "Alternatywnie możesz wrócić do głównej listy analiz fundamentalnych."
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:fund_assets_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:fund_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
+            await self._show_assets_for_analysis_selection(event, "fundamental", page)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji assetów", alert=True)
+            logger.error(f"Error in fund assets pagination: {e}")
+    
+    @RD.cb(b"analysis:tech_assets_page:")
+    async def analysis_tech_assets_page_callback(self, event):
+        """Handler paginacji dla wyboru assetów analiz technicznych."""
+        try:
+            callback_data = event.data.decode()
+            last_part = callback_data.split(":")[-1]
+            
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony assetów**\n\n"
+                    "Używaj przycisków ⬅️ Poprzednia / Następna ➡️ do nawigacji między stronami assetów.\n\n"
+                    "**Każda strona zawiera maksymalnie 12 assetów (6 rzędów po 2).**\n\n"
+                    "Alternatywnie możesz wrócić do głównej listy analiz technicznych."
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:tech_assets_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:tech_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
+            await self._show_assets_for_analysis_selection(event, "technical", page)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji assetów", alert=True)
+            logger.error(f"Error in tech assets pagination: {e}")
+    
+    @RD.cb(b"analysis:patterns_assets_page:")
+    async def analysis_patterns_assets_page_callback(self, event):
+        """Handler paginacji dla wyboru assetów wzorców harmonicznych."""
+        try:
+            callback_data = event.data.decode()
+            last_part = callback_data.split(":")[-1]
+            
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony assetów**\n\n"
+                    "Używaj przycisków ⬅️ Poprzednia / Następna ➡️ do nawigacji między stronami assetów.\n\n"
+                    "**Każda strona zawiera maksymalnie 12 assetów (6 rzędów po 2).**\n\n"
+                    "Alternatywnie możesz wrócić do głównej listy wzorców harmonicznych."
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"analysis:patterns_assets_page:1")],
+                    [Button.inline("🔙 Wstecz", b"analysis:patterns_overview")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
+            await self._show_assets_for_analysis_selection(event, "patterns", page)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji assetów", alert=True)
+            logger.error(f"Error in patterns assets pagination: {e}")
+    
+    @RD.cb(b"analysis:assets_page_info:")
+    async def analysis_assets_page_info_callback(self, event):
+        """Handler dla przycisków informacyjnych o stronie assetów (ignorowanie kliknięć)."""
+        await event.answer("ℹ️ To jest informacja o bieżącej stronie assetów", alert=False)
+    
+    @RD.cb(b"interp:assets_page:")
+    async def interpretations_assets_page_callback(self, event):
+        """Handler paginacji dla selekcji assetów w interpretacjach."""
+        callback_data = event.data.decode()
+        last_part = callback_data.split(":")[-1]
+        
+        if last_part == "jump":
+            await event.answer(
+                "🔢 Aby przejść do konkretnej strony, użyj komend:\n"
+                "• /analysis_interpretations [numer_strony]\n"
+                "• Lub kliknij Poprzednia/Następna"
+            )
+            return
+        
+        try:
+            page = int(last_part)
+            await self._show_assets_for_analysis_selection(event, "interpretations", page)
+        except (ValueError, IndexError) as e:
+            await event.answer("❌ Błąd parsowania strony", alert=True)
     
     async def _show_analysis_details_menu(self, event, analysis_type: str):
         """
