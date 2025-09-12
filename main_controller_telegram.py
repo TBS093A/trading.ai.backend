@@ -38,7 +38,7 @@ except ImportError as e:
 from src.controller_telegram_utils_router import ClassRouter, DomainBase
 
 # Import domen
-from src.controller_telegram_domain_example import PumpBotExampleDomain
+from src.controller_telegram_domain_main_menu import MainMenuTelegramControllerDomain
 from src.controller_telegram_domain_sync_system import SystemTelegramControllerDomain
 from src.controller_telegram_domain_assets import AssetsTelegramControllerDomain
 from src.controller_telegram_domain_exchanges import ExchangesTelegramControllerDomain
@@ -203,6 +203,13 @@ class TelegramController:
         """
         logger.info("📚 Rejestracja domen handlerów...")
         
+        # Domena głównego menu - MainMenuTelegramControllerDomain (pierwsza!)
+        main_menu_domain = MainMenuTelegramControllerDomain(
+            telegram_controller=self,  # Przekazanie referencji do głównego kontrolera
+            test_mode=self.test_mode
+        )
+        self._register_single_domain(main_menu_domain, "main_menu")
+        
         # Domena systemowa - SystemTelegramControllerDomain
         system_domain = SystemTelegramControllerDomain(
             # Usunięto admin_users
@@ -365,6 +372,36 @@ class TelegramController:
         
         logger.info("✅ Dodatkowe handlery systemowe skonfigurowane")
     
+    async def _show_startup_menu(self) -> None:
+        """
+        Automatycznie wyświetla główne menu po uruchomieniu bota.
+        Próbuje wysłać menu do skonfigurowanego administratora lub po prostu loguje informację.
+        """
+        try:
+            # Spróbuj uzyskać główne menu domain
+            main_menu_domain = self.domains.get("main_menu")
+            if not main_menu_domain:
+                logger.info("📱 Główne menu nie jest dostępne - nie wysłano automatycznego menu")
+                return
+            
+            # Sprawdź czy mamy klienta
+            if not self.client:
+                logger.warning("⚠️ Brak klienta - nie można wysłać automatycznego menu")
+                return
+            
+            # Tutaj możesz dodać ID administratora jeśli chcesz wysłać automatyczne menu
+            # admin_chat_id = 12345678  # Zastąp rzeczywistym ID administratora
+            admin_chat_id = None  # Wyłączone domyślnie
+            
+            if admin_chat_id:
+                await main_menu_domain.show_menu_on_bot_start(self.client, admin_chat_id)
+                logger.info(f"📱 Wysłano automatyczne menu startowe do administratora {admin_chat_id}")
+            else:
+                logger.info("📱 Automatyczne menu startowe wyłączone (brak skonfigurowanego administratora)")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Błąd wysyłania automatycznego menu: {e}")
+    
     async def start(self) -> None:
         """
         Uruchamia aplikację Telegram Bot.
@@ -397,6 +434,9 @@ class TelegramController:
             
             # 6. Podsumowanie
             self._log_routes_summary()
+            
+            # 7. Automatyczne wyświetlenie menu głównego (opcjonalnie)
+            await self._show_startup_menu()
             
             logger.info("=" * 50)
             logger.info("🚀 BOT URUCHOMIONY POMYŚLNIE!")
