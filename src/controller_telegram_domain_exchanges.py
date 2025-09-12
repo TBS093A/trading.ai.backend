@@ -75,8 +75,8 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📋 Wszystkie Giełdy", b"cmd:/exchanges"),
-                    Button.inline("✅ Aktywne Giełdy", b"cmd:/exchanges_active")
+                    Button.inline("📋 Wszystkie Giełdy", b"exchanges:list"),
+                    Button.inline("✅ Aktywne Giełdy", b"exchanges:active")
                 ],
                 [
                     Button.inline("ℹ️ Info Giełda", b"cmd:/exchange_info")
@@ -89,6 +89,20 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (exchanges): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"exchanges:list")
+    async def callback_exchanges_list(self, event):
+        """Callback dla bezpośredniego wykonania komendy /exchanges z domyślną stroną 1"""
+        await self.exchanges_command(event)
+    
+    @RD.cb(b"exchanges:active")
+    async def callback_exchanges_active(self, event):
+        """Callback dla bezpośredniego wykonania komendy /exchanges_active"""
+        await self.exchanges_active_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny giełd."""
@@ -139,7 +153,7 @@ class ExchangesTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "exchanges_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:

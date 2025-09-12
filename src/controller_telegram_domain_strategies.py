@@ -83,12 +83,12 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📈 Strategie Invest", b"cmd:/investment_strategies"),
-                    Button.inline("🟢 Strategie Buy", b"cmd:/buy_strategies"),
-                    Button.inline("🔴 Strategie Sell", b"cmd:/sell_strategies")
+                    Button.inline("📈 Strategie Invest", b"strategies:investment"),
+                    Button.inline("🟢 Strategie Buy", b"strategies:buy"),
+                    Button.inline("🔴 Strategie Sell", b"strategies:sell")
                 ],
                 [
-                    Button.inline("➕ Nowa Strategia", b"cmd:/strategy_create")
+                    Button.inline("➕ Nowa Strategia", b"strategies:create")
                 ],
                 [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
             ]
@@ -98,6 +98,30 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (strategies): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"strategies:investment")
+    async def callback_investment_strategies(self, event):
+        """Callback dla bezpośredniego wykonania komendy /investment_strategies z domyślną stroną 1"""
+        await self.investment_strategies_command(event)
+    
+    @RD.cb(b"strategies:buy")
+    async def callback_buy_strategies(self, event):
+        """Callback dla bezpośredniego wykonania komendy /buy_strategies z domyślną stroną 1"""
+        await self.buy_strategies_command(event)
+    
+    @RD.cb(b"strategies:sell")
+    async def callback_sell_strategies(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sell_strategies z domyślną stroną 1"""
+        await self.sell_strategies_command(event)
+    
+    @RD.cb(b"strategies:create")
+    async def callback_strategy_create(self, event):
+        """Callback dla bezpośredniego wykonania komendy /strategy_create"""
+        await self.strategy_create_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny strategii."""
@@ -167,7 +191,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "investment_strategies_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -263,7 +287,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "buy_strategies_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -366,7 +390,7 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "sell_strategies_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:

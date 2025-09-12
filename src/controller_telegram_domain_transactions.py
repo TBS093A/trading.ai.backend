@@ -86,11 +86,11 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📋 Lista Transakcji", b"cmd:/transactions"),
-                    Button.inline("⚠️ Lista Transakcji Bez Interpretacji Generalnej", b"cmd:/transactions_pending")
+                    Button.inline("📋 Lista Transakcji", b"transactions:list"),
+                    Button.inline("⚠️ Bez Interpretacji", b"transactions:pending")
                 ],
                 [
-                    Button.inline("➕ Nowa Transakcja", b"cmd:/transaction_create")
+                    Button.inline("➕ Nowa Transakcja", b"transactions:create")
                 ],
                 [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
             ]
@@ -100,6 +100,25 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (transactions): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"transactions:list")
+    async def callback_transactions_list(self, event):
+        """Callback dla bezpośredniego wykonania komendy /transactions z domyślnym limitem"""
+        await self.transactions_command(event)
+    
+    @RD.cb(b"transactions:pending")
+    async def callback_transactions_pending(self, event):
+        """Callback dla bezpośredniego wykonania komendy /transactions_pending"""
+        await self.transactions_pending_command(event)
+    
+    @RD.cb(b"transactions:create")
+    async def callback_transaction_create(self, event):
+        """Callback dla bezpośredniego wykonania komendy /transaction_create"""
+        await self.transaction_create_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny transakcji."""
@@ -157,7 +176,7 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "transactions_list")
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = self.default_page_size
         page = 1
         

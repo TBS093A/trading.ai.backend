@@ -85,30 +85,30 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             # Przyciski głównych komend
             buttons = [
                 [
-                    Button.inline("📊 Status", b"cmd:/status"),
-                    Button.inline("🏥 Health Check", b"cmd:/health"),
-                    Button.inline("📋 Logs", b"cmd:/logs")
+                    Button.inline("📊 Status", b"system:status"),
+                    Button.inline("🏥 Health Check", b"system:health"),
+                    Button.inline("📋 Logs", b"system:logs")
                 ],
                 [
-                    Button.inline("🔄 Sync All", b"cmd:/sync_all"),
-                    Button.inline("🔍 Sync Exchanges", b"cmd:/sync_exchanges")
+                    Button.inline("🔄 Sync All", b"system:sync_all"),
+                    Button.inline("🔍 Sync Exchanges", b"system:sync_exchanges")
                 ],
                 [
-                    Button.inline("📈 Sync Technical", b"cmd:/sync_technical_analysis"),
-                    Button.inline("📊 Sync Fundamental", b"cmd:/sync_fundamental_analysis"),
-                    Button.inline("📈+📊 Sync Fundamental + Technical (parallel)", b"cmd:/sync_analysis")
+                    Button.inline("📈 Sync Technical", b"system:sync_technical_analysis"),
+                    Button.inline("📊 Sync Fundamental", b"system:sync_fundamental_analysis"),
+                    Button.inline("📈+📊 Sync Combined", b"system:sync_analysis")
                 ],
                 [
-                    Button.inline("🧠 Sync LLM Tech", b"cmd:/sync_llm_technical_analysis_interpretation"),
-                    Button.inline("💡 Sync LLM Fund", b"cmd:/sync_llm_fundamental_analysis_interpretation"),
-                    Button.inline("🧠+💡 Sync LLM Tech + Fund (parallel)", b"cmd:/sync_llm_analysis_interpretation")
+                    Button.inline("🧠 Sync LLM Tech", b"system:sync_llm_technical_analysis_interpretation"),
+                    Button.inline("💡 Sync LLM Fund", b"system:sync_llm_fundamental_analysis_interpretation"),
+                    Button.inline("🧠+💡 Sync LLM Combined", b"system:sync_llm_analysis_interpretation")
                 ],
                 [
-                    Button.inline("💡 Sync LLM General", b"cmd:/sync_general_llm_analysis_interpretation")
+                    Button.inline("💡 Sync LLM General", b"system:sync_general_llm_analysis_interpretation")
                 ],
                 [
-                    Button.inline("💸 Sync Transactions Wallets", b"cmd:/sync_transactions_wallets"),
-                    Button.inline("💸 Sync Transactions", b"cmd:/sync_transactions"),
+                    Button.inline("💸 Sync Transactions Wallets", b"system:sync_transactions_wallets"),
+                    Button.inline("💸 Sync Transactions", b"system:sync_transactions"),
                 ],
                 [
                     Button.inline("🏠 Menu Główne", b"nav:main_menu")
@@ -139,6 +139,80 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Quick health check failed: {e}")
             return False
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"system:status")
+    async def callback_status(self, event):
+        """Callback dla bezpośredniego wykonania komendy /status"""
+        await self.status_command(event)
+    
+    @RD.cb(b"system:health")
+    async def callback_health(self, event):
+        """Callback dla bezpośredniego wykonania komendy /health"""
+        await self.health_command(event)
+    
+    @RD.cb(b"system:logs")
+    async def callback_logs(self, event):
+        """Callback dla bezpośredniego wykonania komendy /logs (domyślny poziom)"""
+        await self.logs_command(event)
+    
+    @RD.cb(b"system:sync_all")
+    async def callback_sync_all(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_all"""
+        await self.sync_all_command(event)
+    
+    @RD.cb(b"system:sync_exchanges")
+    async def callback_sync_exchanges(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_exchanges"""
+        await self.sync_exchanges_command(event)
+    
+    @RD.cb(b"system:sync_technical_analysis")
+    async def callback_sync_technical_analysis(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_technical_analysis"""
+        await self.sync_technical_analysis_command(event)
+    
+    @RD.cb(b"system:sync_fundamental_analysis")
+    async def callback_sync_fundamental_analysis(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_fundamental_analysis"""
+        await self.sync_fundamental_analysis_command(event)
+    
+    @RD.cb(b"system:sync_analysis")
+    async def callback_sync_analysis(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_analysis"""
+        await self.sync_analysis_command(event)
+    
+    @RD.cb(b"system:sync_llm_technical_analysis_interpretation")
+    async def callback_sync_llm_technical_analysis_interpretation(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_llm_technical_analysis_interpretation"""
+        await self.sync_llm_technical_interpretation_command(event)
+    
+    @RD.cb(b"system:sync_llm_fundamental_analysis_interpretation")
+    async def callback_sync_llm_fundamental_analysis_interpretation(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_llm_fundamental_analysis_interpretation"""
+        await self.sync_llm_fundamental_interpretation_command(event)
+    
+    @RD.cb(b"system:sync_llm_analysis_interpretation")
+    async def callback_sync_llm_analysis_interpretation(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_llm_analysis_interpretation"""
+        await self.sync_llm_analysis_interpretation_command(event)
+    
+    @RD.cb(b"system:sync_general_llm_analysis_interpretation")
+    async def callback_sync_general_llm_analysis_interpretation(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_general_llm_analysis_interpretation"""
+        await self.sync_general_llm_interpretation_command(event)
+    
+    @RD.cb(b"system:sync_transactions_wallets")
+    async def callback_sync_transactions_wallets(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_transactions_wallets"""
+        await self.sync_transactions_wallets_command(event)
+    
+    @RD.cb(b"system:sync_transactions")
+    async def callback_sync_transactions(self, event):
+        """Callback dla bezpośredniego wykonania komendy /sync_transactions"""
+        await self.sync_transactions_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny systemowej."""
@@ -387,7 +461,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -439,7 +513,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -491,7 +565,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -548,7 +622,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -600,7 +674,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -652,7 +726,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -709,7 +783,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         limit = 50
         offset = 0
         
@@ -1006,7 +1080,7 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse poziomu logów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         log_level = "INFO"
         
         if len(text_parts) >= 2:
