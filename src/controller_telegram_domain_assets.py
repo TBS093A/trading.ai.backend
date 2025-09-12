@@ -78,7 +78,7 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
             # Przyciski komend
             buttons = [
                 [
-                    Button.inline("📋 Lista Assets", b"cmd:/assets"),
+                    Button.inline("📋 Lista Assets", b"assets:list"),
                     Button.inline("🔍 Szukaj Asset", b"cmd:/assets_search")
                 ],
                 [
@@ -92,6 +92,15 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (assets): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"assets:list")
+    async def callback_assets_list(self, event):
+        """Callback dla bezpośredniego wykonania komendy /assets z domyślną stroną 1"""
+        await self.assets_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny assetów."""
@@ -140,7 +149,7 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "assets_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:

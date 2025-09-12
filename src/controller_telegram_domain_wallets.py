@@ -76,8 +76,8 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📋 Wszystkie Portfele", b"cmd:/wallets"),
-                    Button.inline("✅ Aktywne Portfele", b"cmd:/wallets_active")
+                    Button.inline("📋 Wszystkie Portfele", b"wallets:list"),
+                    Button.inline("✅ Aktywne Portfele", b"wallets:active")
                 ],
                 [
                     Button.inline("💰 Salda Portfeli", b"cmd:/wallet_balance")
@@ -90,6 +90,20 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (wallets): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"wallets:list")
+    async def callback_wallets_list(self, event):
+        """Callback dla bezpośredniego wykonania komendy /wallets z domyślną stroną 1"""
+        await self.wallets_command(event)
+    
+    @RD.cb(b"wallets:active")
+    async def callback_wallets_active(self, event):
+        """Callback dla bezpośredniego wykonania komendy /wallets_active"""
+        await self.wallets_active_command(event)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny portfeli."""
@@ -152,7 +166,7 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "wallets_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:

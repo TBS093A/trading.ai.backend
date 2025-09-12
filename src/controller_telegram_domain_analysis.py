@@ -83,15 +83,15 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📊 Wszystkie Analizy", b"cmd:/analysis"),
-                    Button.inline("💰 Analizy Fund.", b"cmd:/analysis_fundamental")
+                    Button.inline("📊 Wszystkie Analizy", b"analysis:all"),
+                    Button.inline("💰 Analizy Fund.", b"analysis:fundamental")
                 ],
                 [
-                    Button.inline("📈 Analizy Tech.", b"cmd:/analysis_technical"),
-                    Button.inline("🎵 Wzorce Harm.", b"cmd:/analysis_technical_harmonic_patterns")
+                    Button.inline("📈 Analizy Tech.", b"analysis:technical"),
+                    Button.inline("🎵 Wzorce Harm.", b"analysis:patterns")
                 ],
                 [
-                    Button.inline("💡 Interpretacje", b"cmd:/analysis_interpretations")
+                    Button.inline("💡 Interpretacje", b"analysis:interpretations")
                 ],
                 [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
             ]
@@ -101,6 +101,35 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             logger.error(f"Błąd w get_domain_menu (analysis): {e}")
             return await super().get_domain_menu(event, user_id)
+    
+    # ===================
+    # CALLBACK HANDLERS - DIRECT COMMAND EXECUTION
+    # ===================
+    
+    @RD.cb(b"analysis:all")
+    async def callback_analysis_all(self, event):
+        """Callback dla bezpośredniego wykonania komendy /analysis z domyślną stroną 1"""
+        await self.analysis_command(event)
+    
+    @RD.cb(b"analysis:fundamental")
+    async def callback_analysis_fundamental(self, event):
+        """Callback dla bezpośredniego wykonania komendy /analysis_fundamental z domyślną stroną 1"""
+        await self.analysis_fundamental_command(event)
+    
+    @RD.cb(b"analysis:technical")
+    async def callback_analysis_technical(self, event):
+        """Callback dla bezpośredniego wykonania komendy /analysis_technical z domyślną stroną 1"""
+        await self.analysis_technical_command(event)
+    
+    @RD.cb(b"analysis:patterns")
+    async def callback_analysis_patterns(self, event):
+        """Callback dla bezpośredniego wykonania komendy /analysis_technical_harmonic_patterns z domyślną stroną 1"""
+        await self.analysis_harmonic_patterns_command(event)
+    
+    @RD.cb(b"analysis:interpretations")
+    async def callback_analysis_interpretations(self, event):
+        """Callback dla bezpośredniego wykonania komendy /analysis_interpretations z domyślną stroną 1"""
+        await self.analysis_interpretations_command(event)
         
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny analiz."""
@@ -222,7 +251,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "fundamental_analysis_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -372,7 +401,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         if len(text_parts) < 2:
             await event.respond(
                 "💼 **Analizy Fundamentalne po Asset**\n\n"
@@ -433,7 +462,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "technical_analysis_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -583,7 +612,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         if len(text_parts) < 2:
             await event.respond(
                 "📈 **Analizy Techniczne po Asset**\n\n"
@@ -644,7 +673,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "harmonic_patterns_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -793,7 +822,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         if len(text_parts) < 2:
             await event.respond(
                 "🔄 **Wzorce Harmoniczne po Asset**\n\n"
@@ -854,7 +883,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         await self.log_action(user.id, "interpretations_list")
         
         # Parse argumentów dla paginacji
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         page = 1
         
         if len(text_parts) >= 2:
@@ -995,7 +1024,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             return
         
         # Parse argumentów
-        text_parts = event.raw_text.split()
+        text_parts = self.parse_command_args(event)
         if len(text_parts) < 2:
             await event.respond(
                 "🧠 **Interpretacje po Asset**\n\n"
@@ -1639,7 +1668,6 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     async def interpretations_general_callback(self, event):
         """Pokazuje interpretacje generalne."""
         # Ustawić raw_text dla callback query, aby analysis_interpretations_command mogło parsować argumenty
-        event.raw_text = "/analysis_interpretations 1"
         await self.analysis_interpretations_command(event)
     
     @RD.cb(b"interp:asset:")
@@ -2235,21 +2263,18 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     async def analysis_fund_overview_callback(self, event):
         """Przekierowanie do przeglądu analiz fundamentalnych."""
         # Ustawić raw_text dla callback query, aby analysis_fundamental_command mogło parsować argumenty
-        event.raw_text = "/analysis_fundamental 1"
         await self.analysis_fundamental_command(event)
     
     @RD.cb(b"analysis:tech_overview")
     async def analysis_tech_overview_callback(self, event):
         """Przekierowanie do przeglądu analiz technicznych."""
         # Ustawić raw_text dla callback query, aby analysis_technical_command mogło parsować argumenty
-        event.raw_text = "/analysis_technical 1"
         await self.analysis_technical_command(event)
     
     @RD.cb(b"analysis:patterns_overview")
     async def analysis_patterns_overview_callback(self, event):
         """Przekierowanie do przeglądu wzorców harmonicznych."""
         # Ustawić raw_text dla callback query, aby analysis_harmonic_patterns_command mogło parsować argumenty
-        event.raw_text = "/analysis_technical_harmonic_patterns 1"
         await self.analysis_harmonic_patterns_command(event)
     
     @RD.cb(b"analysis:overview")

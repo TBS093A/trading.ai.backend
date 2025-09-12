@@ -180,6 +180,23 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
     # SIMPLIFIED PERMISSIONS (no database)
     # ===================
     
+    def parse_command_args(self, event) -> List[str]:
+        """
+        Pomocna metoda do parsowania argumentów komend z event'ów.
+        Obsługuje zarówno wiadomości tekstowe jak i callbacki.
+        
+        Args:
+            event: Zdarzenie Telegram (wiadomość lub callback)
+            
+        Returns:
+            List[str]: Lista argumentów komendy (lub pusta lista dla callbacków)
+        """
+        try:
+            return event.raw_text.split() if hasattr(event, 'raw_text') and event.raw_text else []
+        except (AttributeError, TypeError):
+            # Callback event lub brak raw_text - zwracamy pustą listę
+            return []
+    
     async def validate_permissions(self, user_id: int, required_level: str) -> bool:
         """
         Sprawdza czy użytkownik ma wymagany poziom uprawnień.
