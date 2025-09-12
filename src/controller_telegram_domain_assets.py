@@ -13,7 +13,7 @@ Autor: AI Assistant
 
 import logging
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from telethon import Button
 
 from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
@@ -48,6 +48,50 @@ class AssetsTelegramControllerDomain(BaseTelegramControllerDomain):
         # Konfiguracja paginacji
         self.default_page_size = 10
         self.max_page_size = 50
+    
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny assetów z przyciskami komend."""
+        try:
+            # Pobierz podstawowe statystyki assetów
+            stats = await self.get_domain_specific_stats()
+            
+            menu_text = "💎 **Assets - Zarządzanie Assetami**\n\n"
+            
+            if stats.get('database_available'):
+                menu_text += f"📊 **Statystyki:**\n"
+                menu_text += f"• Assety: {stats.get('total_assets', 'N/A')}\n"
+                menu_text += f"• Giełdy: {stats.get('total_exchanges', 'N/A')}\n"
+                menu_text += f"• Aktywne giełdy: {stats.get('active_exchanges', 'N/A')}\n\n"
+            else:
+                menu_text += "⚠️ **Baza danych niedostępna**\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Przeglądanie wszystkich assetów\n"
+            menu_text += "• Wyszukiwanie assetów po nazwie\n"
+            menu_text += "• Szczegółowe informacje o assetach\n"
+            menu_text += "• Filtrowanie po giełdach\n"
+            
+            # Przyciski komend
+            buttons = [
+                [
+                    Button.inline("📋 Lista Assets", b"cmd:/assets"),
+                    Button.inline("🔍 Szukaj Asset", b"cmd:/assets_search")
+                ],
+                [
+                    Button.inline("ℹ️ Info Asset", b"cmd:/asset_info")
+                ],
+                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (assets): {e}")
+            return await super().get_domain_menu(event, user_id)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny assetów."""

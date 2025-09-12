@@ -15,7 +15,7 @@ import logging
 import asyncio
 import traceback
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from telethon import Button
 
@@ -59,6 +59,47 @@ class TransactionsTelegramControllerDomain(BaseTelegramControllerDomain):
         
         # Integration with sync_transactions
         self.transactions_sync = Transactions(test_mode=False)
+    
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny transakcji z przyciskami komend."""
+        try:
+            stats = await self.get_domain_specific_stats()
+            
+            menu_text = "💸 **Transactions - Zarządzanie Transakcjami**\n\n"
+            
+            if stats.get('database_available'):
+                menu_text += f"📊 **Statystyki:**\n"
+                menu_text += f"• Wszystkie transakcje: {stats.get('total_transactions', 'N/A')}\n"
+                menu_text += f"• Transakcje bez interpretacji: {stats.get('pending_transactions', 'N/A')}\n\n"
+            else:
+                menu_text += "⚠️ **Baza danych niedostępna**\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Przeglądanie wszystkich transakcji\n"
+            menu_text += "• Lista transakcji bez interpretacji\n"
+            menu_text += "• Szczegóły konkretnej transakcji\n"
+            menu_text += "• Kreator nowej transakcji\n"
+            
+            buttons = [
+                [
+                    Button.inline("📋 Lista Transakcji", b"cmd:/transactions"),
+                    Button.inline("⚠️ Lista Transakcji Bez Interpretacji Generalnej", b"cmd:/transactions_pending")
+                ],
+                [
+                    Button.inline("➕ Nowa Transakcja", b"cmd:/transaction_create")
+                ],
+                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (transactions): {e}")
+            return await super().get_domain_menu(event, user_id)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny transakcji."""

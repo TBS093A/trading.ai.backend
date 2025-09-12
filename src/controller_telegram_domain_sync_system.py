@@ -61,6 +61,85 @@ class SystemTelegramControllerDomain(BaseTelegramControllerDomain):
         # Status długotrwałych operacji
         self.running_operations = {}
     
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny systemowej z przyciskami komend."""
+        try:
+            # Pobierz podstawowe statystyki systemu
+            health_status = await self._quick_health_check()
+            
+            menu_text = "🔧 **System - Panel Zarządzania**\n\n"
+            menu_text += f"🖥️ **Status systemu:** {'🟢 Sprawny' if health_status else '🔴 Problem'}\n"
+            menu_text += f"🧪 **Tryb testowy:** {'✅ Włączony' if self.test_mode else '❌ Wyłączony'}\n"
+            menu_text += f"🔧 **Maintenance:** {'🔴 Aktywny' if self.maintenance_mode else '🟢 Normalny'}\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Monitoring stanu systemu\n"
+            menu_text += "• Synchronizacja komponentów\n"
+            menu_text += "• Health check aplikacji\n"
+            menu_text += "• Zarządzanie logami\n"
+            
+            # Przyciski głównych komend
+            buttons = [
+                [
+                    Button.inline("📊 Status", b"cmd:/status"),
+                    Button.inline("🏥 Health Check", b"cmd:/health"),
+                    Button.inline("📋 Logs", b"cmd:/logs")
+                ],
+                [
+                    Button.inline("🔄 Sync All", b"cmd:/sync_all"),
+                    Button.inline("🔍 Sync Exchanges", b"cmd:/sync_exchanges")
+                ],
+                [
+                    Button.inline("📈 Sync Technical", b"cmd:/sync_technical_analysis"),
+                    Button.inline("📊 Sync Fundamental", b"cmd:/sync_fundamental_analysis"),
+                    Button.inline("📈+📊 Sync Fundamental + Technical (parallel)", b"cmd:/sync_analysis")
+                ],
+                [
+                    Button.inline("🧠 Sync LLM Tech", b"cmd:/sync_llm_technical_analysis_interpretation"),
+                    Button.inline("💡 Sync LLM Fund", b"cmd:/sync_llm_fundamental_analysis_interpretation"),
+                    Button.inline("🧠+💡 Sync LLM Tech + Fund (parallel)", b"cmd:/sync_llm_analysis_interpretation")
+                ],
+                [
+                    Button.inline("💡 Sync LLM General", b"cmd:/sync_general_llm_analysis_interpretation")
+                ],
+                [
+                    Button.inline("💸 Sync Transactions Wallets", b"cmd:/sync_transactions_wallets"),
+                    Button.inline("💸 Sync Transactions", b"cmd:/sync_transactions"),
+                ],
+                [
+                    Button.inline("🏠 Menu Główne", b"nav:main_menu")
+                ]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (system): {e}")
+            return await super().get_domain_menu(event, user_id)
+    
+    async def _quick_health_check(self) -> bool:
+        """Szybki health check systemu."""
+        try:
+            # Sprawdź czy baza danych jest dostępna
+            if not self.db:
+                return False
+            
+            await self.init_database()
+            
+            # Sprawdź czy sync_controller jest dostępny
+            if not self.sync_controller:
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Quick health check failed: {e}")
+            return False
+    
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny systemowej."""
         return {
