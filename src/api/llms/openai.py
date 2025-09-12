@@ -4,7 +4,7 @@ import traceback
 import base64
 import tiktoken
 from typing import Optional, Dict, Any, List, Union
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -70,6 +70,57 @@ class OpenaiAPI:
             logger.error(f"Błąd inicjalizacji klienta OpenAI: {e}", exc_info=True)
             raise APIKeyMissingError(f"Błąd inicjalizacji klienta OpenAI: {e}")
 
+    def _extract_error_details(self, error: RateLimitError) -> Dict[str, Any]:
+        """
+        Wyciąga szczegóły błędu z RateLimitError.
+        
+        Args:
+            error: Błąd RateLimitError z OpenAI API
+            
+        Returns:
+            Dict z szczegółami błędu (message, type, code)
+        """
+        try:
+            # Próbujemy wyciągnąć szczegóły z różnych możliwych atrybutów
+            error_details = {}
+            
+            # Sprawdź czy error ma atrybut body (nowsze wersje openai)
+            if hasattr(error, 'body') and error.body:
+                if isinstance(error.body, dict) and 'error' in error.body:
+                    error_info = error.body['error']
+                    error_details['message'] = error_info.get('message', 'Unknown')
+                    error_details['type'] = error_info.get('type', 'Unknown') 
+                    error_details['code'] = error_info.get('code', 'Unknown')
+            
+            # Sprawdź czy error ma atrybut response (starsze wersje)
+            elif hasattr(error, 'response') and error.response:
+                try:
+                    response_json = error.response.json()
+                    if 'error' in response_json:
+                        error_info = response_json['error']
+                        error_details['message'] = error_info.get('message', 'Unknown')
+                        error_details['type'] = error_info.get('type', 'Unknown')
+                        error_details['code'] = error_info.get('code', 'Unknown')
+                except Exception:
+                    logger.warning("Nie udało się sparsować JSON z response")
+            
+            # Fallback - wyciągnij z tekstu błędu
+            if not error_details:
+                error_str = str(error)
+                error_details['message'] = error_str
+                error_details['type'] = 'rate_limit_error'
+                error_details['code'] = 'unknown'
+            
+            return error_details
+            
+        except Exception as e:
+            logger.warning(f"Nie udało się wyciągnąć szczegółów błędu: {e}")
+            return {
+                'message': str(error),
+                'type': 'rate_limit_error',
+                'code': 'unknown'
+            }
+
     def calculate_tokens_from_prompt(self, prompt: str, model: str = "gpt-4o") -> int:
         """
         Oblicza liczbę tokenów w promptcie dla określonego modelu.
@@ -128,6 +179,13 @@ class OpenaiAPI:
                 logger.warning("API OpenAI zwróciło nieprawidłową odpowiedź podczas testu")
                 return status_info
         
+        except RateLimitError as e:
+            # Specjalna obsługa błędów limit rate i quota
+            error_details = self._extract_error_details(e)
+            error_message = f"Error code: {e.status_code} - message: '{error_details.get('message', 'Unknown')}', type: '{error_details.get('type', 'Unknown')}', code: '{error_details.get('code', 'Unknown')}'"
+            
+            logger.error(f"Przekroczono limit zapytań API OpenAI: {error_message}")
+            raise QuotaExceededError(f"Przekroczono limit zapytań API OpenAI: {error_message}")
         except Exception as e:
             error_message = str(e)
             status_info = {"available": False, "error": error_message}
@@ -302,6 +360,13 @@ class OpenaiAPI:
             logger.info(f"Pomyślnie wygenerowano analizę techniczną za pomocą OpenAI. Tokeny: wejściowe={token_count}, wyjściowe={result['output_tokens']}, łącznie={result['total_tokens']}, obrazków przetworzonych={result['images_processed']}")
             return result
 
+        except RateLimitError as e:
+            # Specjalna obsługa błędów limit rate i quota
+            error_details = self._extract_error_details(e)
+            error_message = f"Error code: {e.status_code} - message: '{error_details.get('message', 'Unknown')}', type: '{error_details.get('type', 'Unknown')}', code: '{error_details.get('code', 'Unknown')}'"
+            
+            logger.error(f"Błąd API OpenAI podczas analizy: {error_message}, traceback: {traceback.format_exc()}")
+            raise QuotaExceededError(f"Przekroczono limit zapytań API OpenAI: {error_message}")
         except Exception as e:
             error_message = str(e)
             logger.error(f"Błąd API OpenAI podczas analizy: {e}, traceback: {traceback.format_exc()}", exc_info=True)
