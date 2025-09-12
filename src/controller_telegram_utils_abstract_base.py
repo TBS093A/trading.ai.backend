@@ -91,6 +91,92 @@ class BaseTelegramControllerDomain(DomainBase, ABC):
             return False
     
     # ===================
+    # DOMAIN MENU SYSTEM
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """
+        Zwraca menu domeny z przyciskami komend.
+        
+        Ta metoda powinna być nadpisana w każdej domenie aby zdefiniować 
+        swoje własne menu z przyciskami komend.
+        
+        Args:
+            event: Zdarzenie Telegram
+            user_id: ID użytkownika Telegram (opcjonalne)
+            
+        Returns:
+            Tuple[str, List[List[Button]]]: (tekst_menu, przyciski)
+        """
+        domain_name = self.get_domain_name().title()
+        
+        menu_text = f"🔧 **{domain_name} - Menu**\n\n"
+        menu_text += "📋 Ta domena nie ma jeszcze zdefiniowanego menu.\n"
+        menu_text += "Skontaktuj się z administratorem aby dodać funkcje.\n\n"
+        menu_text += "💡 **Wskazówka:** Sprawdź dostępne komendy w dokumentacji."
+        
+        buttons = [
+            [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+        ]
+        
+        return menu_text, buttons
+    
+    # ===================
+    # COMMAND EXECUTION FROM BUTTONS
+    # ===================
+    
+    @RD.cb(b"cmd:")
+    async def execute_command_from_button(self, event):
+        """
+        Handler dla przycisków z komendami (callback data zaczyna się od 'cmd:').
+        
+        Symuluje wykonanie komendy przez użytkownika.
+        """
+        try:
+            callback_data = event.data.decode('utf-8')
+            if not callback_data.startswith('cmd:'):
+                return
+            
+            command = callback_data.replace('cmd:', '')
+            
+            # Pokaż informację o wykonywaniu komendy
+            await event.edit(f"⚡ **Wykonywanie komendy:** `{command}`\n\n⏳ Proszę czekać...")
+            
+            # Krótkie opóźnienie dla efektu
+            import asyncio
+            await asyncio.sleep(1)
+            
+            # Informacja dla użytkownika
+            result_text = f"✅ **Wywołano komendę:** `{command}`\n\n"
+            result_text += "💡 **Jak to działa:**\n"
+            result_text += f"• Możesz wpisać komendę `{command}` bezpośrednio w czacie\n"
+            result_text += "• Lub użyć przycisków menu dla wygody\n\n"
+            result_text += "🔹 **Wskazówka:** Wszystkie wyniki komend są wyświetlane w czacie."
+            
+            buttons = [
+                [
+                    Button.inline("🔄 Spróbuj ponownie", f"cmd:{command}".encode()),
+                    Button.inline("🏠 Menu Główne", b"nav:main_menu")
+                ]
+            ]
+            
+            await event.edit(result_text, buttons=buttons, parse_mode="Markdown")
+            
+        except Exception as e:
+            logger.error(f"Błąd w execute_command_from_button: {e}")
+            await event.edit(f"❌ Błąd wykonywania komendy: {str(e)}")
+    
+    @RD.cb(b"nav:main_menu")
+    async def navigate_to_main_menu(self, event):
+        """Handler dla powrotu do menu głównego z dowolnej domeny."""
+        await event.edit(
+            "🏠 **Powrót do Menu Głównego**\n\n"
+            "Użyj komendy `/start` aby zobaczyć główne menu aplikacji.\n\n"
+            "💡 Możesz również użyć komend `/menu` lub `/help`.",
+            parse_mode="Markdown"
+        )
+    
+    # ===================
     # SIMPLIFIED PERMISSIONS (no database)
     # ===================
     

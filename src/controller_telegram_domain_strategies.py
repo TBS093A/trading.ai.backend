@@ -14,7 +14,7 @@ Autor: AI Assistant
 
 import logging
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from telethon import Button
 
 from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
@@ -52,6 +52,52 @@ class StrategiesTelegramControllerDomain(BaseTelegramControllerDomain):
         
         # Strategy creation wizard
         self.strategy_wizards = {}  # user_id -> wizard_state
+    
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny strategii z przyciskami komend."""
+        try:
+            stats = await self.get_domain_specific_stats()
+            
+            menu_text = "📊 **Strategies - Zarządzanie Strategiami**\n\n"
+            
+            if stats.get('database_available'):
+                menu_text += f"📊 **Statystyki:**\n"
+                menu_text += f"• Strategie inwestycyjne: {stats.get('investment_strategies', 'N/A')}\n"
+                menu_text += f"• Strategie kupna: {stats.get('buy_strategies', 'N/A')}\n"
+                menu_text += f"• Strategie sprzedaży: {stats.get('sell_strategies', 'N/A')}\n\n"
+            else:
+                menu_text += "⚠️ **Baza danych niedostępna**\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Przeglądanie strategii inwestycyjnych:\n"
+            menu_text += "\t• /investment_strategy_search - Wyszukiwanie strategii inwestycyjnych\n"
+            menu_text += "• Strategie kupna i sprzedaży\n"
+            menu_text += "• Wyszukiwanie strategii kupna i sprzedaży:\n"
+            menu_text += "\t• /buy_strategy_search - Wyszukiwanie strategii kupna\n"
+            menu_text += "\t• /sell_strategy_search - Wyszukiwanie strategii sprzedaży\n"
+            menu_text += "• Tworzenie nowych strategii\n"
+            
+            buttons = [
+                [
+                    Button.inline("📈 Strategie Invest", b"cmd:/investment_strategies"),
+                    Button.inline("🟢 Strategie Buy", b"cmd:/buy_strategies"),
+                    Button.inline("🔴 Strategie Sell", b"cmd:/sell_strategies")
+                ],
+                [
+                    Button.inline("➕ Nowa Strategia", b"cmd:/strategy_create")
+                ],
+                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (strategies): {e}")
+            return await super().get_domain_menu(event, user_id)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny strategii."""

@@ -15,7 +15,7 @@ import logging
 import traceback
 import os
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from telethon import Button
 from telethon.tl.types import InputMediaUploadedPhoto
 
@@ -54,6 +54,53 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         
         # Ścieżki do chart images (w przyszłości można skonfigurować)
         self.chart_images_path = "/tmp/chart_images"  # Default path
+    
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny analiz z przyciskami komend."""
+        try:
+            stats = await self.get_domain_specific_stats()
+            
+            menu_text = "🔍 **Analysis - Analizy Finansowe**\n\n"
+            
+            if stats.get('database_available'):
+                menu_text += f"📊 **Statystyki:**\n"
+                menu_text += f"• Analizy fundamentalne: {stats.get('fundamental_analysis', 'N/A')}\n"
+                menu_text += f"• Analizy techniczne: {stats.get('technical_analysis', 'N/A')}\n"
+                menu_text += f"• Wzorce harmoniczne: {stats.get('harmonic_patterns', 'N/A')}\n"
+                menu_text += f"• Interpretacje: {stats.get('total_interpretations', 'N/A')}\n\n"
+            else:
+                menu_text += "⚠️ **Baza danych niedostępna**\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Przegląd wszystkich analiz\n"
+            menu_text += "• Analizy fundamentalne i techniczne\n"
+            menu_text += "• Wzorce harmoniczne\n"
+            menu_text += "• Interpretacje analiz\n"
+            
+            buttons = [
+                [
+                    Button.inline("📊 Wszystkie Analizy", b"cmd:/analysis"),
+                    Button.inline("💰 Analizy Fund.", b"cmd:/analysis_fundamental")
+                ],
+                [
+                    Button.inline("📈 Analizy Tech.", b"cmd:/analysis_technical"),
+                    Button.inline("🎵 Wzorce Harm.", b"cmd:/analysis_technical_harmonic_patterns")
+                ],
+                [
+                    Button.inline("💡 Interpretacje", b"cmd:/analysis_interpretations")
+                ],
+                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (analysis): {e}")
+            return await super().get_domain_menu(event, user_id)
         
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny analiz."""

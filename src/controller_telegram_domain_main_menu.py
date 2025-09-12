@@ -269,12 +269,12 @@ class MainMenuTelegramControllerDomain(BaseTelegramControllerDomain):
     
     async def _handle_domain_navigation(self, event, domain_name: str, suggested_command: str):
         """
-        Obsługuje nawigację do konkretnej domeny.
+        Obsługuje nawigację do konkretnej domeny - wywołuje jej własne menu.
         
         Args:
             event: Zdarzenie callback
             domain_name: Nazwa domeny
-            suggested_command: Sugerowana komenda dla użytkownika
+            suggested_command: Sugerowana komenda dla użytkownika (nieużywane, zachowane dla kompatybilności)
         """
         try:
             config = self.domains_config.get(domain_name)
@@ -284,28 +284,33 @@ class MainMenuTelegramControllerDomain(BaseTelegramControllerDomain):
             
             # Sprawdź czy domena jest dostępna
             if self.telegram_controller and hasattr(self.telegram_controller, 'domains'):
-                if domain_name not in self.telegram_controller.domains:
+                domain_instance = self.telegram_controller.domains.get(domain_name)
+                if not domain_instance:
                     await event.edit(f"❌ Domena '{config['name']}' nie jest dostępna.")
                     return
+                
+                # Sprawdź czy domena ma metodę get_domain_menu
+                if hasattr(domain_instance, 'get_domain_menu'):
+                    # Pobierz użytkownika
+                    user = await self.get_user_info(event)
+                    user_id = user.id if user else None
+                    
+                    # Wywołaj menu domeny
+                    menu_text, buttons = await domain_instance.get_domain_menu(event, user_id)
+                    await event.edit(menu_text, buttons=buttons, parse_mode="Markdown")
+                    return
+                else:
+                    # Fallback do starego systemu jeśli domena nie ma menu
+                    logger.warning(f"Domena '{domain_name}' nie ma zaimplementowanego menu")
             
+            # Fallback - podstawowa informacja o domenie
             response_text = f"{config['icon']} **{config['name']}**\n\n"
             response_text += f"📋 {config['description']}\n\n"
-            response_text += f"💡 **Sugerowana komenda:** `{suggested_command}`\n\n"
-            response_text += "🔹 **Inne przydatne komendy dla tego modułu:**\n"
+            response_text += "⚠️ **Ta domena nie ma jeszcze zdefiniowanego menu.**\n\n"
+            response_text += f"💡 Sprawdź dostępne komendy w dokumentacji lub użyj:\n"
+            response_text += f"`{suggested_command}` - główna komenda tej domeny"
             
-            # Dodaj specyficzne komendy dla każdej domeny
-            domain_commands = self._get_domain_commands(domain_name)
-            for cmd in domain_commands[:5]:  # Maksymalnie 5 komend
-                response_text += f"  • `{cmd}`\n"
-            
-            if len(domain_commands) > 5:
-                response_text += f"  • ... i {len(domain_commands) - 5} więcej\n"
-            
-            response_text += f"\n💬 Wpisz komendę w czacie lub użyj przycisków poniżej:"
-            
-            # Przyciski z szybkimi akcjami
             buttons = [
-                [Button.inline(f"▶️ Uruchom {suggested_command}", f"quick:{suggested_command}".encode())],
                 [
                     Button.inline("🏠 Menu Główne", b"nav:refresh"),
                     Button.inline("ℹ️ Pomoc", b"nav:help")

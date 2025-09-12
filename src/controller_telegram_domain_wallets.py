@@ -14,7 +14,7 @@ Autor: AI Assistant
 
 import logging
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from telethon import Button
 
 from .controller_telegram_utils_abstract_base import BaseTelegramControllerDomain, RD
@@ -50,6 +50,46 @@ class WalletsTelegramControllerDomain(BaseTelegramControllerDomain):
         # Konfiguracja paginacji
         self.default_page_size = 15
         self.max_page_size = 50
+    
+    # ===================
+    # DOMAIN MENU
+    # ===================
+    
+    async def get_domain_menu(self, event, user_id: Optional[int] = None) -> Tuple[str, List[List[Button]]]:
+        """Zwraca menu domeny portfeli z przyciskami komend."""
+        try:
+            stats = await self.get_domain_specific_stats()
+            
+            menu_text = "💰 **Wallets - Zarządzanie Portfelami**\n\n"
+            
+            if stats.get('database_available'):
+                menu_text += f"📊 **Statystyki:**\n"
+                menu_text += f"• Wszystkie portfele: {stats.get('total_wallets', 'N/A')}\n"
+                menu_text += f"• Aktywne portfele: {stats.get('active_wallets', 'N/A')}\n\n"
+            else:
+                menu_text += "⚠️ **Baza danych niedostępna**\n\n"
+            
+            menu_text += "📋 **Dostępne funkcje:**\n"
+            menu_text += "• Przeglądanie wszystkich portfeli\n"
+            menu_text += "• Lista tylko aktywnych portfeli\n"
+            menu_text += "• Sprawdzanie sald portfeli na giełdach\n"
+            
+            buttons = [
+                [
+                    Button.inline("📋 Wszystkie Portfele", b"cmd:/wallets"),
+                    Button.inline("✅ Aktywne Portfele", b"cmd:/wallets_active")
+                ],
+                [
+                    Button.inline("💰 Salda Portfeli", b"cmd:/wallet_balance")
+                ],
+                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+            ]
+            
+            return menu_text, buttons
+            
+        except Exception as e:
+            logger.error(f"Błąd w get_domain_menu (wallets): {e}")
+            return await super().get_domain_menu(event, user_id)
     
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny portfeli."""
