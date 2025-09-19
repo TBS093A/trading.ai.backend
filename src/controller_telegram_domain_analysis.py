@@ -84,16 +84,21 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             buttons = [
                 [
                     Button.inline("📊 Wszystkie Analizy", b"analysis:all"),
-                    Button.inline("💰 Analizy Fund.", b"analysis:fundamental")
                 ],
                 [
                     Button.inline("📈 Analizy Tech.", b"analysis:technical"),
-                    Button.inline("🎵 Wzorce Harm.", b"analysis:patterns")
+                    Button.inline("💰 Analizy Fund.", b"analysis:fundamental")
                 ],
                 [
-                    Button.inline("💡 Interpretacje", b"analysis:interpretations")
+                    Button.inline("💡 Interpr. Fund. LLM", b"analysis:interpretations_fundamental"),
+                    Button.inline("💡 Interpr. Tech. LLM", b"analysis:interpretations_technical")
                 ],
-                [Button.inline("🏠 Menu Główne", b"nav:main_menu")]
+                [
+                    Button.inline("💡 Interpr. Gen. LLM", b"analysis:interpretations")
+                ]
+                [
+                    Button.inline("🏠 Menu Główne", b"nav:main_menu")
+                ]
             ]
             
             return menu_text, buttons
@@ -1014,6 +1019,286 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             error_msg = await self.handle_database_error(e, user.id, "interpretations")
             await event.respond(error_msg)
     
+    @RD.cmd("analysis_fund_llm_interpretations", aliases=["fund_llm_interp", "fli"])
+    async def analysis_fund_llm_interpretations_command(self, event):
+        """
+        Komenda interpretacji LLM fundamentalnych.
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        await self.log_action(user.id, "fund_llm_interpretations_list")
+        
+        # Parse argumentów dla paginacji
+        text_parts = self.parse_command_args(event)
+        page = 1
+        
+        if len(text_parts) >= 2:
+            try:
+                page = int(text_parts[1])
+                page = max(1, page)
+            except ValueError:
+                pass
+        
+        try:
+            await self.init_database()
+            fund_interp_table = self.db.get_factory().get_fundamental_analysis_interpretation_table()
+            
+            # Oblicz offset dla paginacji
+            offset = (page - 1) * self.default_page_size
+            
+            # Pobierz interpretacje fundamentalne LLM
+            interpretations = await fund_interp_table.get_all(limit=self.default_page_size + 1, offset=offset)
+            
+            if not interpretations:
+                await event.respond("💼 **Interpretacje LLM Fundamentalne**\n\n❌ Brak interpretacji do wyświetlenia.")
+                return
+            
+            # Sprawdź czy są następne strony
+            has_next = len(interpretations) > self.default_page_size
+            page_interpretations = interpretations[:self.default_page_size]
+            
+            # Formatuj listę
+            interp_text = f"💼 **Interpretacje LLM Fundamentalne - Strona {page}**\n\n"
+            
+            for i, interp in enumerate(page_interpretations, 1):
+                item_number = offset + i
+                
+                # Pobierz asset info (już w wyniku JOIN)
+                asset_info = ""
+                if 'asset' in interp and 'quote' in interp:
+                    asset_info = f" ({interp['asset']}/{interp['quote']})"
+                elif 'symbol' in interp:
+                    asset_info = f" ({interp['symbol']})"
+                
+                interp_text += f"{item_number}. 💼 Interpretacja LLM Fund #{interp['id']}{asset_info}\n"
+                
+                # Wyświetl kluczowe kolumny
+                for key, value in interp.items():
+                    if key in ['id', 'asset', 'quote', 'symbol']:
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if key == 'created_at':
+                            interp_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                        elif key == 'content':
+                            content_text = str(value)
+                            summary = content_text[:80] + "..." if len(content_text) > 80 else content_text
+                            interp_text += f"    📝 {key}: {summary}\n"
+                            
+                            # Wykryj rekomendację
+                            content_upper = content_text.upper()
+                            if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                                interp_text += f"      🟢 Sygnał: BUY\n"
+                            elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                                interp_text += f"      🔴 Sygnał: SELL\n"
+                            elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                                interp_text += f"      🟡 Sygnał: HOLD\n"
+                        elif key == 'interpretation':
+                            interpretation_text = str(value)
+                            summary = interpretation_text[:100] + "..." if len(interpretation_text) > 100 else interpretation_text
+                            interp_text += f"    🧠 {key}: {summary}\n"
+                        elif 'id' in key and key != 'id':
+                            interp_text += f"    🔗 {key}: {value}\n"
+                        else:
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            interp_text += f"    📋 {key}: {value_display}\n"
+                
+                interp_text += "\n"
+            
+            # Informacja o paginacji
+            if page > 1 or has_next:
+                interp_text += f"📄 Strona {page}"
+                if has_next:
+                    interp_text += f" (więcej dostępne)"
+            
+            # Pagination info
+            estimated_total = offset + len(page_interpretations) + (100 if has_next else 0)
+            pagination_info = {
+                'current_page': page,
+                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
+                'total_items': estimated_total,
+                'items_on_page': len(page_interpretations),
+                'has_previous': page > 1,
+                'has_next': has_next,
+                'start_idx': offset,
+                'end_idx': offset + len(page_interpretations)
+            }
+            
+            # Przyciski paginacji
+            buttons = PaginationHelper.create_pagination_buttons(
+                pagination_info, 
+                "interp:fund_page",
+                ""
+            )
+            
+            # Dodatkowe opcje
+            buttons.extend([
+                [
+                    Button.inline("🔍 Po assetach", b"interp:fund_by_asset"),
+                    Button.inline("📊 Szczegóły", b"interp:fund_details_menu")
+                ],
+                [
+                    Button.inline("📈 LLM Technical", b"analysis:tech_llm_overview"),
+                    Button.inline("🎯 General LLM", b"interp:general")
+                ],
+                [
+                    Button.inline("🔄 Odśwież", f"interp:fund_page:{page}".encode()),
+                    Button.inline("🏠 Menu główne", b"nav:home")
+                ]
+            ])
+            
+            await event.respond(interp_text, buttons=buttons)
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "fund_llm_interpretations")
+            await event.respond(error_msg)
+    
+    @RD.cmd("analysis_tech_llm_interpretations", aliases=["tech_llm_interp", "tli"])
+    async def analysis_tech_llm_interpretations_command(self, event):
+        """
+        Komenda interpretacji LLM technicznych.
+        """
+        user = await self.get_user_info(event)
+        if not user:
+            return
+        
+        await self.log_action(user.id, "tech_llm_interpretations_list")
+        
+        # Parse argumentów dla paginacji
+        text_parts = self.parse_command_args(event)
+        page = 1
+        
+        if len(text_parts) >= 2:
+            try:
+                page = int(text_parts[1])
+                page = max(1, page)
+            except ValueError:
+                pass
+        
+        try:
+            await self.init_database()
+            tech_interp_table = self.db.get_factory().get_technical_analysis_interpretation_table()
+            
+            # Oblicz offset dla paginacji
+            offset = (page - 1) * self.default_page_size
+            
+            # Pobierz interpretacje techniczne LLM
+            interpretations = await tech_interp_table.get_all(limit=self.default_page_size + 1, offset=offset)
+            
+            if not interpretations:
+                await event.respond("📈 **Interpretacje LLM Techniczne**\n\n❌ Brak interpretacji do wyświetlenia.")
+                return
+            
+            # Sprawdź czy są następne strony
+            has_next = len(interpretations) > self.default_page_size
+            page_interpretations = interpretations[:self.default_page_size]
+            
+            # Formatuj listę
+            interp_text = f"📈 **Interpretacje LLM Techniczne - Strona {page}**\n\n"
+            
+            for i, interp in enumerate(page_interpretations, 1):
+                item_number = offset + i
+                
+                # Pobierz asset info
+                asset_info = ""
+                if 'asset' in interp and 'quote' in interp:
+                    asset_info = f" ({interp['asset']}/{interp['quote']})"
+                elif 'symbol' in interp:
+                    asset_info = f" ({interp['symbol']})"
+                
+                interp_text += f"{item_number}. 📈 Interpretacja LLM Tech #{interp['id']}{asset_info}\n"
+                
+                # Wyświetl kluczowe kolumny
+                for key, value in interp.items():
+                    if key in ['id', 'asset', 'quote', 'symbol']:
+                        continue
+                    if value is not None and value != '' and value != []:
+                        if key == 'created_at':
+                            interp_text += f"    📅 {key}: {self._format_datetime(value)}\n"
+                        elif key == 'content':
+                            content_text = str(value)
+                            summary = content_text[:80] + "..." if len(content_text) > 80 else content_text
+                            interp_text += f"    📝 {key}: {summary}\n"
+                            
+                            # Wykryj rekomendację
+                            content_upper = content_text.upper()
+                            if any(word in content_upper for word in ['BUY', 'KUPUJ', 'KPUJ', 'ZAKUP']):
+                                interp_text += f"      🟢 Sygnał: BUY\n"
+                            elif any(word in content_upper for word in ['SELL', 'SPRZEDAJ', 'SPRZEDAŻ']):
+                                interp_text += f"      🔴 Sygnał: SELL\n"
+                            elif any(word in content_upper for word in ['HOLD', 'TRZYMAJ', 'CZEKAJ']):
+                                interp_text += f"      🟡 Sygnał: HOLD\n"
+                        elif key == 'interpretation':
+                            interpretation_text = str(value)
+                            summary = interpretation_text[:100] + "..." if len(interpretation_text) > 100 else interpretation_text
+                            interp_text += f"    🧠 {key}: {summary}\n"
+                        elif key == 'patterns_analysis':
+                            patterns_text = str(value)
+                            summary = patterns_text[:100] + "..." if len(patterns_text) > 100 else patterns_text
+                            interp_text += f"    📊 {key}: {summary}\n"
+                        elif 'id' in key and key != 'id':
+                            interp_text += f"    🔗 {key}: {value}\n"
+                        else:
+                            if isinstance(value, str) and len(value) > 50:
+                                value_display = value[:50] + "..."
+                            else:
+                                value_display = value
+                            interp_text += f"    📋 {key}: {value_display}\n"
+                
+                interp_text += "\n"
+            
+            # Informacja o paginacji
+            if page > 1 or has_next:
+                interp_text += f"📄 Strona {page}"
+                if has_next:
+                    interp_text += f" (więcej dostępne)"
+            
+            # Pagination info
+            estimated_total = offset + len(page_interpretations) + (100 if has_next else 0)
+            pagination_info = {
+                'current_page': page,
+                'total_pages': PaginationHelper.calculate_pages(estimated_total, self.default_page_size),
+                'total_items': estimated_total,
+                'items_on_page': len(page_interpretations),
+                'has_previous': page > 1,
+                'has_next': has_next,
+                'start_idx': offset,
+                'end_idx': offset + len(page_interpretations)
+            }
+            
+            # Przyciski paginacji
+            buttons = PaginationHelper.create_pagination_buttons(
+                pagination_info, 
+                "interp:tech_page",
+                ""
+            )
+            
+            # Dodatkowe opcje
+            buttons.extend([
+                [
+                    Button.inline("🔍 Po assetach", b"interp:tech_by_asset"),
+                    Button.inline("📊 Szczegóły", b"interp:tech_details_menu")
+                ],
+                [
+                    Button.inline("💼 LLM Fundamental", b"analysis:fund_llm_overview"),
+                    Button.inline("🎯 General LLM", b"interp:general")
+                ],
+                [
+                    Button.inline("🔄 Odśwież", f"interp:tech_page:{page}".encode()),
+                    Button.inline("🏠 Menu główne", b"nav:home")
+                ]
+            ])
+            
+            await event.respond(interp_text, buttons=buttons)
+            
+        except Exception as e:
+            error_msg = await self.handle_database_error(e, user.id, "tech_llm_interpretations")
+            await event.respond(error_msg)
+    
     # ===================
     # COMMANDS - INTERPRETATIONS BY ASSET
     # ===================
@@ -1210,6 +1495,74 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         except Exception as e:
             await event.answer("❌ Błąd paginacji", alert=True)
             logger.error(f"Error in interpretations pagination: {e}")
+    
+    @RD.cb(b"interp:fund_page:")
+    async def interpretations_fund_page_callback(self, event):
+        """Handler paginacji dla interpretacji LLM fundamentalnych."""
+        try:
+            callback_data = event.data.decode()
+            last_part = callback_data.split(":")[-1]
+            
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony (LLM Fundamentalne)**\n\n"
+                    "Aby przejść do konkretnej strony interpretacji, wyślij:\n"
+                    "`/analysis_fund_llm_interpretations [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_fund_llm_interpretations 3` - przejdź do strony 3\n"
+                    "• `/analysis_fund_llm_interpretations 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"interp:fund_page:1")],
+                    [Button.inline("🔙 Wstecz", b"interp:fund_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
+            event.raw_text = f"/analysis_fund_llm_interpretations {page}"
+            await self.analysis_fund_llm_interpretations_command(event)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji", alert=True)
+            logger.error(f"Error in fund llm interpretations pagination: {e}")
+    
+    @RD.cb(b"interp:tech_page:")
+    async def interpretations_tech_page_callback(self, event):
+        """Handler paginacji dla interpretacji LLM technicznych."""
+        try:
+            callback_data = event.data.decode()
+            last_part = callback_data.split(":")[-1]
+            
+            # Sprawdź czy to przycisk jump
+            if last_part == "jump":
+                jump_help = (
+                    "🔢 **Przejdź do strony (LLM Techniczne)**\n\n"
+                    "Aby przejść do konkretnej strony interpretacji, wyślij:\n"
+                    "`/analysis_tech_llm_interpretations [numer_strony]`\n\n"
+                    "**Przykłady:**\n"
+                    "• `/analysis_tech_llm_interpretations 3` - przejdź do strony 3\n"
+                    "• `/analysis_tech_llm_interpretations 1` - powrót do pierwszej strony"
+                )
+                
+                buttons = [
+                    [Button.inline("📊 Strona 1", b"interp:tech_page:1")],
+                    [Button.inline("🔙 Wstecz", b"interp:tech_page:1")]
+                ]
+                
+                await event.edit(jump_help, buttons=buttons)
+                return
+            
+            page = int(last_part)
+            event.raw_text = f"/analysis_tech_llm_interpretations {page}"
+            await self.analysis_tech_llm_interpretations_command(event)
+            
+        except Exception as e:
+            await event.answer("❌ Błąd paginacji", alert=True)
+            logger.error(f"Error in tech llm interpretations pagination: {e}")
     
     @RD.cb(b"analysis:fund_asset_page:")
     async def analysis_fund_asset_page_callback(self, event):
@@ -2295,6 +2648,16 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
         # analysis_command nie wymaga raw_text, więc nie trzeba go ustawiać
         await self.analysis_command(event)
     
+    @RD.cb(b"analysis:fund_llm_overview")
+    async def analysis_fund_llm_overview_callback(self, event):
+        """Przekierowanie do przeglądu interpretacji LLM fundamentalnych."""
+        await self.analysis_fund_llm_interpretations_command(event)
+    
+    @RD.cb(b"analysis:tech_llm_overview")
+    async def analysis_tech_llm_overview_callback(self, event):
+        """Przekierowanie do przeglądu interpretacji LLM technicznych."""
+        await self.analysis_tech_llm_interpretations_command(event)
+    
     @RD.cb(b"nav:home")
     async def nav_home_callback(self, event):
         """Powrót do menu głównego analiz."""
@@ -2362,6 +2725,26 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     async def interpretations_by_asset_callback(self, event):
         """Pokazuje listę assetów dla interpretacji."""
         await self._show_assets_for_analysis_selection(event, "interpretations", page=1)
+    
+    @RD.cb(b"interp:fund_by_asset")
+    async def interpretations_fund_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla interpretacji LLM fundamentalnych."""
+        await self._show_assets_for_analysis_selection(event, "fund_interpretations", page=1)
+    
+    @RD.cb(b"interp:tech_by_asset")
+    async def interpretations_tech_by_asset_callback(self, event):
+        """Pokazuje listę assetów dla interpretacji LLM technicznych."""
+        await self._show_assets_for_analysis_selection(event, "tech_interpretations", page=1)
+    
+    @RD.cb(b"interp:fund_details_menu")
+    async def interpretations_fund_details_menu_callback(self, event):
+        """Pokazuje menu szczegółowych opcji dla interpretacji LLM fundamentalnych."""
+        await self._show_analysis_details_menu(event, "fund_interpretations")
+    
+    @RD.cb(b"interp:tech_details_menu")
+    async def interpretations_tech_details_menu_callback(self, event):
+        """Pokazuje menu szczegółowych opcji dla interpretacji LLM technicznych."""
+        await self._show_analysis_details_menu(event, "tech_interpretations")
     
     @RD.cb(b"analysis:fund_details_menu")
     async def analysis_fund_details_menu_callback(self, event):
