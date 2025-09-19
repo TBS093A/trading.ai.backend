@@ -2,9 +2,12 @@
 import asyncio
 import logging
 import traceback
+import os
+import multiprocessing
+import math
 from datetime import datetime
-from typing import Optional, Dict, Any
-from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, Dict, Any, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -46,7 +49,13 @@ class SyncController:
         """
         self.test_mode = test_mode
         self.scheduler = AsyncIOScheduler()
-        self.thread_executor = ThreadPoolExecutor(max_workers=4)
+        
+        # Pobierz informacje o zasobach CPU
+        self.cpu_count = multiprocessing.cpu_count()
+        self.max_workers = max(2, self.cpu_count)  # minimum 2 wątki
+        self.thread_executor = ThreadPoolExecutor(max_workers=self.max_workers)
+        
+        logger.info(f"💻 Zainicjalizowano ThreadPool z {self.max_workers} wątkami (dostępne CPU: {self.cpu_count})")
         
         # Inicjalizacja klas synchronizacyjnych
         self._init_sync_classes()
@@ -86,6 +95,62 @@ class SyncController:
         for key in self.workflow_status:
             self.workflow_status[key] = False
         logger.info("Status workflow został zresetowany")
+    
+    def _calculate_chunk_params(self, total_limit: int, num_workers: int) -> List[Tuple[int, int]]:
+        """
+        Oblicza parametry chunków (limit, offset) dla podziału zadań między wątki.
+        
+        Args:
+            total_limit: Całkowita liczba elementów do przetworzenia
+            num_workers: Liczba wątków roboczych
+            
+        Returns:
+            List[Tuple[int, int]]: Lista tupli (limit, offset) dla każdego chunka
+        """
+        chunk_size = math.ceil(total_limit / num_workers)
+        chunks = []
+        
+        for i in range(num_workers):
+            offset = i * chunk_size
+            limit = min(chunk_size, total_limit - offset)
+            
+            if limit > 0:  # Dodaj chunk tylko jeśli ma elementy do przetworzenia
+                chunks.append((limit, offset))
+                
+        logger.info(f"🔄 Podzielono zadania na {len(chunks)} chunków (chunk_size={chunk_size}, total_limit={total_limit})")
+        for i, (limit, offset) in enumerate(chunks):
+            logger.info(f"   Chunk {i+1}: limit={limit}, offset={offset}")
+            
+        return chunks
+    
+    def _run_sync_method_in_thread_sync(self, sync_method, limit: int, offset: int) -> bool:
+        """
+        Synchroniczna metoda do uruchamiania metod sync w wątku przez ThreadPoolExecutor.
+        
+        Args:
+            sync_method: Metoda synchronizacyjna do uruchomienia
+            limit: Limit dla metody sync
+            offset: Offset dla metody sync
+            
+        Returns:
+            bool: True jeśli synchronizacja się udała, False w przeciwnym razie
+        """
+        try:
+            # Utwórz nową pętlę asyncio dla wątku
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # Uruchom metodę async w nowej pętli
+                result = loop.run_until_complete(sync_method(limit=limit, offset=offset))
+                return True
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            logger.error(f"Błąd w wątku dla metody {sync_method.__name__}: {e}")
+            logger.error(traceback.format_exc())
+            return False
     
     async def _run_exchanges_sync(self) -> bool:
         """
@@ -246,74 +311,167 @@ class SyncController:
     
     async def _run_parallel_analysis(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
-        Uruchamia równolegle analizę fundamentalną i techniczną.
+        Uruchamia równolegle analizę fundamentalną i techniczną z wykorzystaniem ThreadPool.
+        Dzieli zadania między wątki na podstawie dostępnych zasobów CPU.
         
         Returns:
             tuple[bool, bool]: (sukces_fundamental, sukces_technical)
         """
-        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH ANALIZ (FUNDAMENTAL + TECHNICAL) ===")
+        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH ANALIZ (FUNDAMENTAL + TECHNICAL) Z THREADPOOL ===")
         
-        # Uruchom równolegle obie analizy używając asyncio.gather
-        results = await asyncio.gather(
-            self._run_fundamental_analysis_sync(limit=limit, offset=offset),
-            self._run_technical_analysis_sync(limit=limit, offset=offset),
-            return_exceptions=True
-        )
+        # Podziel dostępne wątki po połowie między analizy
+        workers_per_analysis = max(1, self.max_workers // 2)
         
-        fundamental_success = results[0] if not isinstance(results[0], Exception) else False
-        technical_success = results[1] if not isinstance(results[1], Exception) else False
+        logger.info(f"🧵 Przydzielono {workers_per_analysis} wątków dla każdej analizy")
         
-        if isinstance(results[0], Exception):
-            logger.error(f"Wyjątek w analizie fundamentalnej: {results[0]}")
-        if isinstance(results[1], Exception):
-            logger.error(f"Wyjątek w analizie technicznej: {results[1]}")
+        # Oblicz chunki dla obu analiz
+        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_analysis)
+        technical_chunks = self._calculate_chunk_params(limit, workers_per_analysis)
         
-        logger.info(f"=== RÓWNOLEGŁE ANALIZY ZAKOŃCZONE: Fundamental={fundamental_success}, Technical={technical_success} ===")
+        # Przygotuj zadania dla ThreadPool
+        fundamental_futures = []
+        technical_futures = []
+        
+        # Uruchom zadania fundamentalne
+        logger.info("📰 Uruchamianie zadań analizy fundamentalnej w ThreadPool")
+        for chunk_limit, chunk_offset in fundamental_chunks:
+            future = self.thread_executor.submit(
+                self._run_sync_method_in_thread_sync,
+                self.fundamental_analysis.sync_news,
+                chunk_limit,
+                chunk_offset + offset  # Dodaj globalny offset
+            )
+            fundamental_futures.append(future)
+        
+        # Uruchom zadania techniczne
+        logger.info("📈 Uruchamianie zadań analizy technicznej w ThreadPool")
+        for chunk_limit, chunk_offset in technical_chunks:
+            future = self.thread_executor.submit(
+                self._run_sync_method_in_thread_sync,
+                self.technical_analysis.sync_technical_analysis,
+                chunk_limit,
+                chunk_offset + offset  # Dodaj globalny offset
+            )
+            technical_futures.append(future)
+        
+        # Oczekuj na zakończenie wszystkich zadań fundamentalnych
+        fundamental_success = True
+        for future in as_completed(fundamental_futures):
+            try:
+                result = future.result()
+                if not result:
+                    fundamental_success = False
+            except Exception as e:
+                logger.error(f"Wyjątek w zadaniu analizy fundamentalnej: {e}")
+                fundamental_success = False
+        
+        # Oczekuj na zakończenie wszystkich zadań technicznych
+        technical_success = True
+        for future in as_completed(technical_futures):
+            try:
+                result = future.result()
+                if not result:
+                    technical_success = False
+            except Exception as e:
+                logger.error(f"Wyjątek w zadaniu analizy technicznej: {e}")
+                technical_success = False
+        
+        # Oznacz jako ukończone w zależności od sukcesu
+        if fundamental_success:
+            self.workflow_status['fundamental_analysis_completed'] = True
+        if technical_success:
+            self.workflow_status['technical_analysis_completed'] = True
+        
+        logger.info(f"=== RÓWNOLEGŁE ANALIZY THREADPOOL ZAKOŃCZONE: Fundamental={fundamental_success}, Technical={technical_success} ===")
         return fundamental_success, technical_success
     
     async def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
-        Uruchamia równolegle interpretacje LLM (po ukończeniu odpowiadających im analiz).
+        Uruchamia równolegle interpretacje LLM z wykorzystaniem ThreadPool.
+        Dzieli zadania między wątki na podstawie dostępnych zasobów CPU.
         
         Returns:
             tuple[bool, bool]: (sukces_llm_fundamental, sukces_llm_technical)
         """
-        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH INTERPRETACJI LLM ===")
+        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH INTERPRETACJI LLM Z THREADPOOL ===")
         
         # Sprawdź warunki wstępne
         fundamental_ready = self.workflow_status['fundamental_analysis_completed']
         technical_ready = self.workflow_status['technical_analysis_completed']
         
-        tasks = []
-        if fundamental_ready:
-            tasks.append(self._run_llm_fundamental_interpretation_sync(limit=limit, offset=offset))
-        if technical_ready:
-            tasks.append(self._run_llm_technical_interpretation_sync(limit=limit, offset=offset))
-        
-        if not tasks:
+        if not fundamental_ready and not technical_ready:
             logger.warning("Brak gotowych analiz do interpretacji LLM")
             return False, False
         
-        # Uruchom dostępne interpretacje równolegle
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Podziel dostępne wątki po połowie między interpretacje (jeśli obie są dostępne)
+        active_analyses = sum([fundamental_ready, technical_ready])
+        workers_per_interpretation = max(1, self.max_workers // active_analyses)
         
-        llm_fundamental_success = False
-        llm_technical_success = False
+        logger.info(f"🧵 Przydzielono {workers_per_interpretation} wątków dla każdej interpretacji LLM")
         
-        # Mapuj wyniki na podstawie tego które zadania zostały uruchomione
-        result_index = 0
+        # Przygotuj zadania dla ThreadPool
+        fundamental_futures = []
+        technical_futures = []
+        
+        # Uruchom zadania interpretacji fundamentalnej LLM
         if fundamental_ready:
-            llm_fundamental_success = results[result_index] if not isinstance(results[result_index], Exception) else False
-            if isinstance(results[result_index], Exception):
-                logger.error(f"Wyjątek w interpretacji LLM fundamentalnej: {results[result_index]}")
-            result_index += 1
+            logger.info("🤖 Uruchamianie zadań interpretacji LLM fundamentalnej w ThreadPool")
+            fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
+            
+            for chunk_limit, chunk_offset in fundamental_chunks:
+                future = self.thread_executor.submit(
+                    self._run_sync_method_in_thread_sync,
+                    self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations,
+                    chunk_limit,
+                    chunk_offset + offset  # Dodaj globalny offset
+                )
+                fundamental_futures.append(future)
         
+        # Uruchom zadania interpretacji technicznej LLM
         if technical_ready:
-            llm_technical_success = results[result_index] if not isinstance(results[result_index], Exception) else False
-            if isinstance(results[result_index], Exception):
-                logger.error(f"Wyjątek w interpretacji LLM technicznej: {results[result_index]}")
+            logger.info("🤖 Uruchamianie zadań interpretacji LLM technicznej w ThreadPool")
+            technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
+            
+            for chunk_limit, chunk_offset in technical_chunks:
+                future = self.thread_executor.submit(
+                    self._run_sync_method_in_thread_sync,
+                    self.llm_technical.sync,
+                    chunk_limit,
+                    chunk_offset + offset  # Dodaj globalny offset
+                )
+                technical_futures.append(future)
         
-        logger.info(f"=== RÓWNOLEGŁE INTERPRETACJE LLM ZAKOŃCZONE: Fundamental={llm_fundamental_success}, Technical={llm_technical_success} ===")
+        # Oczekuj na zakończenie zadań interpretacji fundamentalnej LLM
+        llm_fundamental_success = True if fundamental_ready else False
+        if fundamental_ready:
+            for future in as_completed(fundamental_futures):
+                try:
+                    result = future.result()
+                    if not result:
+                        llm_fundamental_success = False
+                except Exception as e:
+                    logger.error(f"Wyjątek w zadaniu interpretacji LLM fundamentalnej: {e}")
+                    llm_fundamental_success = False
+        
+        # Oczekuj na zakończenie zadań interpretacji technicznej LLM
+        llm_technical_success = True if technical_ready else False
+        if technical_ready:
+            for future in as_completed(technical_futures):
+                try:
+                    result = future.result()
+                    if not result:
+                        llm_technical_success = False
+                except Exception as e:
+                    logger.error(f"Wyjątek w zadaniu interpretacji LLM technicznej: {e}")
+                    llm_technical_success = False
+        
+        # Oznacz jako ukończone w zależności od sukcesu
+        if llm_fundamental_success:
+            self.workflow_status['llm_fundamental_completed'] = True
+        if llm_technical_success:
+            self.workflow_status['llm_technical_completed'] = True
+        
+        logger.info(f"=== RÓWNOLEGŁE INTERPRETACJE LLM THREADPOOL ZAKOŃCZONE: Fundamental={llm_fundamental_success}, Technical={llm_technical_success} ===")
         return llm_fundamental_success, llm_technical_success
     
     async def run_full_sync_workflow(self) -> None:
