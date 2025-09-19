@@ -83,7 +83,7 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
             
             buttons = [
                 [
-                    Button.inline("📊 Wszystkie Analizy", b"analysis:all"),
+                    Button.inline("📊 Menu Szukania", b"analysis:all"),
                 ],
                 [
                     Button.inline("📈 Analizy Tech.", b"analysis:technical"),
@@ -94,8 +94,8 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                     Button.inline("💡 Interpr. Tech. LLM", b"analysis:interpretations_technical")
                 ],
                 [
-                    Button.inline("💡 Interpr. Gen. LLM", b"analysis:interpretations")
-                ]
+                    Button.inline("💡 Interpr. Gen. LLM", b"analysis:interpretations_general")
+                ],
                 [
                     Button.inline("🏠 Menu Główne", b"nav:main_menu")
                 ]
@@ -130,11 +130,6 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     async def callback_analysis_patterns(self, event):
         """Callback dla bezpośredniego wykonania komendy /analysis_technical_harmonic_patterns z domyślną stroną 1"""
         await self.analysis_harmonic_patterns_command(event)
-    
-    @RD.cb(b"analysis:interpretations")
-    async def callback_analysis_interpretations(self, event):
-        """Callback dla bezpośredniego wykonania komendy /analysis_interpretations z domyślną stroną 1"""
-        await self.analysis_interpretations_command(event)
         
     async def get_domain_specific_stats(self) -> Dict[str, Any]:
         """Zwraca statystyki specyficzne dla domeny analiz."""
@@ -2655,6 +2650,21 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
     
     @RD.cb(b"analysis:tech_llm_overview")
     async def analysis_tech_llm_overview_callback(self, event):
+        """Przekierowanie do przeglądu interpretacji LLM technicznych."""
+        await self.analysis_tech_llm_interpretations_command(event)
+    
+    @RD.cb(b"analysis:interpretations_general")
+    async def analysis_interpretations_general_callback(self, event):
+        """Przekierowanie do przeglądu interpretacji generalnych."""
+        await self.analysis_interpretations_command(event)
+    
+    @RD.cb(b"analysis:interpretations_fundamental")
+    async def analysis_interpretations_fundamental_callback(self, event):
+        """Przekierowanie do przeglądu interpretacji LLM fundamentalnych."""
+        await self.analysis_fund_llm_interpretations_command(event)
+    
+    @RD.cb(b"analysis:interpretations_technical")
+    async def analysis_interpretations_technical_callback(self, event):
         """Przekierowanie do przeglądu interpretacji LLM technicznych."""
         await self.analysis_tech_llm_interpretations_command(event)
     
