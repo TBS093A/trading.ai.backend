@@ -395,75 +395,64 @@ class SyncController:
         """
         logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH INTERPRETACJI LLM Z THREADPOOL ===")
         
-        # Sprawdź warunki wstępne
-        fundamental_ready = self.workflow_status['fundamental_analysis_completed']
-        technical_ready = self.workflow_status['technical_analysis_completed']
-        
-        if not fundamental_ready and not technical_ready:
-            logger.warning("Brak gotowych analiz do interpretacji LLM")
-            return False, False
-        
-        # Podziel dostępne wątki po połowie między interpretacje (jeśli obie są dostępne)
-        active_analyses = sum([fundamental_ready, technical_ready])
-        workers_per_interpretation = max(1, self.max_workers // active_analyses)
+        # Podziel dostępne wątki po połowie między interpretacje
+        workers_per_interpretation = max(1, self.max_workers // 2)
         
         logger.info(f"🧵 Przydzielono {workers_per_interpretation} wątków dla każdej interpretacji LLM")
+        
+        # Oblicz chunki dla obu interpretacji
+        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
+        technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
         
         # Przygotuj zadania dla ThreadPool
         fundamental_futures = []
         technical_futures = []
         
         # Uruchom zadania interpretacji fundamentalnej LLM
-        if fundamental_ready:
-            logger.info("🤖 Uruchamianie zadań interpretacji LLM fundamentalnej w ThreadPool")
-            fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
-            
-            for chunk_limit, chunk_offset in fundamental_chunks:
-                future = self.thread_executor.submit(
-                    self._run_sync_method_in_thread_sync,
-                    self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations,
-                    chunk_limit,
-                    chunk_offset + offset  # Dodaj globalny offset
-                )
-                fundamental_futures.append(future)
+        logger.info("🤖 Uruchamianie zadań interpretacji LLM fundamentalnej w ThreadPool")
+        
+        for chunk_limit, chunk_offset in fundamental_chunks:
+            future = self.thread_executor.submit(
+                self._run_sync_method_in_thread_sync,
+                self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations,
+                chunk_limit,
+                chunk_offset + offset  # Dodaj globalny offset
+            )
+            fundamental_futures.append(future)
         
         # Uruchom zadania interpretacji technicznej LLM
-        if technical_ready:
-            logger.info("🤖 Uruchamianie zadań interpretacji LLM technicznej w ThreadPool")
-            technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
-            
-            for chunk_limit, chunk_offset in technical_chunks:
-                future = self.thread_executor.submit(
-                    self._run_sync_method_in_thread_sync,
-                    self.llm_technical.sync,
-                    chunk_limit,
-                    chunk_offset + offset  # Dodaj globalny offset
-                )
-                technical_futures.append(future)
+        logger.info("🤖 Uruchamianie zadań interpretacji LLM technicznej w ThreadPool")
+        
+        for chunk_limit, chunk_offset in technical_chunks:
+            future = self.thread_executor.submit(
+                self._run_sync_method_in_thread_sync,
+                self.llm_technical.sync,
+                chunk_limit,
+                chunk_offset + offset  # Dodaj globalny offset
+            )
+            technical_futures.append(future)
         
         # Oczekuj na zakończenie zadań interpretacji fundamentalnej LLM
-        llm_fundamental_success = True if fundamental_ready else False
-        if fundamental_ready:
-            for future in as_completed(fundamental_futures):
-                try:
-                    result = future.result()
-                    if not result:
-                        llm_fundamental_success = False
-                except Exception as e:
-                    logger.error(f"Wyjątek w zadaniu interpretacji LLM fundamentalnej: {e}")
+        llm_fundamental_success = True
+        for future in as_completed(fundamental_futures):
+            try:
+                result = future.result()
+                if not result:
                     llm_fundamental_success = False
+            except Exception as e:
+                logger.error(f"Wyjątek w zadaniu interpretacji LLM fundamentalnej: {e}")
+                llm_fundamental_success = False
         
         # Oczekuj na zakończenie zadań interpretacji technicznej LLM
-        llm_technical_success = True if technical_ready else False
-        if technical_ready:
-            for future in as_completed(technical_futures):
-                try:
-                    result = future.result()
-                    if not result:
-                        llm_technical_success = False
-                except Exception as e:
-                    logger.error(f"Wyjątek w zadaniu interpretacji LLM technicznej: {e}")
+        llm_technical_success = True
+        for future in as_completed(technical_futures):
+            try:
+                result = future.result()
+                if not result:
                     llm_technical_success = False
+            except Exception as e:
+                logger.error(f"Wyjątek w zadaniu interpretacji LLM technicznej: {e}")
+                llm_technical_success = False
         
         # Oznacz jako ukończone w zależności od sukcesu
         if llm_fundamental_success:
