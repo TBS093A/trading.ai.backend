@@ -220,7 +220,13 @@ class AnalysisTelegramControllerDomain(BaseTelegramControllerDomain):
                 ],
                 [
                     Button.inline("🔄 Wzorce", b"analysis:patterns_overview"),
-                    Button.inline("🧠 Interpretacje", b"interp:general")
+                ],
+                [
+                    Button.inline("💼 Fundamentalne LLM", b"analysis:fund_llm_overview"),
+                    Button.inline("📈 Techniczne LLM", b"analysis:tech_llm_overview")
+                ],
+                [
+                    Button.inline("🎯 General LLM", b"interp:general")
                 ],
                 [
                     Button.inline("🔍 Wyszukaj po asset", b"analysis:search_asset"),
