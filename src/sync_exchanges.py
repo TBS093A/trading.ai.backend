@@ -12,6 +12,7 @@ class Exchanges:
     """
     Klasa odpowiedzialna za integrację z giełdami i synchronizację assetów.
     Używa wzorca strategii do obsługi różnych giełd.
+    Filtruje assety tylko do tych z quote=USDT, aby ograniczyć ilość zbędnych symboli.
     """
     
     def __init__(self, test_mode: bool = False):
@@ -119,19 +120,28 @@ class Exchanges:
             created_exchanges = await exchanges_table.create_many(exchanges_to_create)
             logger.info(f"Zsynchronizowano {len(created_exchanges)} exchanges")
             
-            # KROK 2: Zbierz wszystkie unikalne assety ze wszystkich giełd
-            logger.info("=== KROK 2: Przygotowanie assetów ===")
+            # KROK 2: Zbierz wszystkie unikalne assety ze wszystkich giełd (tylko z quote=USDT)
+            logger.info("=== KROK 2: Przygotowanie assetów (filtrowanie po quote=USDT) ===")
             all_assets = set()
             asset_exchange_mapping = {}  # Mapowanie asset_code -> lista exchanges
+            filtered_symbols_count = 0
+            total_symbols_count = 0
             
             for exchange_name, exchange_data in all_exchange_symbols.items():
                 for symbol_info in exchange_data:
+                    total_symbols_count += 1
                     base_asset = symbol_info.get('base_asset')
-                    if base_asset:
+                    quote_asset = symbol_info.get('quote_asset')
+                    
+                    # Filtruj tylko symbole z quote_asset = 'USDT'
+                    if base_asset and quote_asset == 'USDT':
+                        filtered_symbols_count += 1
                         all_assets.add(base_asset)
                         if base_asset not in asset_exchange_mapping:
                             asset_exchange_mapping[base_asset] = []
                         asset_exchange_mapping[base_asset].append(exchange_name)
+            
+            logger.info(f"Przefiltrowano {filtered_symbols_count} symboli z quote=USDT z łącznej liczby {total_symbols_count} symboli")
             
             logger.info(f"Znaleziono {len(all_assets)} unikalnych assetów ze wszystkich giełd")
             
@@ -144,20 +154,8 @@ class Exchanges:
                 cleaned_asset_code = self._clean_asset_code(asset_code)
                 logger.debug(f"Przygotowuję asset: {asset_code} -> wyczyszczony: {cleaned_asset_code}")
                 
-                # Znajdź najlepszy quote asset dla tego base assetu
-                quote_asset = 'USDT'  # Domyślny quote asset
-                
-                for exchange_name, exchange_data in all_exchange_symbols.items():
-                    for symbol_info in exchange_data:
-                        if symbol_info.get('base_asset') == asset_code:
-                            logger.debug(f"Znaleziono asset {asset_code} w symbolu {symbol_info.get('symbol')} na giełdzie {exchange_name}")
-                            
-                            # Znajdź odpowiedni quote asset (najlepiej USDT, USDC, BTC)
-                            quote_asset = symbol_info.get('quote_asset', 'USDT')
-                            break
-                    
-                    if quote_asset != 'USDT':  # Znaleziono quote asset
-                        break
+                # Wszystkie assety mają quote_asset = 'USDT' (dzięki filtrowaniu)
+                quote_asset = 'USDT'
                 
                 # Dodaj do listy do sprawdzenia
                 assets_to_check.append({
@@ -252,6 +250,7 @@ class Exchanges:
     async def sync_assets(self) -> None:
         """
         Synchronizuje wszystkie Assety na linii giełda - baza danych używając wzorca strategii na puli dostępnych giełd.
+        Filtruje assety tylko do tych z quote=USDT, aby ograniczyć ilość zbędnych symboli i skupić się na głównych parach krypto.
         
         Returns:
             None
