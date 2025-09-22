@@ -9,11 +9,13 @@ class SystemSyncJobTable(AbstractTable):
     
     def create_table(self) -> str:
         return """
+        CREATE SEQUENCE IF NOT EXISTS system_sync_job_id_seq;
         CREATE TABLE IF NOT EXISTS system_sync_job (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY DEFAULT nextval('system_sync_job_id_seq'),
             process VARCHAR(100) NOT NULL UNIQUE,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+        ALTER SEQUENCE system_sync_job_id_seq OWNED BY system_sync_job.id;
         """
     
     async def create(self, process: str) -> Optional[int]:
@@ -127,7 +129,7 @@ class SystemSyncJobTable(AbstractTable):
             f"%{process}%"
         )
     
-    async def seed_default_processes(self) -> None:
+    async def _seed_default_processes(self) -> Dict[str, int]:
         """Dodaje domyślne procesy do tabeli system_sync_job."""
         try:
             default_processes = [
@@ -168,3 +170,50 @@ class SystemSyncJobTable(AbstractTable):
         """Zlicza wszystkie system sync jobs."""
         result = await self.fetch_val("SELECT COUNT(*) FROM system_sync_job")
         return result or 0
+    
+    async def seed_default_records(self) -> Dict[str, Any]:
+        """
+        Inicjalizuje domyślne procesy synchronizacji.
+        
+        Returns:
+            Dict[str, Any]: Informacje o seedowaniu
+        """
+        try:
+            # Sprawdź ile rekordów było przed seedowaniem
+            initial_count = await self.count_all()
+            
+            # Wykonaj seedowanie
+            created_jobs = await self._seed_default_processes()
+            
+            # Sprawdź ile rekordów jest po seedowaniu
+            final_count = await self.count_all()
+            created_count = len(created_jobs) if created_jobs else 0
+            
+            # Określ message w zależności od wyniku
+            if created_count > 0:
+                message = f'Created {created_count} new default sync processes'
+                seeded = True
+            elif final_count > 0:
+                message = f'All default sync processes already exist (total: {final_count})'
+                seeded = False
+            else:
+                message = 'No sync processes found after seeding attempt'
+                seeded = False
+            
+            return {
+                'table_name': 'system_sync_job',
+                'seeded': seeded,
+                'created_count': created_count,
+                'total_count': final_count,
+                'message': message
+            }
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas seedowania system_sync_job: {e}", exc_info=True)
+            return {
+                'table_name': 'system_sync_job',
+                'seeded': False,
+                'created_count': 0,
+                'total_count': await self.count_all(),
+                'message': f'Error during seeding: {str(e)}'
+            }

@@ -70,27 +70,245 @@ class DatabasePostgreSQL:
             
             for table_name in table_order:
                 if table_name in create_queries:
-                    await connection.execute(create_queries[table_name])
+                    # Podziel zapytania na poszczególne polecenia SQL (oddzielone przez ;)
+                    create_query = create_queries[table_name]
+                    sql_statements = [stmt.strip() for stmt in create_query.split(';') if stmt.strip()]
+                    
+                    for sql_statement in sql_statements:
+                        try:
+                            await connection.execute(sql_statement)
+                        except Exception as e:
+                            logger.error(f"Błąd podczas wykonywania SQL dla tabeli {table_name}: {sql_statement[:100]}...")
+                            logger.error(f"Błąd: {e}")
+                            # Kontynuuj dla pozostałych poleceń
+                    
                     logger.info(f"Sprawdzono/utworzono tabelę: {table_name}")
             
             # Inicjalizuj domyślne dane po utworzeniu wszystkich tabel
             await self._seed_initial_data()
     
     async def _seed_initial_data(self):
-        """Inicjalizuje domyślne dane w tabelach systemowych."""
+        """Inicjalizuje domyślne dane we wszystkich tabelach używając abstrakcyjnej metody seed_default_records."""
         try:
-            # Inicjalizuj domyślne procesy synchronizacji
-            system_sync_job_table = self.factory.get_system_sync_job_table()
-            system_sync_jobs = await system_sync_job_table.seed_default_processes()
-            logger.info("Zainicjalizowano domyślne procesy synchronizacji")
+            logger.info("=== ROZPOCZĘCIE SEEDOWANIA DOMYŚLNYCH DANYCH ===")
             
-            # Inicjalizuj domyślny cron job
-            cron_system_sync_job_table = self.factory.get_cron_system_sync_job_table()
-            await cron_system_sync_job_table.seed_default_cron_job(system_sync_jobs)
-            logger.info("Zainicjalizowano domyślny cron job")
+            # Pobierz wszystkie tabele z factory
+            all_tables = self.factory.get_all_tables()
+            seed_results = []
+            
+            # Iteruj przez wszystkie tabele i wywołaj seed_default_records
+            for table_name, table_instance in all_tables.items():
+                try:
+                    logger.info(f"Seedowanie tabeli: {table_name}")
+                    result = await table_instance.seed_default_records()
+                    seed_results.append(result)
+                    
+                    if result['seeded']:
+                        logger.info(f"✅ {table_name}: {result['message']}")
+                    else:
+                        logger.info(f"ℹ️ {table_name}: {result['message']}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Błąd podczas seedowania tabeli {table_name}: {e}")
+                    seed_results.append({
+                        'table_name': table_name,
+                        'seeded': False,
+                        'created_count': 0,
+                        'total_count': 0,
+                        'message': f'Error: {str(e)}'
+                    })
+            
+            # Wyświetl tabelkę z wynikami seedowania
+            self._display_seeding_results_table(seed_results)
+            
+            # Wyświetl zawartość tabel które zostały zaseedowane
+            await self._display_seeded_tables_content(seed_results, all_tables)
+            
+            logger.info("=== ZAKOŃCZENIE SEEDOWANIA DOMYŚLNYCH DANYCH ===")
             
         except Exception as e:
             logger.error(f"Błąd podczas inicjalizacji domyślnych danych: {e}", exc_info=True)
+    
+    def _display_seeding_results_table(self, results: List[Dict[str, Any]]):
+        """Wyświetla tabelkę z wynikami seedowania."""
+        if not results:
+            return
+            
+        # Nagłówki tabeli
+        headers = ['Table Name', 'Seeded', 'Created', 'Total', 'Message']
+        
+        # Oblicz szerokość kolumn
+        col_widths = [len(header) for header in headers]
+        for result in results:
+            col_widths[0] = max(col_widths[0], len(str(result['table_name'])))
+            col_widths[1] = max(col_widths[1], len('✅' if result['seeded'] else '❌'))
+            col_widths[2] = max(col_widths[2], len(str(result['created_count'])))
+            col_widths[3] = max(col_widths[3], len(str(result['total_count'])))
+            col_widths[4] = max(col_widths[4], len(str(result['message'])))
+        
+        # Separator linii
+        separator = '+' + '+'.join(['-' * (w + 2) for w in col_widths]) + '+'
+        
+        # Buduj tabelę
+        table_lines = []
+        table_lines.append(separator)
+        
+        # Nagłówek
+        header_line = '|'
+        for i, header in enumerate(headers):
+            header_line += f' {header:<{col_widths[i]}} |'
+        table_lines.append(header_line)
+        table_lines.append(separator)
+        
+        # Wiersze danych
+        for result in results:
+            seeded_icon = '✅' if result['seeded'] else '❌'
+            data_line = '|'
+            values = [
+                result['table_name'],
+                seeded_icon,
+                str(result['created_count']),
+                str(result['total_count']),
+                result['message']
+            ]
+            
+            for i, value in enumerate(values):
+                data_line += f' {value:<{col_widths[i]}} |'
+            table_lines.append(data_line)
+        
+        table_lines.append(separator)
+        
+        # Wyświetl tabelę
+        logger.info("📊 WYNIKI SEEDOWANIA DOMYŚLNYCH DANYCH:")
+        for line in table_lines:
+            logger.info(line)
+    
+    async def _display_seeded_tables_content(self, seed_results: List[Dict[str, Any]], all_tables: Dict[str, Any]):
+        """Wyświetla zawartość tabel które zostały zaseedowane lub mają rekordy."""
+        try:
+            # Filtruj tabele które mają dane do wyświetlenia
+            tables_to_show = [
+                result for result in seed_results 
+                if result['seeded'] or result['total_count'] > 0
+            ]
+            
+            if not tables_to_show:
+                logger.info("ℹ️ Brak tabel z danymi do wyświetlenia")
+                return
+            
+            logger.info("📋 ZAWARTOŚĆ TABEL Z DOMYŚLNYMI DANYMI:")
+            logger.info("")
+            
+            for result in tables_to_show:
+                table_name_key = result['table_name']
+                
+                # Znajdź odpowiadającą instancję tabeli w all_tables
+                table_instance = None
+                for key, instance in all_tables.items():
+                    if key == table_name_key:
+                        table_instance = instance
+                        break
+                
+                if not table_instance:
+                    logger.warning(f"⚠️ Nie znaleziono instancji tabeli: {table_name_key}")
+                    continue
+                
+                try:
+                    # Pobierz dane z tabeli (ograniczamy do 20 rekordów dla czytelności)
+                    records = await table_instance.get_all(limit=20, offset=0)
+                    
+                    if not records:
+                        logger.info(f"📄 Tabela: {table_name_key.upper()} (pusta)")
+                        continue
+                    
+                    # Wyświetl zawartość tabeli
+                    self._display_table_records(table_name_key, records, result['total_count'])
+                    logger.info("")  # Pusta linia dla separacji
+                    
+                except Exception as e:
+                    logger.error(f"❌ Błąd podczas pobierania danych z tabeli {table_name_key}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Błąd podczas wyświetlania zawartości tabel: {e}", exc_info=True)
+    
+    def _display_table_records(self, table_name: str, records: List[Dict[str, Any]], total_count: int):
+        """Wyświetla rekordy tabeli w formacie ASCII."""
+        if not records:
+            return
+        
+        # Przygotuj nagłówek
+        limit_info = f" (showing {len(records)} of {total_count})" if len(records) < total_count else f" ({total_count} records)"
+        logger.info(f"📄 Tabela: {table_name.upper()}{limit_info}")
+        
+        # Pobierz wszystkie kolumny
+        all_columns = set()
+        for record in records:
+            all_columns.update(record.keys())
+        columns = sorted(list(all_columns))
+        
+        if not columns:
+            logger.info("   (brak kolumn)")
+            return
+        
+        # Przygotuj dane do wyświetlenia - ogranicz długość wartości
+        display_records = []
+        for record in records:
+            display_record = {}
+            for col in columns:
+                value = record.get(col, '')
+                # Formatuj różne typy danych
+                if value is None:
+                    display_value = 'NULL'
+                elif isinstance(value, bool):
+                    display_value = 'TRUE' if value else 'FALSE'
+                elif isinstance(value, (int, float)):
+                    display_value = str(value)
+                else:
+                    display_value = str(value)
+                    # Ogranicz długość długich wartości
+                    if len(display_value) > 50:
+                        display_value = display_value[:47] + '...'
+                
+                display_record[col] = display_value
+            display_records.append(display_record)
+        
+        # Oblicz szerokość kolumn
+        col_widths = {}
+        for col in columns:
+            col_widths[col] = max(len(col), max(len(record[col]) for record in display_records))
+            # Ogranicz maksymalną szerokość kolumny
+            col_widths[col] = min(col_widths[col], 60)
+        
+        # Separator linii
+        separator = '+' + '+'.join(['-' * (col_widths[col] + 2) for col in columns]) + '+'
+        
+        # Buduj tabelę
+        table_lines = []
+        table_lines.append(separator)
+        
+        # Nagłówek kolumn
+        header_line = '|'
+        for col in columns:
+            header_line += f' {col:<{col_widths[col]}} |'
+        table_lines.append(header_line)
+        table_lines.append(separator)
+        
+        # Wiersze danych
+        for record in display_records:
+            data_line = '|'
+            for col in columns:
+                value = record[col]
+                # Ogranicz wartość do szerokości kolumny
+                if len(value) > col_widths[col]:
+                    value = value[:col_widths[col]-3] + '...'
+                data_line += f' {value:<{col_widths[col]}} |'
+            table_lines.append(data_line)
+        
+        table_lines.append(separator)
+        
+        # Wyświetl tabelę z wcięciem
+        for line in table_lines:
+            logger.info(f"   {line}")
     
     async def get_db_pool(self):
         """Zwraca istniejącą pulę połączeń lub inicjalizuje ją."""

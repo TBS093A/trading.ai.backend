@@ -41,6 +41,33 @@ class AbstractTable(ABC):
         """Pobiera wszystkie rekordy z limitem i offsetem."""
         pass
     
+    async def seed_default_records(self) -> Dict[str, Any]:
+        """
+        Inicjalizuje domyślne rekordy dla tabeli.
+        Domyślna implementacja zwraca informację, że seedowanie nie jest zaimplementowane.
+        
+        Returns:
+            Dict[str, Any]: Informacje o seedowaniu w standardowym formacie:
+                - table_name: nazwa tabeli
+                - seeded: czy coś zostało zaseedowane
+                - created_count: liczba utworzonych rekordów
+                - total_count: całkowita liczba rekordów po seedowaniu
+                - message: opis operacji
+        """
+        # Konwertuj CamelCase na snake_case dla lepszej czytelności
+        class_name = self.__class__.__name__.replace('Table', '')
+        # Dodaj underscore przed wielkimi literami (oprócz pierwszej)
+        import re
+        snake_case = re.sub('([A-Z])', r'_\1', class_name).lower()
+        table_name = snake_case.lstrip('_')
+        return {
+            'table_name': table_name,
+            'seeded': False,
+            'created_count': 0,
+            'total_count': 0,
+            'message': 'No default records seeding implemented'
+        }
+    
     async def execute_query(self, query: str, *args) -> Any:
         """Wykonuje zapytanie SQL."""
         async with self.pool.acquire() as connection:

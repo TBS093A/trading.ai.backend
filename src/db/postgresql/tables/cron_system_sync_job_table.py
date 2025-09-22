@@ -9,8 +9,9 @@ class CronSystemSyncJobTable(AbstractTable):
     
     def create_table(self) -> str:
         return """
+        CREATE SEQUENCE IF NOT EXISTS cron_system_sync_job_id_seq;
         CREATE TABLE IF NOT EXISTS cron_system_sync_job (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY DEFAULT nextval('cron_system_sync_job_id_seq'),
             name VARCHAR(255) NOT NULL,
             system_sync_job_id INTEGER NOT NULL REFERENCES system_sync_job(id) ON DELETE CASCADE,
             year INTEGER,
@@ -29,6 +30,7 @@ class CronSystemSyncJobTable(AbstractTable):
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+        ALTER SEQUENCE cron_system_sync_job_id_seq OWNED BY cron_system_sync_job.id;
         """
     
     async def create(self, name: str, system_sync_job_id: int, year: Optional[int] = None, 
@@ -231,20 +233,20 @@ class CronSystemSyncJobTable(AbstractTable):
             LIMIT $1 OFFSET $2
         """, limit, offset)
     
-    async def seed_default_cron_job(self, system_sync_jobs: Dict[str, int]) -> None:
+    async def _seed_default_cron_job(self, system_sync_jobs: Dict[str, int]) -> bool:
         """Dodaje domyślny cron job dla run_full_sync_workflow o 6:00 codziennie."""
         try:
             # Sprawdź czy już istnieje domyślny job
             existing_job = await self.get_by_name("Daily Synchronization - run_full_sync_workflow")
             if existing_job:
                 logger.info("Domyślny cron job już istnieje")
-                return
+                return False
             
             # Pobierz ID procesu run_full_sync_workflow
             process_id = system_sync_jobs.get("run_full_sync_workflow")
             if not process_id:
                 logger.error("Nie znaleziono procesu run_full_sync_workflow w system_sync_jobs")
-                return
+                return False
             
             # Utwórz domyślny cron job - codziennie o 6:00:00
             default_job = {
@@ -260,11 +262,14 @@ class CronSystemSyncJobTable(AbstractTable):
             job_id = await self.create(**default_job)
             if job_id:
                 logger.info(f"Utworzono domyślny cron job dla daily synchronization z ID: {job_id}")
+                return True
             else:
                 logger.error("Nie udało się utworzyć domyślnego cron job")
+                return False
                 
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia domyślnego cron job: {e}", exc_info=True)
+            return False
     
     async def count_all(self) -> int:
         """Zlicza wszystkie cron system sync jobs."""
@@ -275,3 +280,68 @@ class CronSystemSyncJobTable(AbstractTable):
         """Zlicza włączone cron system sync jobs."""
         result = await self.fetch_val("SELECT COUNT(*) FROM cron_system_sync_job WHERE enabled = TRUE")
         return result or 0
+    
+    async def seed_default_records(self) -> Dict[str, Any]:
+        """
+        Inicjalizuje domyślny cron job dla daily synchronization.
+        
+        Returns:
+            Dict[str, Any]: Informacje o seedowaniu
+        """
+        try:
+            # Sprawdź ile rekordów było przed seedowaniem
+            initial_count = await self.count_all()
+            
+            # Pobierz system_sync_jobs (potrzebne do seedowania cron job)
+            # W praktyce powinny już istnieć z poprzedniego seedowania SystemSyncJobTable
+            from .system_sync_job_table import SystemSyncJobTable
+            system_sync_job_table = SystemSyncJobTable(self.pool)
+            
+            # Pobierz ID procesu run_full_sync_workflow
+            workflow_job = await system_sync_job_table.get_by_process('run_full_sync_workflow')
+            
+            if not workflow_job:
+                return {
+                    'table_name': 'cron_system_sync_job',
+                    'seeded': False,
+                    'created_count': 0,
+                    'total_count': initial_count,
+                    'message': 'Cannot seed: run_full_sync_workflow process not found'
+                }
+            
+            # Wykonaj seedowanie
+            system_sync_jobs = {'run_full_sync_workflow': workflow_job['id']}
+            created = await self._seed_default_cron_job(system_sync_jobs)
+            
+            # Sprawdź ile rekordów jest po seedowaniu
+            final_count = await self.count_all()
+            created_count = final_count - initial_count
+            
+            # Określ message w zależności od wyniku
+            if created:
+                message = f'Created {created_count} new default cron job(s)'
+                seeded = True
+            elif final_count > 0:
+                message = f'Default cron job already exists (total: {final_count})'
+                seeded = False
+            else:
+                message = 'No cron jobs found after seeding attempt'
+                seeded = False
+            
+            return {
+                'table_name': 'cron_system_sync_job',
+                'seeded': seeded,
+                'created_count': created_count,
+                'total_count': final_count,
+                'message': message
+            }
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas seedowania cron_system_sync_job: {e}", exc_info=True)
+            return {
+                'table_name': 'cron_system_sync_job',
+                'seeded': False,
+                'created_count': 0,
+                'total_count': await self.count_all(),
+                'message': f'Error during seeding: {str(e)}'
+            }
