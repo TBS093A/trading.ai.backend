@@ -25,7 +25,9 @@ class DatabasePostgreSQLFactory:
         'exchange_transactions': ExchangeTransactionsTable,
         'exchange_account_state': ExchangeAccountStateTable,
         'exchange_account_state_buy_strategies': ExchangeAccountStateBuyStrategiesTable,
-        'exchange_account_state_sell_strategies': ExchangeAccountStateSellStrategiesTable
+        'exchange_account_state_sell_strategies': ExchangeAccountStateSellStrategiesTable,
+        'system_sync_job': SystemSyncJobTable,
+        'cron_system_sync_job': CronSystemSyncJobTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -111,6 +113,14 @@ class DatabasePostgreSQLFactory:
     def get_exchange_account_state_sell_strategies_table(self) -> ExchangeAccountStateSellStrategiesTable:
         """Zwraca tabelę ExchangeAccountStateSellStrategies."""
         return self.get_table('exchange_account_state_sell_strategies')
+    
+    def get_system_sync_job_table(self) -> SystemSyncJobTable:
+        """Zwraca tabelę SystemSyncJob."""
+        return self.get_table('system_sync_job')
+    
+    def get_cron_system_sync_job_table(self) -> CronSystemSyncJobTable:
+        """Zwraca tabelę CronSystemSyncJob."""
+        return self.get_table('cron_system_sync_job')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

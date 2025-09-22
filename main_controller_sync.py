@@ -20,6 +20,7 @@ from src.sync_llm_technical_analysis_interpretation import LlmTechnicalAnalysisI
 from src.sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
 from src.sync_transactions import Transactions
 from src.sync_transactions_wallets import TransactionsWallets
+from src.db.database_facade import DatabaseFacade
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ class SyncController:
         
         logger.info(f"💻 Zainicjalizowano ThreadPool z {self.max_workers} wątkami (dostępne CPU: {self.cpu_count})")
         
+        # Inicjalizacja bazy danych
+        self._init_database()
+        
         # Inicjalizacja klas synchronizacyjnych
         self._init_sync_classes()
         
@@ -72,6 +76,20 @@ class SyncController:
             'transactions_completed': False,
             'transactions_wallets_post_completed': False
         }
+    
+    def _init_database(self) -> None:
+        """Inicjalizuje połączenie z bazą danych."""
+        try:
+            # Inicjalizacja bazy danych
+            if not self.test_mode:
+                self.db = DatabaseFacade().get_database_postgresql()
+            else:
+                self.db = DatabaseFacade().get_test_database_postgresql()
+                
+            logger.info("Zainicjalizowano połączenie z bazą danych")
+        except Exception as e:
+            logger.error(f"Błąd podczas inicjalizacji bazy danych: {e}")
+            raise
     
     def _init_sync_classes(self) -> None:
         """Inicjalizuje instancje wszystkich klas synchronizacyjnych."""
@@ -548,22 +566,80 @@ class SyncController:
             logger.error(f"❌ Krytyczny błąd w workflow synchronizacji: {e}")
             logger.error(traceback.format_exc())
     
-    def setup_cron_jobs(self) -> None:
-        """Konfiguruje cronjobs dla automatycznego uruchamiania workflow."""
+    async def setup_cron_jobs(self) -> None:
+        """Konfiguruje cronjobs dla automatycznego uruchamiania workflow na podstawie bazy danych."""
         try:
-            # Cron job dla sobót o 6:00 rano
-            self.scheduler.add_job(
-                func=self.run_full_sync_workflow,
-                trigger=CronTrigger(day_of_week='sat', hour=6, minute=0),
-                id='weekly_sync_saturday',
-                name='Tygodniowa synchronizacja - sobota 6:00',
-                replace_existing=True
-            )
+            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
             
-            logger.info("✅ Skonfigurowano cron job: soboty o 6:00")
+            # Pobierz wszystkie włączone cron jobs z bazy danych
+            cron_table = self.db.get_factory().get_cron_system_sync_job_table()
+            enabled_jobs = await cron_table.get_all_enabled()
+            
+            logger.info(f"🔍 Znaleziono {len(enabled_jobs)} włączonych cron jobs w bazie danych")
+            
+            for job_config in enabled_jobs:
+                try:
+                    # Pobierz nazwę procesu i znajdź odpowiadającą mu metodę
+                    process_name = job_config['process']
+                    method = getattr(self, process_name, None)
+                    
+                    if method is None:
+                        logger.warning(f"⚠️ Nie znaleziono metody {process_name} w SyncController")
+                        continue
+                    
+                    # Przygotuj parametry dla CronTrigger
+                    cron_params = {}
+                    if job_config['year'] is not None:
+                        cron_params['year'] = job_config['year']
+                    if job_config['month'] is not None:
+                        cron_params['month'] = job_config['month']
+                    if job_config['day'] is not None:
+                        cron_params['day'] = job_config['day']
+                    if job_config['week'] is not None:
+                        cron_params['week'] = job_config['week']
+                    if job_config['day_of_week'] is not None:
+                        cron_params['day_of_week'] = job_config['day_of_week']
+                    if job_config['hour'] is not None:
+                        cron_params['hour'] = job_config['hour']
+                    if job_config['minute'] is not None:
+                        cron_params['minute'] = job_config['minute']
+                    if job_config['second'] is not None:
+                        cron_params['second'] = job_config['second']
+                    if job_config['start_date'] is not None:
+                        cron_params['start_date'] = job_config['start_date']
+                    if job_config['end_date'] is not None:
+                        cron_params['end_date'] = job_config['end_date']
+                    if job_config['timezone'] is not None:
+                        cron_params['timezone'] = job_config['timezone']
+                    if job_config['jitter'] is not None and job_config['jitter'] > 0:
+                        cron_params['jitter'] = job_config['jitter']
+                    
+                    # Utwórz CronTrigger z parametrami
+                    trigger = CronTrigger(**cron_params)
+                    
+                    # Dodaj job do schedulera
+                    self.scheduler.add_job(
+                        func=method,
+                        trigger=trigger,
+                        id=f"cron_job_{job_config['id']}",
+                        name=job_config['name'],
+                        replace_existing=True
+                    )
+                    
+                    logger.info(f"✅ Skonfigurowano cron job: {job_config['name']} (ID: {job_config['id']})")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Błąd podczas konfiguracji cron job {job_config.get('name', 'Unknown')}: {e}")
+            
+            if len(enabled_jobs) == 0:
+                logger.warning("⚠️ Brak włączonych cron jobs w bazie danych")
+            else:
+                logger.info(f"✅ Skonfigurowano {len(enabled_jobs)} cron jobs z bazy danych")
             
         except Exception as e:
-            logger.error(f"Błąd podczas konfiguracji cron jobs: {e}")
+            logger.error(f"❌ Błąd podczas konfiguracji cron jobs: {e}")
             raise
     
     async def start(self) -> None:
@@ -575,7 +651,7 @@ class SyncController:
             logger.info("🚀 URUCHAMIANIE SYNC CONTROLLER")
             
             # Konfiguruj cron jobs
-            self.setup_cron_jobs()
+            await self.setup_cron_jobs()
             
             # Uruchom scheduler
             self.scheduler.start()

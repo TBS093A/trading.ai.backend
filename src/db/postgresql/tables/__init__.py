@@ -16,6 +16,8 @@ from .exchange_transactions_table import ExchangeTransactionsTable
 from .exchange_account_state_table import ExchangeAccountStateTable
 from .exchange_account_state_buy_strategies_table import ExchangeAccountStateBuyStrategiesTable
 from .exchange_account_state_sell_strategies_table import ExchangeAccountStateSellStrategiesTable
+from .system_sync_job_table import SystemSyncJobTable
+from .cron_system_sync_job_table import CronSystemSyncJobTable
 
 __all__ = [
     'AbstractTable',
@@ -35,5 +37,7 @@ __all__ = [
     'ExchangeTransactionsTable',
     'ExchangeAccountStateTable',
     'ExchangeAccountStateBuyStrategiesTable',
-    'ExchangeAccountStateSellStrategiesTable'
+    'ExchangeAccountStateSellStrategiesTable',
+    'SystemSyncJobTable',
+    'CronSystemSyncJobTable'
 ] 
