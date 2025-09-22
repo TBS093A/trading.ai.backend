@@ -45,6 +45,8 @@ class DatabasePostgreSQL:
             
             # Wykonaj zapytania w odpowiedniej kolejności (z uwzględnieniem zależności)
             table_order = [
+                'system_sync_job',  # Musi być przed cron_system_sync_job
+                'cron_system_sync_job',  # Zależy od system_sync_job
                 'assets',
                 'exchanges',
                 'exchange_account_state',
@@ -70,6 +72,25 @@ class DatabasePostgreSQL:
                 if table_name in create_queries:
                     await connection.execute(create_queries[table_name])
                     logger.info(f"Sprawdzono/utworzono tabelę: {table_name}")
+            
+            # Inicjalizuj domyślne dane po utworzeniu wszystkich tabel
+            await self._seed_initial_data()
+    
+    async def _seed_initial_data(self):
+        """Inicjalizuje domyślne dane w tabelach systemowych."""
+        try:
+            # Inicjalizuj domyślne procesy synchronizacji
+            system_sync_job_table = self.factory.get_system_sync_job_table()
+            system_sync_jobs = await system_sync_job_table.seed_default_processes()
+            logger.info("Zainicjalizowano domyślne procesy synchronizacji")
+            
+            # Inicjalizuj domyślny cron job
+            cron_system_sync_job_table = self.factory.get_cron_system_sync_job_table()
+            await cron_system_sync_job_table.seed_default_cron_job(system_sync_jobs)
+            logger.info("Zainicjalizowano domyślny cron job")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas inicjalizacji domyślnych danych: {e}", exc_info=True)
     
     async def get_db_pool(self):
         """Zwraca istniejącą pulę połączeń lub inicjalizuje ją."""
@@ -101,6 +122,8 @@ class DatabasePostgreSQL:
         async with self.pool.acquire() as connection:
             # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
             table_order = [
+                'cron_system_sync_job',  # Usuń przed system_sync_job z powodu foreign key
+                'system_sync_job',
                 'chart_images_harmonic_patterns',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'chart_images',
