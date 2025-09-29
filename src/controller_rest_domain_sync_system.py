@@ -165,7 +165,7 @@ async def run_sync_operation_background(operation_id: str, operation_type: str, 
 # ENDPOINTY GŁÓWNE
 # ===================
 
-@router.get("/sync/", response_model=Dict[str, Any])
+@router.get("", response_model=Dict[str, Any])
 async def sync_info():
     """Informacje o dostępnych endpointach synchronizacji."""
     return {
@@ -174,13 +174,13 @@ async def sync_info():
         "available_endpoints": {
             "full_sync": "POST /sync/all - Pełna synchronizacja systemu",
             "exchanges": "POST /sync/exchanges - Synchronizacja giełd",
-            "technical_analysis": "POST /sync/technical-analysis - Synchronizacja analiz technicznych",
-            "fundamental_analysis": "POST /sync/fundamental-analysis - Synchronizacja analiz fundamentalnych",
-            "parallel_analysis": "POST /sync/analysis - Równoległa synchronizacja analiz",
-            "llm_technical": "POST /sync/llm/technical - Interpretacja LLM analiz technicznych",
-            "llm_fundamental": "POST /sync/llm/fundamental - Interpretacja LLM analiz fundamentalnych",
-            "llm_parallel": "POST /sync/llm/analysis - Równoległa interpretacja LLM",
-            "llm_general": "POST /sync/llm/general - Generalna decyzja LLM",
+            "technical_analysis": "POST /sync/analysis/technical - Synchronizacja analiz technicznych",
+            "fundamental_analysis": "POST /sync/analysis/fundamental - Synchronizacja analiz fundamentalnych",
+            "parallel_analysis": "POST /sync/analysis - Równoległa synchronizacja analiz (fundamentalne + techniczne)",
+            "llm_technical": "POST /sync/llm/interpretation/technical - Interpretacja LLM analiz technicznych",
+            "llm_fundamental": "POST /sync/llm/interpretation/fundamental - Interpretacja LLM analiz fundamentalnych",
+            "llm_parallel": "POST /sync/llm/interpretation - Równoległa interpretacja LLM (fundamentalne + techniczne)",
+            "llm_general": "POST /sync/llm/decision/general - Generalna decyzja LLM",
             "transactions_wallets": "POST /sync/transactions/wallets - Synchronizacja portfeli",
             "transactions": "POST /sync/transactions - Synchronizacja transakcji",
             "status": "GET /sync/status - Status operacji",
@@ -190,7 +190,7 @@ async def sync_info():
     }
 
 
-@router.get("/sync/status", response_model=List[SyncStatus])
+@router.get("/status", response_model=List[SyncStatus])
 async def get_sync_status():
     """Pobiera status wszystkich uruchomionych operacji synchronizacji."""
     statuses = []
@@ -213,7 +213,7 @@ async def get_sync_status():
     return statuses
 
 
-@router.get("/sync/status/{operation_id}", response_model=SyncStatus)
+@router.get("/status/{operation_id}", response_model=SyncStatus)
 async def get_operation_status(operation_id: str = Path(..., description="ID operacji synchronizacji")):
     """Pobiera status konkretnej operacji synchronizacji."""
     if operation_id not in running_operations:
@@ -235,7 +235,7 @@ async def get_operation_status(operation_id: str = Path(..., description="ID ope
     )
 
 
-@router.get("/sync/workflow", response_model=WorkflowStatus)
+@router.get("/workflow", response_model=WorkflowStatus)
 async def get_workflow_status(sync_controller: SyncController = Depends(get_sync_controller)):
     """Pobiera status workflow synchronizacji."""
     return WorkflowStatus(**sync_controller.workflow_status)
@@ -245,7 +245,7 @@ async def get_workflow_status(sync_controller: SyncController = Depends(get_sync
 # SYNCHRONIZACJA PEŁNA
 # ===================
 
-@router.post("/sync/all", response_model=SyncResponse)
+@router.post("/all", response_model=SyncResponse)
 async def sync_all(
     background_tasks: BackgroundTasks,
     sync_controller: SyncController = Depends(get_sync_controller)
@@ -264,7 +264,7 @@ async def sync_all(
     return SyncResponse(
         success=True,
         message=f"Pełna synchronizacja rozpoczęta (ID: {operation_id})",
-        details={"operation_id": operation_id, "status_endpoint": f"/sync/status/{operation_id}"}
+        details={"operation_id": operation_id, "status_endpoint": f"/status/{operation_id}"}
     )
 
 
@@ -272,7 +272,7 @@ async def sync_all(
 # SYNCHRONIZACJA KOMPONENTÓW
 # ===================
 
-@router.post("/sync/exchanges", response_model=SyncResponse)
+@router.post("/exchanges", response_model=SyncResponse)
 async def sync_exchanges(
     background_tasks: BackgroundTasks,
     sync_controller: SyncController = Depends(get_sync_controller)
@@ -294,7 +294,7 @@ async def sync_exchanges(
     )
 
 
-@router.post("/sync/technical-analysis", response_model=SyncResponse)
+@router.post("/analysis/technical", response_model=SyncResponse)
 async def sync_technical_analysis(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
@@ -323,7 +323,7 @@ async def sync_technical_analysis(
     )
 
 
-@router.post("/sync/fundamental-analysis", response_model=SyncResponse)
+@router.post("/analysis/fundamental", response_model=SyncResponse)
 async def sync_fundamental_analysis(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
@@ -352,13 +352,13 @@ async def sync_fundamental_analysis(
     )
 
 
-@router.post("/sync/analysis", response_model=SyncResponse)
+@router.post("/analysis", response_model=SyncResponse)
 async def sync_analysis_parallel(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
     sync_controller: SyncController = Depends(get_sync_controller)
 ):
-    """Równoległa synchronizacja analiz (techniczna + fundamentalna)."""
+    """Równoległa synchronizacja analiz (techniczna + fundamentalna równolegle)."""
     operation_id = generate_operation_id("sync_analysis_parallel")
     
     background_tasks.add_task(
@@ -385,7 +385,7 @@ async def sync_analysis_parallel(
 # INTERPRETACJE LLM
 # ===================
 
-@router.post("/sync/llm/technical", response_model=SyncResponse)
+@router.post("/llm/interpretation/technical", response_model=SyncResponse)
 async def sync_llm_technical_interpretation(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
@@ -414,7 +414,7 @@ async def sync_llm_technical_interpretation(
     )
 
 
-@router.post("/sync/llm/fundamental", response_model=SyncResponse)
+@router.post("/llm/interpretation/fundamental", response_model=SyncResponse)
 async def sync_llm_fundamental_interpretation(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
@@ -443,13 +443,13 @@ async def sync_llm_fundamental_interpretation(
     )
 
 
-@router.post("/sync/llm/analysis", response_model=SyncResponse)
+@router.post("/llm/interpretation", response_model=SyncResponse)
 async def sync_llm_analysis_parallel(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
     sync_controller: SyncController = Depends(get_sync_controller)
 ):
-    """Równoległa synchronizacja interpretacji LLM (fundamentalne + techniczne)."""
+    """Równoległa synchronizacja interpretacji LLM (fundamentalne + techniczne równolegle)."""
     operation_id = generate_operation_id("sync_llm_analysis_parallel")
     
     background_tasks.add_task(
@@ -472,7 +472,7 @@ async def sync_llm_analysis_parallel(
     )
 
 
-@router.post("/sync/llm/general", response_model=SyncResponse)
+@router.post("/llm/decision/general", response_model=SyncResponse)
 async def sync_llm_general_decision(
     params: SyncParameters,
     background_tasks: BackgroundTasks,
@@ -505,7 +505,7 @@ async def sync_llm_general_decision(
 # TRANSAKCJE
 # ===================
 
-@router.post("/sync/transactions/wallets", response_model=SyncResponse)
+@router.post("/transactions/wallets", response_model=SyncResponse)
 async def sync_transactions_wallets(
     background_tasks: BackgroundTasks,
     phase: str = Query(default="pre", description="Faza synchronizacji portfeli (pre/post)"),
@@ -535,7 +535,7 @@ async def sync_transactions_wallets(
     )
 
 
-@router.post("/sync/transactions", response_model=SyncResponse)
+@router.post("/transactions", response_model=SyncResponse)
 async def sync_transactions(
     background_tasks: BackgroundTasks,
     limit: int = Query(default=500, ge=1, le=10000, description="Limit transakcji do przetworzenia"),
@@ -569,7 +569,7 @@ async def sync_transactions(
 # HEALTH & MONITORING
 # ===================
 
-@router.get("/sync/health", response_model=SystemHealth)
+@router.get("/health", response_model=SystemHealth)
 async def health_check(sync_controller: SyncController = Depends(get_sync_controller)):
     """Health check systemu synchronizacji."""
     try:
