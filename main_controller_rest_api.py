@@ -79,18 +79,29 @@ def load_rest_controllers() -> List[str]:
     loaded_controllers = []
     src_path = os.path.join(os.path.dirname(__file__), "src")
     
+    logger.info(f"🔍 Szukam kontrolerów REST w: {src_path}")
+    
     if not os.path.exists(src_path):
         logger.warning(f"Katalog src nie istnieje: {src_path}")
         return loaded_controllers
     
     try:
-        for filename in os.listdir(src_path):
+        files = os.listdir(src_path)
+        logger.info(f"📁 Znalezione pliki w src: {[f for f in files if f.endswith('.py')]}")
+        
+        for filename in files:
             if filename.startswith("controller_rest_") and filename.endswith(".py"):
                 module_name = filename[:-3]  # Usuń .py
+                logger.info(f"🔄 Próba załadowania modułu: {module_name}")
                 
                 try:
                     # Importuj moduł
                     module = importlib.import_module(f"src.{module_name}")
+                    logger.info(f"✅ Zaimportowano moduł: {module_name}")
+                    
+                    # Sprawdź atrybuty modułu
+                    module_attrs = [attr for attr in dir(module) if not attr.startswith('_')]
+                    logger.info(f"📋 Atrybuty modułu {module_name}: {module_attrs}")
                     
                     # Sprawdź czy ma router
                     if hasattr(module, 'router'):
@@ -98,21 +109,27 @@ def load_rest_controllers() -> List[str]:
                         router = getattr(module, 'router')
                         
                         # Pobierz prefix z modułu lub użyj domyślnego
-                        prefix = getattr(module, 'PREFIX', f"/{module_name.replace('controller_rest_', '')}")
+                        prefix = getattr(module, 'PREFIX', f"/{module_name.replace('controller_rest_', '').replace('_', '-')}")
                         tags = getattr(module, 'TAGS', [module_name.replace('controller_rest_', '').replace('_', ' ').title()])
                         
+                        logger.info(f"🚀 Dodawanie routera z prefixem: {prefix}, tags: {tags}")
                         app.include_router(router, prefix=prefix, tags=tags)
                         loaded_controllers.append(module_name)
-                        logger.info(f"✅ Załadowano kontroler: {module_name} (prefix: {prefix})")
+                        logger.info(f"✅ Załadowano kontroler: {module_name} (prefix: {prefix}, tags: {tags})")
                     else:
                         logger.warning(f"⚠️ Moduł {module_name} nie ma routera")
                         
                 except Exception as e:
                     logger.error(f"❌ Błąd podczas ładowania kontrolera {module_name}: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     
     except Exception as e:
         logger.error(f"❌ Błąd podczas skanowania katalogu src: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     
+    logger.info(f"📊 Załadowano kontrolerów: {len(loaded_controllers)}")
     return loaded_controllers
 
 
@@ -164,22 +181,30 @@ async def api_info():
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     """Handler dla błędów 404."""
-    return {
-        "error": "Not Found",
-        "message": f"Endpoint {request.url.path} nie został znaleziony",
-        "available_docs": "/docs"
-    }
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not Found",
+            "message": f"Endpoint {request.url.path} nie został znaleziony",
+            "available_docs": "/docs"
+        }
+    )
 
 
 # Handler dla błędów 500
 @app.exception_handler(500)
 async def internal_error_handler(request, exc):
     """Handler dla błędów 500."""
+    from fastapi.responses import JSONResponse
     logger.error(f"Błąd serwera dla {request.url.path}: {exc}")
-    return {
-        "error": "Internal Server Error",
-        "message": "Wystąpił błąd serwera. Sprawdź logi dla szczegółów."
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "Wystąpił błąd serwera. Sprawdź logi dla szczegółów."
+        }
+    )
 
 
 if __name__ == "__main__":
