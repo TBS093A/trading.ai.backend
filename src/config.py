@@ -92,6 +92,10 @@ class Config:
         self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED")
         self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
 
+        # Celery konfiguracja
+        self.celery_broker_url = os.getenv("CELERY_BROKER_URL", "pyamqp://trading_bot_ai_rabbit:trading_bot_ai_rabbit_pass@localhost:5672//")
+        self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
+
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
     
@@ -137,6 +141,9 @@ class Config:
         
         # Informacje o opcjonalnych zmiennych Telethon Controller
         # Usunięto sprawdzanie admin users
+        
+        # Informacje o konfiguracji Celery
+        logger.info(f"Konfiguracja Celery: broker={self.celery_broker_url}, backend={self.celery_result_backend}")
             
         logger.info(f"Konfiguracja Telegram Controller: error_responses={self.enable_error_responses}, handler_logging={self.enable_handler_logging}")
     
@@ -263,6 +270,14 @@ class Config:
         return {
             'is_enabled': self.local_storage_is_enabled,
             'storage_path': self.local_storage_path
+        }
+    
+    @property
+    def celery_config(self) -> dict:
+        """Konfiguracja Celery jako słownik"""
+        return {
+            'broker_url': self.celery_broker_url,
+            'result_backend': self.celery_result_backend
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
