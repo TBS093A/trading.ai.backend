@@ -17,11 +17,30 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, Path
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from pydantic import BaseModel, Field
 
 # Import SyncController
 from main_controller_sync import SyncController
+
+# Import Celery tasks
+from .celery_tasks.sync_tasks import sync_exchanges_task, sync_all_task
+from .celery_tasks.analysis_tasks import (
+    sync_technical_analysis_task,
+    sync_fundamental_analysis_task, 
+    sync_analysis_parallel_task
+)
+from .celery_tasks.llm_tasks import (
+    sync_llm_technical_interpretation_task,
+    sync_llm_fundamental_interpretation_task,
+    sync_llm_analysis_parallel_task,
+    sync_llm_general_decision_task
+)
+from .celery_tasks.transaction_tasks import (
+    sync_transactions_wallets_task,
+    sync_transactions_task
+)
+from .controller_rest_celery_worker import get_task_status, get_celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +108,6 @@ class SyncParameters(BaseModel):
 
 # Singleton dla SyncController
 sync_controller: Optional[SyncController] = None
-running_operations: Dict[str, Dict[str, Any]] = {}
 
 
 def get_sync_controller(test_mode: bool = False) -> SyncController:
@@ -108,57 +126,6 @@ def get_sync_controller(test_mode: bool = False) -> SyncController:
         sync_controller = SyncController(test_mode=test_mode)
     
     return sync_controller
-
-
-def generate_operation_id(operation_type: str) -> str:
-    """Generuje unikalny ID operacji."""
-    timestamp = int(datetime.now().timestamp())
-    return f"{operation_type}_{timestamp}"
-
-
-async def run_sync_operation_background(operation_id: str, operation_type: str, sync_func, *args, **kwargs):
-    """
-    Uruchamia operację synchronizacji w tle.
-    
-    Args:
-        operation_id: ID operacji
-        operation_type: Typ operacji
-        sync_func: Funkcja synchronizacji do uruchomienia
-        *args, **kwargs: Argumenty dla funkcji synchronizacji
-    """
-    try:
-        logger.info(f"Rozpoczęcie operacji w tle: {operation_id}")
-        
-        # Rozpocznij operację
-        running_operations[operation_id] = {
-            "type": operation_type,
-            "status": "running",
-            "start_time": datetime.now()
-        }
-        
-        # Uruchom operację synchronizacji
-        result = await sync_func(*args, **kwargs)
-        
-        # Zaktualizuj status
-        running_operations[operation_id]["status"] = "completed" if result else "error"
-        running_operations[operation_id]["end_time"] = datetime.now()
-        running_operations[operation_id]["result"] = result
-        
-        if not result:
-            running_operations[operation_id]["error"] = "Synchronization failed"
-        
-        logger.info(f"Operacja {operation_id} zakończona: {'sukces' if result else 'błąd'}")
-        
-    except Exception as e:
-        logger.error(f"Błąd w operacji {operation_id}: {e}")
-        running_operations[operation_id]["status"] = "error"
-        running_operations[operation_id]["end_time"] = datetime.now()
-        running_operations[operation_id]["error"] = str(e)
-    
-    finally:
-        # Usuń operację po 10 minutach
-        await asyncio.sleep(600)
-        running_operations.pop(operation_id, None)
 
 
 # ===================
@@ -190,49 +157,59 @@ async def sync_info():
     }
 
 
-@router.get("/status", response_model=List[SyncStatus])
+@router.get("/status", response_model=List[Dict[str, Any]])
 async def get_sync_status():
-    """Pobiera status wszystkich uruchomionych operacji synchronizacji."""
-    statuses = []
-    
-    for operation_id, operation_data in running_operations.items():
-        duration = None
-        if operation_data.get("end_time"):
-            duration = str(operation_data["end_time"] - operation_data["start_time"])
+    """Pobiera status wszystkich zadań Celery."""
+    try:
+        celery_app = get_celery_app()
+        inspect = celery_app.control.inspect()
         
-        statuses.append(SyncStatus(
-            operation_id=operation_id,
-            operation_type=operation_data["type"],
-            status=operation_data["status"],
-            start_time=operation_data["start_time"],
-            end_time=operation_data.get("end_time"),
-            duration=duration,
-            error=operation_data.get("error")
-        ))
-    
-    return statuses
+        # Pobierz aktywne zadania
+        active_tasks = inspect.active() or {}
+        scheduled_tasks = inspect.scheduled() or {}
+        
+        all_statuses = []
+        
+        # Przetwórz aktywne zadania
+        for worker, tasks in active_tasks.items():
+            for task in tasks:
+                all_statuses.append({
+                    'task_id': task['id'],
+                    'task_name': task['name'],
+                    'status': 'RUNNING',
+                    'worker': worker,
+                    'args': task.get('args', []),
+                    'kwargs': task.get('kwargs', {}),
+                })
+        
+        # Przetwórz zaplanowane zadania
+        for worker, tasks in scheduled_tasks.items():
+            for task in tasks:
+                all_statuses.append({
+                    'task_id': task['request']['id'],
+                    'task_name': task['request']['task'],
+                    'status': 'PENDING',
+                    'worker': worker,
+                    'eta': task.get('eta'),
+                })
+        
+        return all_statuses
+        
+    except Exception as e:
+        logger.error(f"Error getting Celery status: {e}")
+        return []
 
 
-@router.get("/status/{operation_id}", response_model=SyncStatus)
-async def get_operation_status(operation_id: str = Path(..., description="ID operacji synchronizacji")):
-    """Pobiera status konkretnej operacji synchronizacji."""
-    if operation_id not in running_operations:
-        raise HTTPException(status_code=404, detail="Operacja nie została znaleziona")
-    
-    operation_data = running_operations[operation_id]
-    duration = None
-    if operation_data.get("end_time"):
-        duration = str(operation_data["end_time"] - operation_data["start_time"])
-    
-    return SyncStatus(
-        operation_id=operation_id,
-        operation_type=operation_data["type"],
-        status=operation_data["status"],
-        start_time=operation_data["start_time"],
-        end_time=operation_data.get("end_time"),
-        duration=duration,
-        error=operation_data.get("error")
-    )
+@router.get("/status/{task_id}", response_model=Dict[str, Any])
+async def get_operation_status(task_id: str = Path(..., description="ID zadania Celery")):
+    """Pobiera status konkretnego zadania Celery."""
+    try:
+        status = get_task_status(task_id)
+        if status.get('status') == 'ERROR' and 'error' in status:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Task not found: {str(e)}")
 
 
 @router.get("/workflow", response_model=WorkflowStatus)
@@ -246,26 +223,24 @@ async def get_workflow_status(sync_controller: SyncController = Depends(get_sync
 # ===================
 
 @router.post("/all", response_model=SyncResponse)
-async def sync_all(
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
-):
+async def sync_all(test_mode: bool = Query(default=False, description="Tryb testowy")):
     """Uruchamia pełny workflow synchronizacji systemu."""
-    operation_id = generate_operation_id("sync_all")
-    
-    # Uruchom w tle
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_all",
-        sync_controller.run_full_sync_workflow
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Pełna synchronizacja rozpoczęta (ID: {operation_id})",
-        details={"operation_id": operation_id, "status_endpoint": f"/status/{operation_id}"}
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_all_task.delay(test_mode=test_mode)
+        
+        return SyncResponse(
+            success=True,
+            message=f"Pełna synchronizacja rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_all task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start synchronization: {str(e)}")
 
 
 # ===================
@@ -273,112 +248,114 @@ async def sync_all(
 # ===================
 
 @router.post("/exchanges", response_model=SyncResponse)
-async def sync_exchanges(
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
-):
+async def sync_exchanges(test_mode: bool = Query(default=False, description="Tryb testowy")):
     """Synchronizacja assetów z giełd."""
-    operation_id = generate_operation_id("sync_exchanges")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_exchanges",
-        sync_controller._run_exchanges_sync
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja giełd rozpoczęta (ID: {operation_id})",
-        details={"operation_id": operation_id}
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_exchanges_task.delay(test_mode=test_mode)
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja giełd rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_exchanges task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start exchanges sync: {str(e)}")
 
 
 @router.post("/analysis/technical", response_model=SyncResponse)
 async def sync_technical_analysis(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja analiz technicznych."""
-    operation_id = generate_operation_id("sync_technical_analysis")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_technical_analysis",
-        sync_controller._run_technical_analysis_sync,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja analiz technicznych rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_technical_analysis_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja analiz technicznych rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_technical_analysis task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start technical analysis sync: {str(e)}")
 
 
 @router.post("/analysis/fundamental", response_model=SyncResponse)
 async def sync_fundamental_analysis(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja analiz fundamentalnych."""
-    operation_id = generate_operation_id("sync_fundamental_analysis")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_fundamental_analysis",
-        sync_controller._run_fundamental_analysis_sync,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja analiz fundamentalnych rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_fundamental_analysis_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja analiz fundamentalnych rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_fundamental_analysis task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start fundamental analysis sync: {str(e)}")
 
 
 @router.post("/analysis", response_model=SyncResponse)
 async def sync_analysis_parallel(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Równoległa synchronizacja analiz (techniczna + fundamentalna równolegle)."""
-    operation_id = generate_operation_id("sync_analysis_parallel")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_analysis_parallel",
-        sync_controller._run_parallel_analysis,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Równoległa synchronizacja analiz rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_analysis_parallel_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Równoległa synchronizacja analiz rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_analysis_parallel task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start parallel analysis sync: {str(e)}")
 
 
 # ===================
@@ -388,117 +365,121 @@ async def sync_analysis_parallel(
 @router.post("/llm/interpretation/technical", response_model=SyncResponse)
 async def sync_llm_technical_interpretation(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja interpretacji LLM analiz technicznych."""
-    operation_id = generate_operation_id("sync_llm_technical")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_llm_technical",
-        sync_controller._run_llm_technical_interpretation_sync,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja interpretacji LLM technicznych rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_llm_technical_interpretation_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja interpretacji LLM technicznych rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_llm_technical_interpretation task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start LLM technical interpretation: {str(e)}")
 
 
 @router.post("/llm/interpretation/fundamental", response_model=SyncResponse)
 async def sync_llm_fundamental_interpretation(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja interpretacji LLM analiz fundamentalnych."""
-    operation_id = generate_operation_id("sync_llm_fundamental")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_llm_fundamental",
-        sync_controller._run_llm_fundamental_interpretation_sync,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja interpretacji LLM fundamentalnych rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_llm_fundamental_interpretation_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja interpretacji LLM fundamentalnych rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_llm_fundamental_interpretation task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start LLM fundamental interpretation: {str(e)}")
 
 
 @router.post("/llm/interpretation", response_model=SyncResponse)
 async def sync_llm_analysis_parallel(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Równoległa synchronizacja interpretacji LLM (fundamentalne + techniczne równolegle)."""
-    operation_id = generate_operation_id("sync_llm_analysis_parallel")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_llm_analysis_parallel",
-        sync_controller._run_parallel_llm_interpretations,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Równoległa synchronizacja interpretacji LLM rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_llm_analysis_parallel_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Równoległa synchronizacja interpretacji LLM rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_llm_analysis_parallel task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start LLM parallel interpretation: {str(e)}")
 
 
 @router.post("/llm/decision/general", response_model=SyncResponse)
 async def sync_llm_general_decision(
     params: SyncParameters,
-    background_tasks: BackgroundTasks,
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja generalnych decyzji LLM."""
-    operation_id = generate_operation_id("sync_llm_general")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_llm_general",
-        sync_controller._run_llm_general_decision_sync,
-        limit=params.limit,
-        offset=params.offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja generalnych decyzji LLM rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": params.limit,
-            "offset": params.offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_llm_general_decision_task.delay(
+            limit=params.limit,
+            offset=params.offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja generalnych decyzji LLM rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": params.limit,
+                "offset": params.offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_llm_general_decision task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start LLM general decision: {str(e)}")
 
 
 # ===================
@@ -507,62 +488,64 @@ async def sync_llm_general_decision(
 
 @router.post("/transactions/wallets", response_model=SyncResponse)
 async def sync_transactions_wallets(
-    background_tasks: BackgroundTasks,
     phase: str = Query(default="pre", description="Faza synchronizacji portfeli (pre/post)"),
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja portfeli/walletów z giełd."""
     if phase not in ["pre", "post"]:
         raise HTTPException(status_code=400, detail="Parametr phase musi być 'pre' lub 'post'")
     
-    operation_id = generate_operation_id(f"sync_transactions_wallets_{phase}")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        f"sync_transactions_wallets_{phase}",
-        sync_controller._run_transactions_wallets_sync,
-        phase=phase
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja portfeli ({phase}) rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "phase": phase
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_transactions_wallets_task.delay(
+            phase=phase,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja portfeli ({phase}) rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "phase": phase,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_transactions_wallets task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start wallets sync: {str(e)}")
 
 
 @router.post("/transactions", response_model=SyncResponse)
 async def sync_transactions(
-    background_tasks: BackgroundTasks,
     limit: int = Query(default=500, ge=1, le=10000, description="Limit transakcji do przetworzenia"),
     offset: int = Query(default=0, ge=0, description="Offset transakcji"),
-    sync_controller: SyncController = Depends(get_sync_controller)
+    test_mode: bool = Query(default=False, description="Tryb testowy")
 ):
     """Synchronizacja transakcji."""
-    operation_id = generate_operation_id("sync_transactions")
-    
-    background_tasks.add_task(
-        run_sync_operation_background,
-        operation_id,
-        "sync_transactions",
-        sync_controller._run_transactions_sync,
-        limit=limit,
-        offset=offset
-    )
-    
-    return SyncResponse(
-        success=True,
-        message=f"Synchronizacja transakcji rozpoczęta (ID: {operation_id})",
-        details={
-            "operation_id": operation_id,
-            "limit": limit,
-            "offset": offset
-        }
-    )
+    try:
+        # Uruchom zadanie Celery
+        task = sync_transactions_task.delay(
+            limit=limit,
+            offset=offset,
+            test_mode=test_mode
+        )
+        
+        return SyncResponse(
+            success=True,
+            message=f"Synchronizacja transakcji rozpoczęta (Task ID: {task.id})",
+            details={
+                "task_id": task.id,
+                "status_endpoint": f"/sync/status/{task.id}",
+                "limit": limit,
+                "offset": offset,
+                "test_mode": test_mode
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error starting sync_transactions task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start transactions sync: {str(e)}")
 
 
 # ===================
