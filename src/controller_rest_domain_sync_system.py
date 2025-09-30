@@ -42,6 +42,13 @@ from .celery_tasks.transaction_tasks import (
 )
 from .controller_rest_celery_worker import get_task_status, get_celery_app
 
+# Import Health Checkers dla Celery
+from .health_checkers import (
+    BrokerHealthCheckerFactory,
+    ResultBackendHealthCheckerFactory
+)
+from .config import config
+
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
@@ -108,6 +115,9 @@ class SyncParameters(BaseModel):
 
 # Singleton dla SyncController
 sync_controller: Optional[SyncController] = None
+
+# Globalne śledzenie aktywnych operacji
+running_operations: Dict[str, Dict[str, Any]] = {}
 
 
 def get_sync_controller(test_mode: bool = False) -> SyncController:
@@ -589,12 +599,25 @@ async def health_check(sync_controller: SyncController = Depends(get_sync_contro
         # Check Database
         try:
             if hasattr(sync_controller, 'db') and sync_controller.db:
-                # Spróbuj zainicjalizować bazę
-                await sync_controller._init_database()
-                components["Database"] = HealthCheckResult(
-                    healthy=True,
-                    message="Połączenie OK"
-                )
+                # Użyj nowej metody test_connection()
+                test_result = await sync_controller.db.test_connection()
+                if test_result.get('test_passed', False):
+                    components["Database"] = HealthCheckResult(
+                        healthy=True,
+                        message="Połączenie OK",
+                        details={
+                            "connection": test_result.get('connection'),
+                            "tables_count": test_result.get('tables_count', 0),
+                            "database_version": test_result.get('database_version', 'Unknown')[:50] + '...' if len(test_result.get('database_version', '')) > 50 else test_result.get('database_version', 'Unknown')
+                        }
+                    )
+                else:
+                    components["Database"] = HealthCheckResult(
+                        healthy=False,
+                        message="Test połączenia nieudany",
+                        error=test_result.get('error', 'Unknown error')
+                    )
+                    overall_healthy = False
             else:
                 components["Database"] = HealthCheckResult(
                     healthy=False,
@@ -610,6 +633,68 @@ async def health_check(sync_controller: SyncController = Depends(get_sync_contro
             )
             overall_healthy = False
         
+        # Check Celery Broker
+        try:
+            broker_url = config.celery_broker_url
+            if broker_url:
+                broker_checker = BrokerHealthCheckerFactory.create_checker(broker_url)
+                broker_result = await broker_checker.check_health()
+                
+                components["CeleryBroker"] = HealthCheckResult(
+                    healthy=broker_result.get("healthy", False),
+                    message=broker_result.get("message", "Unknown"),
+                    details=broker_result.get("details"),
+                    error=broker_result.get("error")
+                )
+                
+                if not broker_result.get("healthy", False):
+                    overall_healthy = False
+            else:
+                components["CeleryBroker"] = HealthCheckResult(
+                    healthy=False,
+                    message="Nie skonfigurowany",
+                    error="CELERY_BROKER_URL nie jest ustawiony"
+                )
+                overall_healthy = False
+        except Exception as e:
+            components["CeleryBroker"] = HealthCheckResult(
+                healthy=False,
+                message="Błąd sprawdzania brokera",
+                error=str(e)
+            )
+            overall_healthy = False
+        
+        # Check Celery Result Backend  
+        try:
+            backend_url = config.celery_result_backend
+            if backend_url:
+                backend_checker = ResultBackendHealthCheckerFactory.create_checker(backend_url)
+                backend_result = await backend_checker.check_health()
+                
+                components["CeleryResultBackend"] = HealthCheckResult(
+                    healthy=backend_result.get("healthy", False),
+                    message=backend_result.get("message", "Unknown"),
+                    details=backend_result.get("details"),
+                    error=backend_result.get("error")
+                )
+                
+                if not backend_result.get("healthy", False):
+                    overall_healthy = False
+            else:
+                components["CeleryResultBackend"] = HealthCheckResult(
+                    healthy=False,
+                    message="Nie skonfigurowany",
+                    error="CELERY_RESULT_BACKEND nie jest ustawiony"
+                )
+                overall_healthy = False
+        except Exception as e:
+            components["CeleryResultBackend"] = HealthCheckResult(
+                healthy=False,
+                message="Błąd sprawdzania result backend",
+                error=str(e)
+            )
+            overall_healthy = False
+
         # Check running operations
         components["Operations"] = HealthCheckResult(
             healthy=True,
