@@ -62,16 +62,24 @@ def create_celery_app() -> Celery:
         worker_prefetch_multiplier=1,
         task_acks_late=True,
         worker_max_tasks_per_child=100,
+        worker_disable_rate_limits=True,  # Wyłącz rate limiting dla długotrwałych zadań
         
         # Task execution
-        task_soft_time_limit=1800,  # 30 minut soft limit
-        task_time_limit=3600,       # 60 minut hard limit
+        task_soft_time_limit=None,  # Brak soft limit (unlimited)
+        task_time_limit=None,       # Brak hard limit (unlimited)
         task_track_started=True,
         task_reject_on_worker_lost=True,
         
         # Results
         result_expires=3600,  # 1 godzina
         result_persistent=True,
+        
+        # Broker transport options (dla długotrwałych zadań)
+        broker_transport_options={
+            'visibility_timeout': 0,  # Brak timeout dla visibility (unlimited)
+            'fanout_prefix': True,
+            'fanout_patterns': True
+        },
         
         # Monitoring
         worker_send_task_events=True,
@@ -80,7 +88,7 @@ def create_celery_app() -> Celery:
         # Error handling
         task_annotations={
             '*': {
-                'rate_limit': '10/s',
+                'rate_limit': None,  # Brak rate limiting dla długotrwałych zadań
                 'retry_policy': {
                     'max_retries': 3,
                     'interval_start': 0,

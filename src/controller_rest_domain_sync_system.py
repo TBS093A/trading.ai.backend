@@ -49,6 +49,9 @@ from .health_checkers import (
 )
 from .config import config
 
+# Import API Facade dla storage health checks
+from .api.api_facade import ApiFacade
+
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
@@ -691,6 +694,48 @@ async def health_check(sync_controller: SyncController = Depends(get_sync_contro
             components["CeleryResultBackend"] = HealthCheckResult(
                 healthy=False,
                 message="Błąd sprawdzania result backend",
+                error=str(e)
+            )
+            overall_healthy = False
+
+        # Check Storage APIs
+        try:
+            api_facade = ApiFacade()
+            storage_apis = api_facade.get_fabric().get_storage_apis()
+            
+            storage_results = {}
+            for storage_api in storage_apis:
+                storage_name = f"{storage_api.STORAGE}Storage"
+                try:
+                    storage_result = await storage_api.health_check()
+                    storage_results[storage_name] = storage_result
+                    
+                    components[storage_name] = HealthCheckResult(
+                        healthy=storage_result.get("healthy", False),
+                        message=storage_result.get("message", "Unknown"),
+                        details=storage_result.get("details"),
+                        error=storage_result.get("error")
+                    )
+                    
+                    if not storage_result.get("healthy", False):
+                        overall_healthy = False
+                        
+                except Exception as e:
+                    logger.error(f"Błąd podczas sprawdzania {storage_name}: {e}")
+                    components[storage_name] = HealthCheckResult(
+                        healthy=False,
+                        message=f"Błąd sprawdzania {storage_name}",
+                        error=str(e)
+                    )
+                    overall_healthy = False
+            
+            logger.info(f"Sprawdzono {len(storage_apis)} storage APIs: {list(storage_results.keys())}")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas inicjalizacji sprawdzania storage: {e}")
+            components["StorageAPIs"] = HealthCheckResult(
+                healthy=False,
+                message="Błąd inicjalizacji sprawdzania storage",
                 error=str(e)
             )
             overall_healthy = False
