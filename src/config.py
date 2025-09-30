@@ -93,8 +93,8 @@ class Config:
         self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
 
         # Celery konfiguracja
-        self.celery_broker_url = os.getenv("CELERY_BROKER_URL", "pyamqp://trading_bot_ai_rabbit:trading_bot_ai_rabbit_pass@localhost:5672//")
-        self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
+        self.celery_broker_url = os.getenv("CELERY_BROKER_URL")
+        self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND")
 
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
