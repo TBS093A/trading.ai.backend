@@ -261,3 +261,176 @@ class MinIOStorage(AbstractStorage):
         except Exception as e:
             logger.error(f"Błąd podczas generowania URL dla pliku {file_name}: {str(e)}")
             return None
+
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Sprawdza stan zdrowotny MinIO storage.
+        
+        Returns:
+            Dict[str, Any]: Wynik sprawdzenia MinIO storage
+        """
+        try:
+            # Sprawdź czy storage jest włączony
+            if not self.is_enabled:
+                return {
+                    "healthy": False,
+                    "storage_type": self.STORAGE,
+                    "message": "MinIO storage jest wyłączony",
+                    "details": {
+                        "is_enabled": self.is_enabled,
+                        "reason": "Storage disabled in configuration"
+                    },
+                    "error": None
+                }
+            
+            # Sprawdź czy klient jest zainicjalizowany
+            if not self.client:
+                return {
+                    "healthy": False,
+                    "storage_type": self.STORAGE,
+                    "message": "MinIO client nie jest zainicjalizowany",
+                    "details": {
+                        "is_enabled": self.is_enabled,
+                        "client_initialized": False
+                    },
+                    "error": "Missing configuration parameters"
+                }
+            
+            # Test połączenia z MinIO - sprawdź czy bucket istnieje
+            bucket_exists = self.client.bucket_exists(self.bucket_name)
+            
+            if not bucket_exists:
+                # Spróbuj utworzyć bucket
+                self.client.make_bucket(self.bucket_name)
+                logger.info(f"Utworzono bucket: {self.bucket_name}")
+                bucket_created = True
+            else:
+                bucket_created = False
+            
+            # Test operacji - spróbuj wykonać test upload/download/delete
+            test_operations = await self._test_minio_operations()
+            
+            # Pobierz informacje o bucket
+            bucket_info = self._get_bucket_info()
+            
+            return {
+                "healthy": True,
+                "storage_type": self.STORAGE,
+                "message": "MinIO storage dostępny i funkcjonalny",
+                "details": {
+                    "is_enabled": self.is_enabled,
+                    "client_initialized": True,
+                    "endpoint": self.endpoint,
+                    "bucket_name": self.bucket_name,
+                    "bucket_exists": True,
+                    "bucket_created": bucket_created,
+                    "secure_connection": self.secure,
+                    "test_operations": test_operations,
+                    "bucket_info": bucket_info
+                },
+                "error": None
+            }
+            
+        except S3Error as e:
+            logger.error(f"Błąd S3 podczas sprawdzania MinIO: {e}")
+            return {
+                "healthy": False,
+                "storage_type": self.STORAGE,
+                "message": "Błąd S3 podczas sprawdzania MinIO",
+                "details": {
+                    "is_enabled": self.is_enabled,
+                    "endpoint": self.endpoint,
+                    "bucket_name": self.bucket_name,
+                    "error_code": getattr(e, 'code', 'Unknown')
+                },
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Błąd podczas sprawdzania MinIO storage: {e}")
+            return {
+                "healthy": False,
+                "storage_type": self.STORAGE,
+                "message": "Błąd sprawdzania MinIO storage",
+                "details": {
+                    "is_enabled": self.is_enabled,
+                    "client_initialized": self.client is not None
+                },
+                "error": str(e)
+            }
+
+    async def _test_minio_operations(self) -> Dict[str, str]:
+        """
+        Testuje podstawowe operacje MinIO (upload/download/delete).
+        
+        Returns:
+            Dict[str, str]: Wyniki testów operacji
+        """
+        operations_results = {}
+        test_file_name = "health_check_test.txt"
+        test_content = "MinIO health check test content"
+        test_base64 = base64.b64encode(test_content.encode()).decode()
+        
+        try:
+            # Test upload
+            upload_result = self.upload_file(test_file_name, test_base64)
+            operations_results["upload"] = "OK" if upload_result else "FAILED"
+            
+            if upload_result:
+                # Test download
+                downloaded_content = self.download_file(test_file_name)
+                if downloaded_content and downloaded_content == test_base64:
+                    operations_results["download"] = "OK"
+                else:
+                    operations_results["download"] = "FAILED"
+                
+                # Test delete (cleanup)
+                delete_result = self.delete_file(test_file_name)
+                operations_results["delete"] = "OK" if delete_result else "FAILED"
+            else:
+                operations_results["download"] = "SKIPPED"
+                operations_results["delete"] = "SKIPPED"
+                
+        except Exception as e:
+            operations_results["error"] = str(e)
+        
+        return operations_results
+
+    def _get_bucket_info(self) -> Dict[str, Any]:
+        """
+        Pobiera informacje o bucket MinIO.
+        
+        Returns:
+            Dict[str, Any]: Informacje o bucket
+        """
+        try:
+            # Pobierz podstawowe informacje o obiektach w bucket
+            objects_count = 0
+            total_size = 0
+            
+            # Policz obiekty (ograniczamy do 100 dla performance)
+            objects = self.client.list_objects(self.bucket_name, recursive=True, max_keys=100)
+            for obj in objects:
+                objects_count += 1
+                total_size += obj.size
+                
+            return {
+                "objects_count": objects_count if objects_count < 100 else "100+",
+                "total_size_bytes": total_size,
+                "total_size_human": self._format_bytes(total_size)
+            }
+            
+        except Exception as e:
+            logger.warning(f"Nie można pobrać informacji o bucket: {e}")
+            return {
+                "objects_count": "unknown",
+                "total_size_bytes": 0,
+                "error": str(e)
+            }
+
+    def _format_bytes(self, bytes_size: int) -> str:
+        """Formatuje rozmiar w bytach na human-readable format."""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if bytes_size < 1024.0:
+                return f"{bytes_size:.1f} {unit}"
+            bytes_size /= 1024.0
+        return f"{bytes_size:.1f} PB"

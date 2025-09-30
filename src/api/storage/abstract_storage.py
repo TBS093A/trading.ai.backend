@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, Dict, Any
+from abc import ABC, abstractmethod
 
-class AbstractStorage:
+class AbstractStorage(ABC):
 
     STORAGE = "ABSTRACT"
 
@@ -41,5 +42,20 @@ class AbstractStorage:
             
         Returns:
             bool: True jeśli usunięcie się powiodło, False w przeciwnym razie
+        """
+        pass
+
+    @abstractmethod
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Sprawdza stan zdrowotny storage'u.
+        
+        Returns:
+            Dict[str, Any]: Wynik sprawdzenia z polami:
+                - healthy: bool - czy storage jest zdrowy
+                - storage_type: str - typ storage (MINIO, LOCAL)
+                - message: str - wiadomość opisująca stan
+                - details: Optional[Dict[str, Any]] - dodatkowe szczegóły
+                - error: Optional[str] - błąd jeśli wystąpił
         """
         pass
