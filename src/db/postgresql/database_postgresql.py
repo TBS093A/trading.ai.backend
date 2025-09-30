@@ -374,3 +374,46 @@ class DatabasePostgreSQL:
         await self.drop_all_tables()
         await self._create_all_tables()
         logger.info("Reset bazy danych zakończony.")
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """
+        Testuje połączenie z bazą danych i zwraca informacje o wszystkich tabelach.
+        
+        Returns:
+            Dict[str, Any]: Informacje o połączeniu i listę wszystkich tabel w bazie
+        """
+        try:
+            pool = await self.get_db_pool()
+            
+            async with pool.acquire() as connection:
+                # Zapytanie testowe - zwróć wszystkie tabele w schemacie public
+                query = """
+                SELECT table_name, table_type 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                ORDER BY table_name
+                """
+                
+                rows = await connection.fetch(query)
+                tables = [{"name": row["table_name"], "type": row["table_type"]} for row in rows]
+                
+                # Dodatkowe informacje o bazie
+                version_query = "SELECT version()"
+                version_row = await connection.fetchrow(version_query)
+                db_version = version_row["version"] if version_row else "Unknown"
+                
+                return {
+                    "connection": "OK",
+                    "database_version": db_version,
+                    "tables_count": len(tables),
+                    "tables": tables,
+                    "test_passed": True
+                }
+                
+        except Exception as e:
+            logger.error(f"Test połączenia z bazą danych nieudany: {e}")
+            return {
+                "connection": "FAILED",
+                "error": str(e),
+                "test_passed": False
+            }
