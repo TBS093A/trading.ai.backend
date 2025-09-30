@@ -225,6 +225,72 @@ async def get_operation_status(task_id: str = Path(..., description="ID zadania 
         raise HTTPException(status_code=404, detail=f"Task not found: {str(e)}")
 
 
+@router.delete("/status/{task_id}", response_model=SyncResponse)
+async def cancel_operation(task_id: str = Path(..., description="ID zadania Celery do anulowania")):
+    """
+    Anuluje wykonanie zadania Celery.
+    
+    Endpoint umożliwia anulowanie długotrwałych operacji synchronizacji
+    na podstawie ID zadania pobranego z get_sync_status.
+    """
+    try:
+        celery_app = get_celery_app()
+        
+        # Sprawdź czy zadanie istnieje
+        task_status = get_task_status(task_id)
+        current_status = task_status.get('status', 'UNKNOWN')
+        
+        # Sprawdź czy zadanie można anulować
+        if current_status in ['SUCCESS', 'FAILURE', 'REVOKED']:
+            return SyncResponse(
+                success=False,
+                message=f"Nie można anulować zadania - status: {current_status}",
+                details={
+                    "task_id": task_id,
+                    "current_status": current_status,
+                    "reason": "Task already completed or revoked"
+                }
+            )
+        
+        # Anuluj zadanie z terminate=True (zatrzyma wykonywanie)
+        celery_app.control.revoke(
+            task_id, 
+            terminate=True,  # Natychmiast zatrzymaj wykonywanie
+            signal='SIGTERM'  # Używaj SIGTERM zamiast SIGKILL dla graceful shutdown
+        )
+        
+        # Dodatkowe anulowanie przez AsyncResult
+        from celery.result import AsyncResult
+        result = AsyncResult(task_id, app=celery_app)
+        result.revoke(terminate=True)
+        
+        logger.info(f"🚫 Anulowano zadanie Celery: {task_id}")
+        
+        # Usuń zadanie z globalnego running_operations jeśli istnieje
+        if task_id in running_operations:
+            running_operations[task_id]["status"] = "cancelled"
+            running_operations[task_id]["end_time"] = datetime.now()
+            logger.info(f"🗑️ Usunięto zadanie z running_operations: {task_id}")
+        
+        return SyncResponse(
+            success=True,
+            message=f"Zadanie zostało anulowane: {task_id}",
+            details={
+                "task_id": task_id,
+                "previous_status": current_status,
+                "action": "revoked_with_terminate",
+                "cancelled_at": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Błąd podczas anulowania zadania {task_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Nie udało się anulować zadania: {str(e)}"
+        )
+
+
 @router.get("/workflow", response_model=WorkflowStatus)
 async def get_workflow_status(sync_controller: SyncController = Depends(get_sync_controller)):
     """Pobiera status workflow synchronizacji."""
