@@ -195,7 +195,9 @@ async def technical_analysis_info():
                 "by_asset": "GET /analysis/technical/asset/{asset_id} - Analizy dla assetu",
                 "by_asset_interval": "GET /analysis/technical/asset/{asset_id}/interval/{interval} - Analizy dla assetu i interwału",
                 "latest_by_asset": "GET /analysis/technical/asset/{asset_id}/latest - Najnowsza analiza dla assetu",
-                "by_timestamp_range": "GET /analysis/technical/timestamp/range - Analizy z zakresu czasowego",
+                "by_timestamp_range": "GET /analysis/technical/timestamp/range - Analizy z zakresu czasowego (+ opcjonalne asset_id, interval)",
+                "by_timestamp_range_asset": "GET /analysis/technical/timestamp/range/asset/{asset_id} - Analizy z zakresu dla assetu",
+                "by_timestamp_range_asset_interval": "GET /analysis/technical/timestamp/range/asset/{asset_id}/interval/{interval} - Analizy z zakresu dla assetu i interwału",
                 "complete_patterns": "GET /analysis/technical/patterns/complete/{asset_id} - Kompletne wzorce",
                 "incomplete_patterns": "GET /analysis/technical/patterns/incomplete/{asset_id} - Niekompletne wzorce"
             },
@@ -521,6 +523,140 @@ async def get_technical_analyses_by_timestamp_range(
         
     except Exception as e:
         logger.error(f"Error getting technical analyses by timestamp range: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get technical analyses: {str(e)}")
+
+
+@router.get("/timestamp/range/asset/{asset_id}", response_model=TechnicalAnalysisListResponse)
+async def get_technical_analyses_by_timestamp_range_and_asset(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+    start_timestamp: int = Query(..., description="Timestamp początkowy"),
+    end_timestamp: int = Query(..., description="Timestamp końcowy"),
+    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
+    offset: int = Query(default=0, ge=0, description="Offset wyników")
+):
+    """
+    Pobiera analizy techniczne z zakresu czasowego dla konkretnego assetu.
+    
+    Dedykowany endpoint dla wygodnego filtrowania po zakresie czasowym i asset.
+    
+    Args:
+        asset_id: ID assetu
+        start_timestamp: Timestamp początkowy (x_point_timestamp)
+        end_timestamp: Timestamp końcowy (x_point_timestamp)
+        limit: Maksymalna liczba wyników
+        offset: Przesunięcie wyników
+        
+    Returns:
+        TechnicalAnalysisListResponse: Lista analiz z zakresu dla assetu
+    """
+    try:
+        db = await get_db()
+        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
+        
+        analyses = await ta_table.get_by_timestamp_range_and_asset_id(
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            asset_id=asset_id,
+            limit=limit + 1,
+            offset=offset
+        )
+        
+        has_more = len(analyses) > limit
+        page_analyses = analyses[:limit]
+        
+        analysis_responses = [
+            TechnicalAnalysisResponse(
+                id=a['id'],
+                asset_id=a['asset_id'],
+                asset=a.get('asset'),
+                quote=a.get('quote'),
+                interval=a.get('interval'),
+                x_point_timestamp=a.get('x_point_timestamp'),
+                a_point_timestamp=a.get('a_point_timestamp'),
+                b_point_timestamp=a.get('b_point_timestamp'),
+                c_point_timestamp=a.get('c_point_timestamp'),
+                d_point_timestamp=a.get('d_point_timestamp'),
+                ta_object_json=a['ta_object_json']
+            )
+            for a in page_analyses
+        ]
+        
+        return TechnicalAnalysisListResponse(
+            analyses=analysis_responses,
+            pagination=PaginationInfo(limit=limit, offset=offset, has_more=has_more)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting technical analyses by timestamp range and asset {asset_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get technical analyses: {str(e)}")
+
+
+@router.get("/timestamp/range/asset/{asset_id}/interval/{interval}", response_model=TechnicalAnalysisListResponse)
+async def get_technical_analyses_by_timestamp_range_asset_and_interval(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+    interval: str = Path(..., description="Interwał czasowy (np. 1h, 4h, 1d)"),
+    start_timestamp: int = Query(..., description="Timestamp początkowy"),
+    end_timestamp: int = Query(..., description="Timestamp końcowy"),
+    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
+    offset: int = Query(default=0, ge=0, description="Offset wyników")
+):
+    """
+    Pobiera analizy techniczne z zakresu czasowego dla assetu i interwału.
+    
+    Dedykowany endpoint dla wygodnego filtrowania po zakresie czasowym, asset i interwale.
+    Rozszerzona wersja asset/{asset_id}/interval/{interval} z filtrowaniem po czasie.
+    
+    Args:
+        asset_id: ID assetu
+        interval: Interwał czasowy
+        start_timestamp: Timestamp początkowy (x_point_timestamp)
+        end_timestamp: Timestamp końcowy (x_point_timestamp)
+        limit: Maksymalna liczba wyników
+        offset: Przesunięcie wyników
+        
+    Returns:
+        TechnicalAnalysisListResponse: Lista analiz z zakresu dla assetu i interwału
+    """
+    try:
+        db = await get_db()
+        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
+        
+        analyses = await ta_table.get_by_timestamp_range_and_asset_id_and_interval(
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            asset_id=asset_id,
+            interval=interval,
+            limit=limit + 1,
+            offset=offset
+        )
+        
+        has_more = len(analyses) > limit
+        page_analyses = analyses[:limit]
+        
+        analysis_responses = [
+            TechnicalAnalysisResponse(
+                id=a['id'],
+                asset_id=a['asset_id'],
+                asset=a.get('asset'),
+                quote=a.get('quote'),
+                interval=a.get('interval'),
+                x_point_timestamp=a.get('x_point_timestamp'),
+                a_point_timestamp=a.get('a_point_timestamp'),
+                b_point_timestamp=a.get('b_point_timestamp'),
+                c_point_timestamp=a.get('c_point_timestamp'),
+                d_point_timestamp=a.get('d_point_timestamp'),
+                ta_object_json=a['ta_object_json']
+            )
+            for a in page_analyses
+        ]
+        
+        return TechnicalAnalysisListResponse(
+            analyses=analysis_responses,
+            pagination=PaginationInfo(limit=limit, offset=offset, has_more=has_more)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting technical analyses by timestamp range, asset {asset_id} and interval {interval}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get technical analyses: {str(e)}")
 
 
