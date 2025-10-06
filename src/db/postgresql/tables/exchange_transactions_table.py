@@ -513,3 +513,26 @@ class ExchangeTransactionsTable(AbstractTable):
             ORDER BY et.created_at DESC
             LIMIT $2 OFFSET $3
         """, sell_strategy_id, limit, offset)
+    
+    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: int, end_timestamp: int, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera transakcje z określonego zakresu czasowego dla konkretnego assetu."""
+        return await self.fetch_all("""
+            SELECT et.id, et.exchange_id, et.asset_id, et.exchange_account_state_id, et.general_interpretation_id,
+                   et.buy_strategy_id, et.sell_strategy_id, et.type, et.quote_amount, et.asset_amount, et.created_at,
+                   e.name as exchange_name, e.display_name as exchange_display_name,
+                   a.asset, a.quote,
+                   eas.currency, eas.amount as account_amount, eas.type as account_type,
+                   bs.type as buy_strategy_type, bs.movement_amount as buy_movement_amount, bs.is_percent as buy_is_percent,
+                   ss.type as sell_strategy_type, ss.movement_amount as sell_movement_amount, ss.is_percent as sell_is_percent,
+                   gi.title as interpretation_title, gi.content as interpretation_content
+            FROM exchange_transactions et
+            JOIN exchanges e ON et.exchange_id = e.id
+            JOIN assets a ON et.asset_id = a.id
+            JOIN exchange_account_state eas ON et.exchange_account_state_id = eas.id
+            LEFT JOIN exchange_account_state_buy_strategies bs ON et.buy_strategy_id = bs.id
+            LEFT JOIN exchange_account_state_sell_strategies ss ON et.sell_strategy_id = ss.id
+            LEFT JOIN general_interpretation gi ON et.general_interpretation_id = gi.id
+            WHERE et.created_at >= $1 AND et.created_at <= $2 AND et.asset_id = $3
+            ORDER BY et.created_at DESC
+            LIMIT $4 OFFSET $5
+        """, start_timestamp, end_timestamp, asset_id, limit, offset)
