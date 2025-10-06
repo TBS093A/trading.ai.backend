@@ -165,7 +165,8 @@ async def fundamental_analysis_info():
                 "by_asset": "GET /analysis/fundamental/asset/{asset_id} - Analizy dla assetu",
                 "by_service": "GET /analysis/fundamental/service/{service} - Analizy z serwisu",
                 "by_timestamp": "GET /analysis/fundamental/timestamp/{timestamp} - Analizy z timestamp",
-                "by_timestamp_range": "GET /analysis/fundamental/timestamp/range - Analizy z zakresu czasowego",
+                "by_timestamp_range": "GET /analysis/fundamental/timestamp/range - Analizy z zakresu czasowego (+ opcjonalne asset_id, service)",
+                "by_timestamp_range_asset": "GET /analysis/fundamental/timestamp/range/asset/{asset_id} - Analizy z zakresu dla assetu",
                 "by_timestamp_service": "GET /analysis/fundamental/timestamp/{timestamp}/service/{service} - Analizy po timestamp i serwisie",
                 "latest_by_asset": "GET /analysis/fundamental/asset/{asset_id}/latest - Najnowsza analiza dla assetu",
                 "without_interpretation": "GET /analysis/fundamental/without-interpretation - Analizy bez interpretacji LLM"
@@ -582,6 +583,69 @@ async def get_fundamental_analyses_by_timestamp_range(
         
     except Exception as e:
         logger.error(f"Error getting fundamental analyses by timestamp range: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get fundamental analyses: {str(e)}")
+
+
+@router.get("/timestamp/range/asset/{asset_id}", response_model=FundamentalAnalysisListResponse)
+async def get_fundamental_analyses_by_timestamp_range_and_asset(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+    start_timestamp: int = Query(..., description="Timestamp początkowy"),
+    end_timestamp: int = Query(..., description="Timestamp końcowy"),
+    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
+    offset: int = Query(default=0, ge=0, description="Offset wyników")
+):
+    """
+    Pobiera analizy fundamentalne z zakresu czasowego dla konkretnego assetu.
+    
+    Dedykowany endpoint dla wygodnego filtrowania po zakresie czasowym i asset.
+    
+    Args:
+        asset_id: ID assetu
+        start_timestamp: Timestamp początkowy
+        end_timestamp: Timestamp końcowy
+        limit: Maksymalna liczba wyników
+        offset: Przesunięcie wyników
+        
+    Returns:
+        FundamentalAnalysisListResponse: Lista analiz z zakresu dla assetu
+    """
+    try:
+        db = await get_db()
+        fa_table = db.get_factory().get_fundamental_analysis_table()
+        
+        analyses = await fa_table.get_by_timestamp_range_and_asset_id(
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            asset_id=asset_id,
+            limit=limit + 1,
+            offset=offset
+        )
+        
+        has_more = len(analyses) > limit
+        page_analyses = analyses[:limit]
+        
+        analysis_responses = [
+            FundamentalAnalysisResponse(
+                id=a['id'],
+                timestamp=a['timestamp'],
+                content=a['content'],
+                link=a.get('link'),
+                service=a['service'],
+                created_at=a.get('created_at'),
+                assets=a.get('assets'),
+                quotes=a.get('quotes'),
+                asset_ids=a.get('asset_ids')
+            )
+            for a in page_analyses
+        ]
+        
+        return FundamentalAnalysisListResponse(
+            analyses=analysis_responses,
+            pagination=PaginationInfo(limit=limit, offset=offset, has_more=has_more)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting fundamental analyses by timestamp range and asset {asset_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get fundamental analyses: {str(e)}")
 
 
