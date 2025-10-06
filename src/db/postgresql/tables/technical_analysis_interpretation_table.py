@@ -281,4 +281,16 @@ class TechnicalAnalysisInterpretationTable(AbstractTable):
         SELECT COUNT(*) FROM technical_analysis_interpretation WHERE asset_id = $1
         """, asset_id)
         
-        return result or 0 
+        return result or 0
+    
+    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: str, end_timestamp: str, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera interpretacje z określonego zakresu czasowego i asset."""
+        return await self.fetch_all("""
+        SELECT tai.id, tai.asset_id, tai.technical_analysis_id, tai.timestamp, tai.content, tai.created_at,
+               a.asset, a.quote, ta.x_point_timestamp
+        FROM technical_analysis_interpretation tai
+        JOIN assets a ON tai.asset_id = a.id
+        JOIN technical_analysis_harmonic_patterns ta ON tai.technical_analysis_id = ta.id
+        WHERE tai.timestamp >= $1 AND tai.timestamp <= $2 AND tai.asset_id = $3
+        ORDER BY tai.id DESC LIMIT $4 OFFSET $5
+        """, start_timestamp, end_timestamp, asset_id, limit, offset) 
