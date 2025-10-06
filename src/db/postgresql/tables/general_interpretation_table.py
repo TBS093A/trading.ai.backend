@@ -181,6 +181,20 @@ class GeneralInterpretationTable(AbstractTable):
         ORDER BY gi.id DESC LIMIT $3 OFFSET $4
         """, start_timestamp, end_timestamp, limit, offset)
     
+    async def get_by_timestamp_range_and_asset_id(self, start_timestamp: str, end_timestamp: str, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera ogólne interpretacje z określonego zakresu czasowego dla konkretnego assetu."""
+        return await self.fetch_all("""
+        SELECT gi.id, gi.asset_id, gi.technical_analysis_interpretation_id, 
+               gi.fundamental_analysis_interpretation_id, gi.investment_strategy_id, gi.timestamp, gi.content, gi.created_at,
+               a.asset, a.quote,
+               istr.name as investment_strategy_name, istr.description as investment_strategy_description
+        FROM general_interpretation gi
+        JOIN assets a ON gi.asset_id = a.id
+        LEFT JOIN investment_strategies istr ON gi.investment_strategy_id = istr.id
+        WHERE gi.timestamp >= $1 AND gi.timestamp <= $2 AND gi.asset_id = $3
+        ORDER BY gi.id DESC LIMIT $4 OFFSET $5
+        """, start_timestamp, end_timestamp, asset_id, limit, offset)
+    
     async def search_by_content(self, content: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje ogólne interpretacje po zawartości."""
         return await self.fetch_all("""
