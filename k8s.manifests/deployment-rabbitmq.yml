@@ -69,7 +69,7 @@ spec:
       volumes:
         - name: rabbitmq-storage
           persistentVolumeClaim:
-            claimName: pvc-rabbitmq
+            claimName: pvc-trading-ai-backend-rabbitmq
 
 ---
 # RabbitMQ Service (AMQP)
@@ -111,16 +111,37 @@ spec:
     app: rabbitmq
 
 ---
+# RabbitMQ PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-backend-rabbitmq
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /k8s/pv/trading-ai-backend-rabbitmq
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k8s.node.001
+---
 # RabbitMQ PersistentVolumeClaim
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: pvc-rabbitmq
+  name: pvc-trading-ai-backend-rabbitmq
   namespace: default
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 2Gi
-
+  volumeName: pv-trading-ai-backend-rabbitmq
