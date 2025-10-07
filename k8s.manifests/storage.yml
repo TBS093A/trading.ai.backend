@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv-pump-bot
+  name: pv-trading-ai-backend
 spec:
   capacity:
     storage: 2Gi
   accessModes:
     - ReadWriteMany
   hostPath:
-    path: /k8s/pv/pump-bot
+    path: /k8s/pv/trading-ai-backend
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -22,11 +22,11 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: pvc-pump-bot
+  name: pvc-trading-ai-backend
 spec:
   accessModes:
     - ReadWriteMany
   resources:
     requests:
       storage: 2Gi
-  volumeName: pv-pump-bot
+  volumeName: pv-trading-ai-backend
