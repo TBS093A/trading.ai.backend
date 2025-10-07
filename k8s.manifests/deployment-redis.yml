@@ -70,7 +70,7 @@ spec:
       volumes:
         - name: redis-storage
           persistentVolumeClaim:
-            claimName: pvc-redis
+            claimName: pvc-trading-ai-backend-redis
 
 ---
 # Redis Service
@@ -92,16 +92,37 @@ spec:
     app: redis
 
 ---
+# Redis PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-backend-redis
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /k8s/pv/trading-ai-backend-redis
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k8s.node.001
+---
 # Redis PersistentVolumeClaim
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: pvc-redis
-  namespace: default
+  name: pvc-trading-ai-backend-redis
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 1Gi
+  volumeName: pv-trading-ai-backend-redis
 
