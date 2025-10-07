@@ -1,0 +1,329 @@
+---
+# REST API Controller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-api-controller
+  namespace: default
+  labels:
+    app: rest-api-controller
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-api-controller
+  template:
+    metadata:
+      labels:
+        app: rest-api-controller
+        component: backend
+    spec:
+      initContainers:
+        - name: remove-old-files
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              find /app/ -mindepth 1 -delete;
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+        
+        - name: clone-repo
+          image: alpine/git
+          command:
+            - "sh"
+            - "-c"
+            - >
+              git clone <<trading.ai.backend.repo.url>> /app/;
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+        
+        - name: setup-environment
+          image: python:3.11.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              apt update -y;
+              apt upgrade -y;
+              apt install python3-pip -y;
+              pip3 install --upgrade pip setuptools;
+              pip3 install --target=/app/python-packages tox;
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+      
+      containers:
+        - name: rest-api-controller
+          image: python:3.11.0
+          ports:
+            - containerPort: 9090
+              name: http
+              protocol: TCP
+          command:
+            - /bin/bash
+            - -c
+            - |
+              cd /app;
+              python -m tox -e rest-api-controller;
+          env:
+            - name: PYTHONPATH
+              value: "/app/python-packages"
+            
+            # Database URL (budowane dynamicznie z istniejącego PostgreSQL na klastrze)
+            - name: DATABASE_URL
+              value: "postgresql://$(DATABASE_USERNAME):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_SCHEMA)"
+            
+            # Celery URLs (budowane dynamicznie)
+            - name: CELERY_BROKER_URL
+              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq-service:$(RABBITMQ_PORT)//"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:$(REDIS_PORT)/0"
+            
+            # Database configuration
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: DATABASE_PORT
+            - name: DATABASE_SCHEMA
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: DATABASE_SCHEMA
+            - name: DATABASE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: DATABASE_USERNAME
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: DATABASE_PASSWORD
+            
+            # RabbitMQ configuration
+            - name: RABBITMQ_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: RABBITMQ_PORT
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: RABBITMQ_PASSWORD
+            
+            # Redis configuration
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: REDIS_PORT
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: REDIS_PASSWORD
+            
+            # Test Database URL
+            - name: TEST_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TEST_DATABASE_URL
+            
+            # Telethon credentials
+            - name: TELETHON_BOT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_BOT_NAME
+            - name: TELETHON_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_BOT_TOKEN
+            - name: TELETHON_API_PHONE
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_API_PHONE
+            - name: TELETHON_API_ID
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_API_ID
+            - name: TELETHON_API_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_API_HASH
+            - name: TELETHON_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_USER_ID
+            - name: TELETHON_BOT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: TELETHON_BOT_ID
+            
+            # Exchange API credentials
+            - name: KUCOIN_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: KUCOIN_API_SECRET
+            - name: KUCOIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: KUCOIN_API_KEY
+            - name: KUCOIN_API_KEY_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: KUCOIN_API_KEY_PASSPHRASE
+            - name: MEXC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: MEXC_API_KEY
+            - name: MEXC_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: MEXC_API_SECRET
+            
+            # AI/LLM credentials
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: OPENAI_API_KEY
+            
+            # News API credentials
+            - name: CRYPTO_PANIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: CRYPTO_PANIC_API_KEY
+            - name: GNEWS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: GNEWS_API_KEY
+            - name: COINDESK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: COINDESK_API_KEY
+            
+            # MinIO credentials
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: MINIO_SECRET_KEY
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: MINIO_ENDPOINT
+            - name: MINIO_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: MINIO_SECURE
+            - name: MINIO_BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: MINIO_BUCKET_NAME
+            
+            # Storage configuration
+            - name: LOCAL_STORAGE_IS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: LOCAL_STORAGE_IS_ENABLED
+            - name: LOCAL_STORAGE_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: LOCAL_STORAGE_PATH
+          
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      
+      volumes:
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: pvc-trading-ai-backend
+
+---
+# REST API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-ai-backend-rest-api-service
+  namespace: default
+  labels:
+    app: trading-ai-backend-rest-api-controller
+spec:
+  type: NodePort
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: http
+      nodePort: 30090
+  selector:
+    app: trading-ai-backend-rest-api-controller
+

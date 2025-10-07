@@ -1,0 +1,86 @@
+---
+# ConfigMap dla zmiennych środowiskowych (non-sensitive)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trading-ai-config
+  namespace: default
+data:
+  # Database configuration (używamy istniejącego PostgreSQL na klastrze)
+  DATABASE_HOST: "<<database.host>>"
+  DATABASE_PORT: "<<database.port>>"
+  DATABASE_SCHEMA: "<<database.schema>>"
+  DATABASE_USERNAME: "<<database.username>>"
+  
+  # RabbitMQ configuration
+  RABBITMQ_USER: "<<rabbitmq.user>>"
+  RABBITMQ_PORT: "<<rabbitmq.port>>"
+  RABBITMQ_MANAGEMENT_PORT: "<<rabbitmq.management.port>>"
+  
+  # Redis configuration
+  REDIS_PORT: "<<redis.port>>"
+  
+  # MinIO configuration
+  MINIO_ENDPOINT: "<<minio.endpoint>>"
+  MINIO_SECURE: "<<minio.secure>>"
+  MINIO_BUCKET_NAME: "<<minio.bucket.name>>"
+  
+  # Storage configuration
+  LOCAL_STORAGE_IS_ENABLED: "<<local.storage.is.enabled>>"
+  LOCAL_STORAGE_PATH: "<<local.storage.path>>"
+  
+  # URLs (będą budowane w deploymentach)
+  # DATABASE_URL będzie budowany jako: postgresql://${DB_USER}:${DB_PASSWORD}@postgres-service:${DB_PORT}/${DB_NAME}
+  # CELERY_BROKER_URL będzie budowany jako: pyamqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq-service:${RABBITMQ_PORT}//
+  # CELERY_RESULT_BACKEND będzie budowany jako: redis://:${REDIS_PASSWORD}@redis-service:${REDIS_PORT}/0
+
+---
+# Secret dla wrażliwych danych (sensitive)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: trading-ai-secrets
+  namespace: default
+type: Opaque
+stringData:
+  # Telethon Bot credentials
+  TELETHON_BOT_NAME: "<<telethon.bot.name>>"
+  TELETHON_BOT_TOKEN: "<<telethon.bot.token>>"
+  
+  # Telethon API credentials
+  TELETHON_API_PHONE: "<<telethon.api.phone>>"
+  TELETHON_API_ID: "<<telethon.api.id>>"
+  TELETHON_API_HASH: "<<telethon.api.hash>>"
+  TELETHON_USER_ID: "<<telethon.user.id>>"
+  TELETHON_BOT_ID: "<<telethon.bot.id>>"
+  
+  # KuCoin API credentials
+  KUCOIN_API_SECRET: "<<kucoin.api.secret>>"
+  KUCOIN_API_KEY: "<<kucoin.api.key>>"
+  KUCOIN_API_KEY_PASSPHRASE: "<<kucoin.api.key.passphrase>>"
+  
+  # MEXC API credentials
+  MEXC_API_KEY: "<<mexc.api.key>>"
+  MEXC_API_SECRET: "<<mexc.api.secret>>"
+  
+  # OpenAI API credentials
+  OPENAI_API_KEY: "<<openai.api.key>>"
+  
+  # News API credentials
+  CRYPTO_PANIC_API_KEY: "<<crypto.panic.api.key>>"
+  GNEWS_API_KEY: "<<gnews.api.key>>"
+  COINDESK_API_KEY: "<<coindesk.api.key>>"
+  
+  # MinIO credentials
+  MINIO_ACCESS_KEY: "<<minio.access.key>>"
+  MINIO_SECRET_KEY: "<<minio.secret.key>>"
+  
+  # Database credentials
+  DATABASE_PASSWORD: "<<database.password>>"
+  
+  # RabbitMQ password
+  RABBITMQ_PASSWORD: "<<rabbitmq.password>>"
+  
+  # Redis password
+  REDIS_PASSWORD: "<<redis.password>>"
+
