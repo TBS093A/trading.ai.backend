@@ -1,6 +1,7 @@
 import os
 import logging
 import base64
+import io
 from typing import Optional, Dict, Any
 from minio import Minio
 from minio.error import S3Error
@@ -96,19 +97,22 @@ class MinIOStorage(AbstractStorage):
                 try:
                     file_content = base64.b64decode(file_base64)
                     
+                    # Zawinięcie bajtów w BytesIO, aby utworzyć obiekt file-like
+                    file_stream = io.BytesIO(file_content)
+                    
                     # Upload pliku do MinIO
                     self.client.put_object(
                         bucket_name=self.bucket_name,
                         object_name=file_name,
-                        data=file_content,
+                        data=file_stream,
                         length=len(file_content)
                     )
                     
                     logger.info(f"Pomyślnie zapisano base64 jako plik: {file_name}")
                     return True
                 except Exception as e:
-                    logger.error(f"Błąd podczas dekodowania base64: {str(e)}")
-                    raise Exception(f"Błąd podczas dekodowania base64: {str(e)}")
+                    logger.error(f"Błąd podczas uploadu do MinIO: {str(e)}")
+                    raise Exception(f"Błąd podczas uploadu do MinIO: {str(e)}")
             else:
                 raise ValueError("Musi być podany parametr file_base64")
             
