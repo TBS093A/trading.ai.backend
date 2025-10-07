@@ -36,7 +36,13 @@ spec:
             - "sh"
             - "-c"
             - >
-              git clone <<trading.ai.backend.repo.url>> /app/;
+              git clone $(TRADING_AI_BACKEND_REPO_URL) /app/;
+          env:
+            - name: TRADING_AI_BACKEND_REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: TRADING_AI_BACKEND_REPO_URL
           volumeMounts:
             - name: app-storage
               mountPath: /app
