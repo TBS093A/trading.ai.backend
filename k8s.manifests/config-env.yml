@@ -6,6 +6,9 @@ metadata:
   name: trading-ai-config
   namespace: default
 data:
+  # Trading AI Backend configuration
+  TRADING_AI_BACKEND_REPO_URL: "<<trading.ai.backend.repo.url>>"
+
   # Database configuration (używamy istniejącego PostgreSQL na klastrze)
   DATABASE_HOST: "<<database.host>>"
   DATABASE_PORT: "<<database.port>>"
