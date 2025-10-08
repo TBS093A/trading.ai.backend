@@ -8,6 +8,7 @@ metadata:
 data:
   # Trading AI Backend configuration
   TRADING_AI_BACKEND_REPO_URL: "<<trading.ai.backend.repo.url>>"
+  TRADING_AI_BACKEND_REPO_BRANCH: "<<trading.ai.backend.repo.branch>>"
 
   # Database configuration (używamy istniejącego PostgreSQL na klastrze)
   DATABASE_HOST: "<<database.host>>"

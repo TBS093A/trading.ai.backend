@@ -30,12 +30,13 @@ Skrypt `set.envs.sh` generuje pliki konfiguracyjne z wrażliwymi danymi na podst
 - Wygenerowane pliki (z secretami) są w `.gitignore`
 
 ```bash
-cd /home/tbs093a/Projects/trading.ai.backend
+cd /home/tbs093a/Projects/trading.ai.backend;
 
-source .env
+source .env;
 
 ./set.envs.sh \
   --set trading.ai.backend.repo.url=$REPO_URL \
+  --set trading.ai.backend.repo.branch=$REPO_BRANCH \
   --set telethon.bot.name=$TELETHON_BOT_NAME \
   --set telethon.bot.token=$TELETHON_BOT_TOKEN \
   --set telethon.api.phone=$TELETHON_API_PHONE \
@@ -102,9 +103,6 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout
 kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
-
-# 4. Services (jeśli nie zostały jeszcze stworzone)
-kubectl apply -f k8s.manifests/services.yml
 ```
 
 ### 3. Weryfikacja deploymentu
@@ -315,9 +313,6 @@ kubectl delete -f k8s.manifests/daemonset-celery-workers.yml
 # Uwaga: PostgreSQL nie jest usuwany (używamy istniejącego na klastrze)
 kubectl delete -f k8s.manifests/deployment-rabbitmq.yml
 kubectl delete -f k8s.manifests/deployment-redis.yml
-
-# Usuń services
-kubectl delete -f k8s.manifests/services.yml
 
 # Usuń konfigurację
 kubectl delete -f k8s.manifests/config-env.yml

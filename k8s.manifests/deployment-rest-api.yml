@@ -60,13 +60,18 @@ spec:
             - "sh"
             - "-c"
             - >
-              git clone $(TRADING_AI_BACKEND_REPO_URL) /app/;
+              git clone $(TRADING_AI_BACKEND_REPO_URL) -b $(TRADING_AI_BACKEND_REPO_BRANCH) /app/;
           env:
             - name: TRADING_AI_BACKEND_REPO_URL
               valueFrom:
                 configMapKeyRef:
                   name: trading-ai-config
                   key: TRADING_AI_BACKEND_REPO_URL
+            - name: TRADING_AI_BACKEND_REPO_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: TRADING_AI_BACKEND_REPO_BRANCH
           volumeMounts:
             - name: app-storage
               mountPath: /app
@@ -84,7 +89,7 @@ spec:
               apt upgrade -y;
               apt install python3-pip -y;
               pip3 install --upgrade pip setuptools;
-              pip3 install --target=/app/python-packages tox;
+              pip3 install --target=/app/python-packages tox==4.30.3;
           volumeMounts:
             - name: app-storage
               mountPath: /app
@@ -107,7 +112,7 @@ spec:
             - -c
             - |
               cd /app;
-              python -m tox -e rest-api-controller;
+              python -m tox run -e rest-api-controller;
           env:
             - name: PYTHONPATH
               value: "/app/python-packages"
@@ -177,13 +182,6 @@ spec:
                 secretKeyRef:
                   name: trading-ai-secrets
                   key: REDIS_PASSWORD
-            
-            # Test Database URL
-            - name: TEST_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: trading-ai-secrets
-                  key: TEST_DATABASE_URL
             
             # Telethon credentials
             - name: TELETHON_BOT_NAME
@@ -365,7 +363,7 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - k8s.node.001
+          - k8s.node.002
 
 ---
 # REST API PersistentVolumeClaim
