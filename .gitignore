@@ -1,4 +1,5 @@
 .env
+config-env.yml
 .tox/
 .temp_pkg/
 __pycache__/
