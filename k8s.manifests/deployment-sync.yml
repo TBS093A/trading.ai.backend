@@ -80,7 +80,7 @@ spec:
             runAsGroup: 1000
         
         - name: setup-environment
-          image: python:3.11.0
+          image: python:3.13.1
           command:
             - /bin/bash
             - -c
@@ -99,7 +99,7 @@ spec:
       
       containers:
         - name: trading-ai-backend-sync-controller
-          image: python:3.11.0
+          image: python:3.13.1
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
