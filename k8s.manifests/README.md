@@ -20,12 +20,19 @@ System składa się z następujących komponentów:
 
 ### 1. Konfiguracja zmiennych środowiskowych
 
-Użyj skryptu `set.envs.sh` do ustawienia wszystkich placeholderów:
+Skrypt `set.envs.sh` generuje pliki konfiguracyjne z wrażliwymi danymi na podstawie template'ów:
+
+**Jak to działa:**
+- Szuka plików z wzorcem `*.template.*` (np. `config-env.template.yml`)
+- Tworzy nowe pliki bez `.template.` (np. `config-env.yml`)
+- Replaceuje placeholdery `<<placeholder>>` wartościami
+- Template pozostaje niezmieniony i można go commitować do repo
+- Wygenerowane pliki (z secretami) są w `.gitignore`
 
 ```bash
-cd /home/tbs093a/Projects/trading.ai.backend;
+cd /home/tbs093a/Projects/trading.ai.backend
 
-source .env;
+source .env
 
 ./set.envs.sh \
   --set trading.ai.backend.repo.url=$REPO_URL \
@@ -64,6 +71,15 @@ source .env;
   --set redis.password=$CELERY_RESULT_BACKEND_PASSWORD \
   --set redis.port=$CELERY_RESULT_BACKEND_PORT \
   --dir ./k8s.manifests
+```
+
+**Rezultat:**
+```
+Processing template: ./k8s.manifests/config-env.template.yml
+  Created: ./k8s.manifests/config-env.yml
+  ✓ Replaced <<trading.ai.backend.repo.url>> with https://...
+  ✓ Replaced <<database.password>> with ******
+  ✓ Completed: ./k8s.manifests/config-env.yml
 ```
 
 ### 2. Deploy kolejno wszystkie komponenty
@@ -112,8 +128,10 @@ kubectl get services
 
 ## 📦 Komponenty
 
-### config-env.yml
-ConfigMap i Secret z wszystkimi zmiennymi środowiskowymi:
+### config-env.template.yml → config-env.yml
+Template i wygenerowany plik ConfigMap/Secret z wszystkimi zmiennymi środowiskowymi:
+- **config-env.template.yml** - Template z placeholderami `<<key>>` (commitowany do repo)
+- **config-env.yml** - Wygenerowany plik z secretami (w .gitignore, NIE commitować!)
 - ConfigMap: `trading-ai-config` - zmienne non-sensitive
 - Secret: `trading-ai-secrets` - wrażliwe dane (API keys, hasła)
 
@@ -271,13 +289,15 @@ kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 ### Aktualizacja konfiguracji
 
 ```bash
-# 1. Zaktualizuj placeholdery
+# 1. Edytuj wartości w .env lub eksportuj nowe zmienne
+
+# 2. Wygeneruj nowy config-env.yml z template
 ./set.envs.sh --set key=value --dir ./k8s.manifests
 
-# 2. Zastosuj nową konfigurację
+# 3. Zastosuj nową konfigurację
 kubectl apply -f k8s.manifests/config-env.yml
 
-# 3. Zrestartuj pody aby załadować nową konfigurację
+# 4. Zrestartuj pody aby załadować nową konfigurację
 kubectl rollout restart deployment/trading-ai-backend-sync-controller
 kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
 kubectl rollout restart daemonset/trading-ai-backend-celery-workers
@@ -333,7 +353,10 @@ cd k8s.manifests
 
 6. **NodePort**: Tylko REST API jest dostępny przez NodePort (30090). RabbitMQ Management jest dostępny przez ClusterIP (użyj port-forward).
 
-7. **Secrets**: Pamiętaj aby **NIGDY** nie commitować config-env.yml z wypełnionymi placeholderami do git!
+7. **Template Files**: 
+   - Commituj do repo: `*.template.*` (z placeholderami)
+   - NIE commituj: pliki wygenerowane bez `.template.` (zawierają sekrety)
+   - Plik `config-env.yml` jest w `.gitignore` - automatycznie bezpieczny
 
 ## 🔐 Bezpieczeństwo
 
