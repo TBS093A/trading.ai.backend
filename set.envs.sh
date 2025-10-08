@@ -9,7 +9,11 @@ excludes=()
 # Function to print usage
 usage() {
   echo "Usage: $0 [--set placeholder=value] [--dir directory] [--exclude file_or_pattern]"
-  echo "Example: $0 --set setup.repo=https://github.com/TSD/lol.git --set another.placeholder=some_other_value --dir ./ --exclude Jenkinsfile --exclude *.md"
+  echo "Example: $0 --set setup.repo=https://github.com/TSD/lol.git --set another.placeholder=some_other_value --dir ./"
+  echo ""
+  echo "Note: Script processes only files matching *.template.* pattern"
+  echo "      Creates new files without '.template.' with replaced placeholders"
+  echo "      Example: config-env.template.yml -> config-env.yml"
   exit 1
 }
 
@@ -66,25 +70,39 @@ for exclude in "${excludes[@]}"; do
   exclude_cmd+="! -name '$exclude' "
 done
 
-# Find all files recursively in the specified directory, excluding specified patterns
-eval "find \"$ROOT_DIR\" -type f $exclude_cmd" | while read -r file; do
-  echo "Processing file: $file"
+# Find all files matching *.template.* pattern recursively in the specified directory
+eval "find \"$ROOT_DIR\" -type f -name '*.template.*' $exclude_cmd" | while read -r template_file; do
+  echo "Processing template: $template_file"
 
-  # Loop through each placeholder in the associative array
+  # Generate output filename by removing '.template.' from the name
+  output_file="${template_file//.template./.}"
+  
+  # Check if output file would be the same as input (shouldn't happen with proper naming)
+  if [ "$template_file" == "$output_file" ]; then
+    echo "  Warning: Output filename same as template. Skipping."
+    continue
+  fi
+
+  # Copy template to output file
+  cp "$template_file" "$output_file"
+  echo "  Created: $output_file"
+
+  # Loop through each placeholder in the associative array and replace in the output file
   for placeholder in "${!replacements[@]}"; do
       value="${replacements[$placeholder]}"
 
-      # Use sed to replace the placeholder with the corresponding value
-      sed -i "s|<<$placeholder>>|$value|g" "$file"
+      # Use sed to replace the placeholder with the corresponding value in the output file
+      sed -i "s|<<$placeholder>>|$value|g" "$output_file"
 
       # Confirm replacement (optional logging)
-      if grep -q "$value" "$file"; then
-        echo "  Successfully replaced $placeholder with $value in $file"
-      else
-        echo "  No occurrences of $placeholder found in $file"
+      if grep -q "$value" "$output_file"; then
+        echo "  ✓ Replaced <<$placeholder>> with $value"
       fi
   done
+  
+  echo "  ✓ Completed: $output_file"
+  echo ""
 done
 
-echo "All files processed."
+echo "All template files processed."
 
