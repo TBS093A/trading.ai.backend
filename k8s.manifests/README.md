@@ -28,7 +28,6 @@ cd /home/tbs093a/Projects/trading.ai.backend;
 source .env;
 
 ./set.envs.sh \
-  --set pump.bot.repo.url=https://github.com/your-org/trading.ai.backend.git \
   --set trading.ai.backend.repo.url=$REPO_URL \
   --set telethon.bot.name=$TELETHON_BOT_NAME \
   --set telethon.bot.token=$TELETHON_BOT_TOKEN \
