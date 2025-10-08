@@ -50,6 +50,8 @@ source .env;
   --set minio.endpoint=$MINIO_ENDPOINT \
   --set minio.secure=$MINIO_SECURE \
   --set minio.bucket.name=$MINIO_BUCKET_NAME \
+  --set local.storage.is.enabled=$LOCAL_STORAGE_IS_ENABLED \
+  --set local.storage.path=$LOCAL_STORAGE_PATH \
   --set database.username=$DATABASE_USERNAME \
   --set database.password=$DATABASE_PASSWORD \
   --set database.host=$DATABASE_HOST \

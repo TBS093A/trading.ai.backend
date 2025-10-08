@@ -16,7 +16,7 @@ data:
   DATABASE_USERNAME: "<<database.username>>"
   
   # RabbitMQ configuration
-  RABBITMQ_USER: "<<rabbitmq.user>>"
+  RABBITMQ_USER: "<<rabbitmq.username>>"
   RABBITMQ_PORT: "<<rabbitmq.port>>"
   RABBITMQ_MANAGEMENT_PORT: "<<rabbitmq.management.port>>"
   
