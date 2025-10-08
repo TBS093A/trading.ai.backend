@@ -111,21 +111,14 @@ spec:
             - /bin/bash
             - -c
             - |
+              export DATABASE_URL="postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_SCHEMA}"
+              export CELERY_BROKER_URL="pyamqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@trading-ai-backend-rabbitmq-service:${RABBITMQ_PORT}//"
+              export CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@trading-ai-backend-redis-service:${REDIS_PORT}/0"
               cd /app;
               python -m tox run -e rest-api-controller;
           env:
             - name: PYTHONPATH
               value: "/app/python-packages"
-            
-            # Database URL (budowane dynamicznie z istniejącego PostgreSQL na klastrze)
-            - name: DATABASE_URL
-              value: "postgresql://$(DATABASE_USERNAME):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_SCHEMA)"
-            
-            # Celery URLs (budowane dynamicznie)
-            - name: CELERY_BROKER_URL
-              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@trading-ai-backend-rabbitmq-service:$(RABBITMQ_PORT)//"
-            - name: CELERY_RESULT_BACKEND
-              value: "redis://:$(REDIS_PASSWORD)@trading-ai-backend-redis-service:$(REDIS_PORT)/0"
             
             # Database configuration
             - name: DATABASE_HOST
