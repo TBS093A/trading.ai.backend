@@ -107,15 +107,12 @@ spec:
             - /bin/bash
             - -c
             - |
+              export DATABASE_URL="postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_SCHEMA}"
               cd /app;
               python -m tox run -e sync-controller;
           env:
             - name: PYTHONPATH
               value: "/app/python-packages"
-            
-            # Database URL (budowane dynamicznie z istniejącego PostgreSQL na klastrze)
-            - name: DATABASE_URL
-              value: "postgresql://$(DATABASE_USERNAME):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_SCHEMA)"
             
             # Database configuration
             - name: DATABASE_HOST
