@@ -61,8 +61,8 @@ deploy_config() {
 # Deploy Storage
 deploy_storage() {
     log_info "Deployowanie Storage (PersistentVolume)..."
-    kubectl apply -f storage.yml
-    log_success "Storage został wdrożony"
+    log_info "Storage jest teraz wdrażany razem z aplikacjami"
+    log_success "Storage będzie wdrożony z odpowiednimi deploymentami"
 }
 
 # Deploy Infrastructure
@@ -80,11 +80,11 @@ deploy_infrastructure() {
     
     # Czekaj na RabbitMQ
     log_info "Czekam na RabbitMQ..."
-    kubectl wait --for=condition=ready pod -l app=rabbitmq --timeout=300s || log_warning "Timeout podczas oczekiwania na RabbitMQ"
+    kubectl wait --for=condition=ready pod -l app=trading-ai-backend-rabbitmq --timeout=300s || log_warning "Timeout podczas oczekiwania na RabbitMQ"
     
     # Czekaj na Redis
     log_info "Czekam na Redis..."
-    kubectl wait --for=condition=ready pod -l app=redis --timeout=300s || log_warning "Timeout podczas oczekiwania na Redis"
+    kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout=300s || log_warning "Timeout podczas oczekiwania na Redis"
     
     log_success "Infrastructure Services są gotowe"
 }
@@ -128,9 +128,9 @@ show_status() {
 show_logs() {
     log_info "Dostępne opcje do podglądu logów:"
     echo ""
-    echo "  kubectl logs -l app=sync-controller -f"
-    echo "  kubectl logs -l app=rest-api-controller -f"
-    echo "  kubectl logs -l app=celery-workers -f"
+    echo "  kubectl logs -l app=trading-ai-backend-sync-controller -f"
+    echo "  kubectl logs -l app=trading-ai-backend-rest-api-controller -f"
+    echo "  kubectl logs -l app=trading-ai-backend-celery-workers -f"
     echo "  kubectl logs -l component=backend -f --all-containers=true"
     echo ""
 }
@@ -145,14 +145,15 @@ show_access_info() {
     NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
     
     log_info "REST API:"
-    echo "  Wewnętrzny: http://rest-api-service:9090"
+    echo "  Wewnętrzny: http://trading-ai-backend-rest-api-service:9090"
     echo "  Zewnętrzny: http://${NODE_IP}:30090"
     echo "  Health Check: http://${NODE_IP}:30090/health"
     echo "  API Docs: http://${NODE_IP}:30090/docs"
     echo ""
     
-    log_info "RabbitMQ Management UI:"
-    echo "  URL: http://${NODE_IP}:30672"
+    log_info "RabbitMQ Management UI (tylko ClusterIP - dostęp przez port-forward):"
+    echo "  Port Forward: kubectl port-forward svc/trading-ai-backend-rabbitmq-management 15672:15672"
+    echo "  URL (po port-forward): http://localhost:15672"
     echo "  User: trading_bot_ai_rabbit"
     echo "  Password: <sprawdź w Secret: kubectl get secret trading-ai-secrets -o jsonpath='{.data.RABBITMQ_PASSWORD}' | base64 -d>"
     echo ""
@@ -183,11 +184,7 @@ cleanup() {
     log_info "Usuwanie Services..."
     kubectl delete -f services.yml --ignore-not-found=true
     
-    read -p "Czy usunąć Storage (UWAGA: to usunie wszystkie dane!)? (yes/no): " confirm_storage
-    if [ "$confirm_storage" == "yes" ]; then
-        log_info "Usuwanie Storage..."
-        kubectl delete -f storage.yml --ignore-not-found=true
-    fi
+    log_info "Storage jest teraz usuwany razem z aplikacjami (PV/PVC są w plikach deploymentów)"
     
     log_info "Usuwanie ConfigMap i Secret..."
     kubectl delete -f config-env.yml --ignore-not-found=true

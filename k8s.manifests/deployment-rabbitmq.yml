@@ -3,24 +3,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rabbitmq
+  name: trading-ai-backend-rabbitmq
   namespace: default
   labels:
-    app: rabbitmq
+    app: trading-ai-backend-rabbitmq
     component: message-broker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: rabbitmq
+      app: trading-ai-backend-rabbitmq
   template:
     metadata:
       labels:
-        app: rabbitmq
+        app: trading-ai-backend-rabbitmq
         component: message-broker
     spec:
       containers:
-        - name: rabbitmq
+        - name: trading-ai-backend-rabbitmq
           image: rabbitmq:3-management-alpine
           ports:
             - containerPort: 5672
@@ -76,10 +76,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: rabbitmq-service
+  name: trading-ai-backend-rabbitmq-service
   namespace: default
   labels:
-    app: rabbitmq
+    app: trading-ai-backend-rabbitmq
 spec:
   type: ClusterIP
   ports:
@@ -88,27 +88,26 @@ spec:
       protocol: TCP
       name: amqp
   selector:
-    app: rabbitmq
+    app: trading-ai-backend-rabbitmq
 
 ---
 # RabbitMQ Service (Management UI)
 apiVersion: v1
 kind: Service
 metadata:
-  name: rabbitmq-management
+  name: trading-ai-backend-rabbitmq-management
   namespace: default
   labels:
-    app: rabbitmq
+    app: trading-ai-backend-rabbitmq
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 15672
       targetPort: 15672
       protocol: TCP
       name: management
-      nodePort: 30672
   selector:
-    app: rabbitmq
+    app: trading-ai-backend-rabbitmq
 
 ---
 # RabbitMQ PersistentVolume

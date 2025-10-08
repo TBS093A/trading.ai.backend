@@ -71,24 +71,22 @@ source .env;
 # 1. ConfigMap i Secret (zmienne środowiskowe)
 kubectl apply -f k8s.manifests/config-env.yml
 
-# 2. Storage (PersistentVolume dla aplikacji)
-kubectl apply -f k8s.manifests/storage.yml
-
-# 3. Infrastructure Services (RabbitMQ, Redis)
+# 2. Infrastructure Services (RabbitMQ, Redis)
 # Uwaga: PostgreSQL używamy istniejący na klastrze (postgresql.default.svc.cluster.local)
+# Storage (PV/PVC) jest teraz wdrażany razem z każdym serwisem
 kubectl apply -f k8s.manifests/deployment-rabbitmq.yml
 kubectl apply -f k8s.manifests/deployment-redis.yml
 
 # Poczekaj aż infrastructure services będą ready
-kubectl wait --for=condition=ready pod -l component=message-broker --timeout=300s
-kubectl wait --for=condition=ready pod -l component=cache --timeout=300s
+kubectl wait --for=condition=ready pod -l app=trading-ai-backend-rabbitmq --timeout=300s
+kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout=300s
 
-# 4. Application Services
+# 3. Application Services (każdy ma swój własny PV/PVC)
 kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
 
-# 5. Services (jeśli nie zostały jeszcze stworzone)
+# 4. Services (jeśli nie zostały jeszcze stworzone)
 kubectl apply -f k8s.manifests/services.yml
 ```
 
@@ -99,13 +97,13 @@ kubectl apply -f k8s.manifests/services.yml
 kubectl get pods
 
 # Sprawdź logi sync-controller
-kubectl logs -l app=sync-controller -f
+kubectl logs -l app=trading-ai-backend-sync-controller -f
 
 # Sprawdź logi rest-api-controller
-kubectl logs -l app=rest-api-controller -f
+kubectl logs -l app=trading-ai-backend-rest-api-controller -f
 
 # Sprawdź logi celery workers
-kubectl logs -l app=celery-workers -f
+kubectl logs -l app=trading-ai-backend-celery-workers -f
 
 # Sprawdź services
 kubectl get services
@@ -130,47 +128,49 @@ ConfigMap i Secret z wszystkimi zmiennymi środowiskowymi:
 
 ### deployment-rabbitmq.yml
 RabbitMQ 3 Management:
+- Nazwa: `trading-ai-backend-rabbitmq`
 - Port AMQP: 5672
-- Port Management: 15672 (NodePort 30672)
-- Service: `rabbitmq-service` (AMQP), `rabbitmq-management` (UI)
-- PVC: `pvc-rabbitmq` (2Gi)
+- Port Management: 15672 (ClusterIP - dostęp przez port-forward)
+- Service: `trading-ai-backend-rabbitmq-service` (AMQP), `trading-ai-backend-rabbitmq-management` (UI)
+- PVC: `pvc-trading-ai-backend-rabbitmq` (2Gi)
 - Resources: 256Mi-512Mi RAM, 250m-500m CPU
 
 ### deployment-redis.yml
 Redis 7 Alpine:
+- Nazwa: `trading-ai-backend-redis`
 - Port: 6379
-- Service: `redis-service`
-- PVC: `pvc-redis` (1Gi)
+- Service: `trading-ai-backend-redis-service`
+- PVC: `pvc-trading-ai-backend-redis` (1Gi)
 - Resources: 128Mi-256Mi RAM, 100m-250m CPU
 
 ### deployment-sync.yml
 Sync Controller (1 replica):
+- Nazwa: `trading-ai-backend-sync-controller`
 - Komenda: `tox run -e sync-controller`
-- Używa PVC: `pvc-pump-bot`
+- Używa PVC: `pvc-trading-ai-backend-sync` (25Mi)
 - Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
 ### deployment-rest-api.yml
 REST API Controller (1 replica):
+- Nazwa: `trading-ai-backend-rest-api-controller`
 - Komenda: `tox run -e rest-api-controller`
 - Port: 9090 (NodePort 30090)
-- Service: `rest-api-service`
+- Service: `trading-ai-backend-rest-api-service`
 - Health checks: `/health`
-- Używa PVC: `pvc-pump-bot`
+- Używa PVC: `pvc-trading-ai-backend-rest-api` (25Mi)
 - Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
 ### daemonset-celery-workers.yml
 Celery Workers (1 worker per node):
+- Nazwa: `trading-ai-backend-celery-workers`
 - Komenda: `tox run -e rest-api-celery-worker`
 - DaemonSet - każdy node otrzyma 1 worker
-- Używa emptyDir (każdy worker ma własny storage)
+- Używa hostPath (każdy worker na każdym node ma własny storage)
 - Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
 ### services.yml
-Wszystkie Services w jednym pliku (dla czytelności):
-- `rabbitmq-service` (ClusterIP:5672)
-- `rabbitmq-management` (NodePort:30672)
-- `redis-service` (ClusterIP:6379)
-- `rest-api-service` (NodePort:30090)
+Serwisy (tylko Redis - reszta jest w odpowiednich plikach deploymentów):
+- `trading-ai-backend-redis-service` (ClusterIP:6379)
 
 **Uwaga**: PostgreSQL service nie jest potrzebny - używamy istniejącego `postgresql.default.svc.cluster.local`
 
@@ -191,8 +191,8 @@ URL-e do baz danych są budowane dynamicznie w deploymentach:
 DATABASE_URL="postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgresql.default.svc.cluster.local:${DATABASE_PORT}/${DATABASE_SCHEMA}"
 
 # Celery (nasze serwisy)
-CELERY_BROKER_URL="pyamqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq-service:${RABBITMQ_PORT}//"
-CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@redis-service:${REDIS_PORT}/0"
+CELERY_BROKER_URL="pyamqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@trading-ai-backend-rabbitmq-service:${RABBITMQ_PORT}//"
+CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@trading-ai-backend-redis-service:${REDIS_PORT}/0"
 ```
 
 ## 🌐 Dostęp do serwisów
@@ -200,7 +200,7 @@ CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@redis-service:${REDIS_PORT}/0"
 ### REST API
 ```bash
 # Z wewnątrz klastra
-http://rest-api-service:9090
+http://trading-ai-backend-rest-api-service:9090
 
 # Z zewnątrz (NodePort)
 http://<NODE_IP>:30090
@@ -208,8 +208,11 @@ http://<NODE_IP>:30090
 
 ### RabbitMQ Management UI
 ```bash
-# Z zewnątrz (NodePort)
-http://<NODE_IP>:30672
+# Port Forward (ClusterIP)
+kubectl port-forward svc/trading-ai-backend-rabbitmq-management 15672:15672
+
+# Po port-forward
+http://localhost:15672
 
 # Credentials:
 User: trading_bot_ai_rabbit
@@ -225,16 +228,16 @@ Password: <wartość z secret RABBITMQ_PASSWORD>
 kubectl logs -l component=backend -f --all-containers=true
 
 # Sync Controller
-kubectl logs -l app=sync-controller -f
+kubectl logs -l app=trading-ai-backend-sync-controller -f
 
 # REST API
-kubectl logs -l app=rest-api-controller -f
+kubectl logs -l app=trading-ai-backend-rest-api-controller -f
 
 # Celery Workers (wszystkie)
-kubectl logs -l app=celery-workers -f --all-containers=true
+kubectl logs -l app=trading-ai-backend-celery-workers -f --all-containers=true
 
 # Celery Worker na konkretnym node
-kubectl logs -l app=celery-workers -f --field-selector spec.nodeName=<node-name>
+kubectl logs -l app=trading-ai-backend-celery-workers -f --field-selector spec.nodeName=<node-name>
 ```
 
 ### Status podów
@@ -259,9 +262,9 @@ kubectl get pods -l component=database,component=message-broker,component=cache
 kubectl delete pod -l component=backend
 
 # Lub wykonaj rolling update
-kubectl rollout restart deployment/sync-controller
-kubectl rollout restart deployment/rest-api-controller
-kubectl rollout restart daemonset/celery-workers
+kubectl rollout restart deployment/trading-ai-backend-sync-controller
+kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
+kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 ```
 
 ### Aktualizacja konfiguracji
@@ -274,9 +277,9 @@ kubectl rollout restart daemonset/celery-workers
 kubectl apply -f k8s.manifests/config-env.yml
 
 # 3. Zrestartuj pody aby załadować nową konfigurację
-kubectl rollout restart deployment/sync-controller
-kubectl rollout restart deployment/rest-api-controller
-kubectl rollout restart daemonset/celery-workers
+kubectl rollout restart deployment/trading-ai-backend-sync-controller
+kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
+kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 ```
 
 ## 🧹 Cleanup
@@ -295,11 +298,10 @@ kubectl delete -f k8s.manifests/deployment-redis.yml
 # Usuń services
 kubectl delete -f k8s.manifests/services.yml
 
-# Usuń storage (UWAGA: to usunie dane!)
-kubectl delete -f k8s.manifests/storage.yml
-
 # Usuń konfigurację
 kubectl delete -f k8s.manifests/config-env.yml
+
+# Uwaga: Storage (PV/PVC) jest automatycznie usuwany razem z aplikacjami
 ```
 
 Lub użyj skryptu:
@@ -312,7 +314,12 @@ cd k8s.manifests
 
 1. **PostgreSQL**: System używa **istniejącego PostgreSQL** na klastrze pod adresem `postgresql.default.svc.cluster.local`. Nie deployujemy własnego PostgreSQL. Jeśli jednak chcesz deployować własny, użyj pliku `deployment-postgres.optional.yml`.
 
-2. **Storage**: Deployment sync-controller i rest-api-controller używają wspólnego PVC `pvc-pump-bot`. Celery workers używają `emptyDir` (każdy worker ma własny storage).
+2. **Storage**: Każdy komponent ma swój własny PV/PVC (25Mi dla aplikacji):
+   - REST API: `pvc-trading-ai-backend-rest-api` (25Mi)
+   - Sync Controller: `pvc-trading-ai-backend-sync` (25Mi)
+   - Celery Workers: używają `hostPath` (każdy worker na każdym node ma własny storage)
+   - RabbitMQ: `pvc-trading-ai-backend-rabbitmq` (2Gi)
+   - Redis: `pvc-trading-ai-backend-redis` (1Gi)
 
 3. **InitContainers**: Każdy deployment aplikacyjny używa initContainers do:
    - Usunięcia starych plików
@@ -321,9 +328,11 @@ cd k8s.manifests
 
 4. **Resources**: Limity zasobów są ustawione jako przykłady - dostosuj je do swoich potrzeb.
 
-5. **NodePort**: REST API i RabbitMQ Management UI są dostępne przez NodePort. W produkcji rozważ użycie Ingress.
+5. **Nazewnictwo**: Wszystkie obiekty mają prefix `trading-ai-backend-` dla łatwej identyfikacji przynależności do ekosystemu.
 
-6. **Secrets**: Pamiętaj aby **NIGDY** nie commitować config-env.yml z wypełnionymi placeholderami do git!
+6. **NodePort**: Tylko REST API jest dostępny przez NodePort (30090). RabbitMQ Management jest dostępny przez ClusterIP (użyj port-forward).
+
+7. **Secrets**: Pamiętaj aby **NIGDY** nie commitować config-env.yml z wypełnionymi placeholderami do git!
 
 ## 🔐 Bezpieczeństwo
 
