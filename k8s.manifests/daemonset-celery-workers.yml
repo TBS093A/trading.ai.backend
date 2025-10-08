@@ -87,9 +87,9 @@ spec:
             
             # Celery URLs (budowane dynamicznie)
             - name: CELERY_BROKER_URL
-              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq-service:$(RABBITMQ_PORT)//"
+              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@trading-ai-backend-rabbitmq-service:$(RABBITMQ_PORT)//"
             - name: CELERY_RESULT_BACKEND
-              value: "redis://:$(REDIS_PASSWORD)@redis-service:$(REDIS_PORT)/0"
+              value: "redis://:$(REDIS_PASSWORD)@trading-ai-backend-redis-service:$(REDIS_PORT)/0"
             
             # Database configuration
             - name: DATABASE_HOST
@@ -295,6 +295,7 @@ spec:
       
       volumes:
         - name: app-storage
-          persistentVolumeClaim:
-            claimName: pvc-trading-ai-backend
+          hostPath:
+            path: /k8s/pv/trading-ai-backend-celery-workers
+            type: DirectoryOrCreate
 

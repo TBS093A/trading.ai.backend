@@ -256,5 +256,42 @@ spec:
       volumes:
         - name: app-storage
           persistentVolumeClaim:
-            claimName: pvc-trading-ai-backend
+            claimName: pvc-trading-ai-backend-sync
+
+---
+# Sync PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-backend-sync
+spec:
+  capacity:
+    storage: 25Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /k8s/pv/trading-ai-backend-sync
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k8s.node.001
+
+---
+# Sync PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-trading-ai-backend-sync
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 25Mi
+  volumeName: pv-trading-ai-backend-sync
 

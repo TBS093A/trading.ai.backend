@@ -3,20 +3,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rest-api-controller
+  name: trading-ai-backend-rest-api-controller
   namespace: default
   labels:
-    app: rest-api-controller
+    app: trading-ai-backend-rest-api-controller
     component: backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: rest-api-controller
+      app: trading-ai-backend-rest-api-controller
   template:
     metadata:
       labels:
-        app: rest-api-controller
+        app: trading-ai-backend-rest-api-controller
         component: backend
     spec:
       initContainers:
@@ -64,7 +64,7 @@ spec:
               mountPath: /app
       
       containers:
-        - name: rest-api-controller
+        - name: trading-ai-backend-rest-api-controller
           image: python:3.11.0
           ports:
             - containerPort: 9090
@@ -86,9 +86,9 @@ spec:
             
             # Celery URLs (budowane dynamicznie)
             - name: CELERY_BROKER_URL
-              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq-service:$(RABBITMQ_PORT)//"
+              value: "pyamqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@trading-ai-backend-rabbitmq-service:$(RABBITMQ_PORT)//"
             - name: CELERY_RESULT_BACKEND
-              value: "redis://:$(REDIS_PASSWORD)@redis-service:$(REDIS_PORT)/0"
+              value: "redis://:$(REDIS_PASSWORD)@trading-ai-backend-redis-service:$(REDIS_PORT)/0"
             
             # Database configuration
             - name: DATABASE_HOST
@@ -311,7 +311,44 @@ spec:
       volumes:
         - name: app-storage
           persistentVolumeClaim:
-            claimName: pvc-trading-ai-backend
+            claimName: pvc-trading-ai-backend-rest-api
+
+---
+# REST API PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-backend-rest-api
+spec:
+  capacity:
+    storage: 25Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /k8s/pv/trading-ai-backend-rest-api
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k8s.node.001
+
+---
+# REST API PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-trading-ai-backend-rest-api
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 25Mi
+  volumeName: pv-trading-ai-backend-rest-api
 
 ---
 # REST API Service
