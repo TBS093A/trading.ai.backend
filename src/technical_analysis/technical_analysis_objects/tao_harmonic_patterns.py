@@ -390,7 +390,9 @@ class HarmonicPatterns(
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
                                 total_all_targets = len(fibonacci_levels.get('all_targets', {}))
                                 logger.debug(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
-                                logger.debug(f"Wygląd Świecy: {str(klines[kline_idx]).replace(',', ',\n')}")
+                                newline = '\n'
+                                kline_str = str(klines[kline_idx]).replace(',', ',' + newline)
+                                logger.debug(f"Wygląd Świecy: {kline_str}")
 
                                 # Zarejestruj wzorzec jako dodany
                                 added_patterns[pattern_key] = patterns_count
