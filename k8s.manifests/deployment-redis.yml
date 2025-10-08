@@ -24,6 +24,22 @@ spec:
         runAsUser: 999
         runAsGroup: 999
       
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data
+              chown -R 999:999 /data
+              chmod -R 755 /data
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+          securityContext:
+            runAsUser: 0
+      
       containers:
         - name: trading-ai-backend-redis
           image: redis:7-alpine

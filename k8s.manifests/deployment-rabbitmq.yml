@@ -24,6 +24,22 @@ spec:
         runAsUser: 999
         runAsGroup: 999
       
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /var/lib/rabbitmq
+              chown -R 999:999 /var/lib/rabbitmq
+              chmod -R 755 /var/lib/rabbitmq
+          volumeMounts:
+            - name: rabbitmq-storage
+              mountPath: /var/lib/rabbitmq
+          securityContext:
+            runAsUser: 0
+      
       containers:
         - name: trading-ai-backend-rabbitmq
           image: rabbitmq:3-management-alpine
