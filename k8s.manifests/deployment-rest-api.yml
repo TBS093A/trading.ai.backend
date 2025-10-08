@@ -19,7 +19,27 @@ spec:
         app: trading-ai-backend-rest-api-controller
         component: backend
     spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      
       initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /app
+              chown -R 1000:1000 /app
+              chmod -R 755 /app
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          securityContext:
+            runAsUser: 0
+        
         - name: remove-old-files
           image: alpine/git
           command:
@@ -30,6 +50,9 @@ spec:
           volumeMounts:
             - name: app-storage
               mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
         
         - name: clone-repo
           image: alpine/git
@@ -47,6 +70,9 @@ spec:
           volumeMounts:
             - name: app-storage
               mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
         
         - name: setup-environment
           image: python:3.11.0
@@ -62,10 +88,16 @@ spec:
           volumeMounts:
             - name: app-storage
               mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
       
       containers:
         - name: trading-ai-backend-rest-api-controller
           image: python:3.11.0
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
           ports:
             - containerPort: 9090
               name: http

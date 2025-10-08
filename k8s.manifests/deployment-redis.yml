@@ -19,6 +19,11 @@ spec:
         app: trading-ai-backend-redis
         component: cache
     spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      
       containers:
         - name: trading-ai-backend-redis
           image: redis:7-alpine

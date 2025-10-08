@@ -19,6 +19,11 @@ spec:
         app: trading-ai-backend-rabbitmq
         component: message-broker
     spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      
       containers:
         - name: trading-ai-backend-rabbitmq
           image: rabbitmq:3-management-alpine
