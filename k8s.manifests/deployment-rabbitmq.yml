@@ -33,7 +33,12 @@ spec:
             - |
               mkdir -p /var/lib/rabbitmq
               chown -R 999:999 /var/lib/rabbitmq
-              chmod -R 755 /var/lib/rabbitmq
+              find /var/lib/rabbitmq -type d -exec chmod 700 {} \;
+              # jeśli cookie już istnieje na PVC - ustaw właściciela i prawa:
+              if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+                chown 999:999 /var/lib/rabbitmq/.erlang.cookie
+                chmod 600 /var/lib/rabbitmq/.erlang.cookie
+              fi
           volumeMounts:
             - name: rabbitmq-storage
               mountPath: /var/lib/rabbitmq
