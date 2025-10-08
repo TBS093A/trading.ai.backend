@@ -308,8 +308,8 @@ spec:
               memory: "512Mi"
               cpu: "500m"
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: "8Gi"
+              cpu: "4000m"
       
       volumes:
         - name: app-storage
