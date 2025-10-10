@@ -696,41 +696,41 @@ class SyncController:
                 expected_job_ids.add(job_id)
                 
                 # Pobierz metodę do wykonania
-                    process_name = job_config['process']
-                    method = getattr(self, process_name, None)
-                    
-                    if method is None:
+                process_name = job_config['process']
+                method = getattr(self, process_name, None)
+                
+                if method is None:
                     logger.warning(f"⚠️ Nie znaleziono metody {process_name} w SyncController - pomijam")
-                        continue
-                    
-                    # Przygotuj parametry dla CronTrigger
-                    cron_params = {}
-                    if job_config['year'] is not None:
-                        cron_params['year'] = job_config['year']
-                    if job_config['month'] is not None:
-                        cron_params['month'] = job_config['month']
-                    if job_config['day'] is not None:
-                        cron_params['day'] = job_config['day']
-                    if job_config['week'] is not None:
-                        cron_params['week'] = job_config['week']
-                    if job_config['day_of_week'] is not None:
-                        cron_params['day_of_week'] = job_config['day_of_week']
-                    if job_config['hour'] is not None:
-                        cron_params['hour'] = job_config['hour']
-                    if job_config['minute'] is not None:
-                        cron_params['minute'] = job_config['minute']
-                    if job_config['second'] is not None:
-                        cron_params['second'] = job_config['second']
-                    if job_config['start_date'] is not None:
-                        cron_params['start_date'] = job_config['start_date']
-                    if job_config['end_date'] is not None:
-                        cron_params['end_date'] = job_config['end_date']
-                    if job_config['timezone'] is not None:
-                        cron_params['timezone'] = job_config['timezone']
-                    if job_config['jitter'] is not None and job_config['jitter'] > 0:
-                        cron_params['jitter'] = job_config['jitter']
-                    
-                    trigger = CronTrigger(**cron_params)
+                    continue
+                
+                # Przygotuj parametry dla CronTrigger
+                cron_params = {}
+                if job_config['year'] is not None:
+                    cron_params['year'] = job_config['year']
+                if job_config['month'] is not None:
+                    cron_params['month'] = job_config['month']
+                if job_config['day'] is not None:
+                    cron_params['day'] = job_config['day']
+                if job_config['week'] is not None:
+                    cron_params['week'] = job_config['week']
+                if job_config['day_of_week'] is not None:
+                    cron_params['day_of_week'] = job_config['day_of_week']
+                if job_config['hour'] is not None:
+                    cron_params['hour'] = job_config['hour']
+                if job_config['minute'] is not None:
+                    cron_params['minute'] = job_config['minute']
+                if job_config['second'] is not None:
+                    cron_params['second'] = job_config['second']
+                if job_config['start_date'] is not None:
+                    cron_params['start_date'] = job_config['start_date']
+                if job_config['end_date'] is not None:
+                    cron_params['end_date'] = job_config['end_date']
+                if job_config['timezone'] is not None:
+                    cron_params['timezone'] = job_config['timezone']
+                if job_config['jitter'] is not None and job_config['jitter'] > 0:
+                    cron_params['jitter'] = job_config['jitter']
+                
+                trigger = CronTrigger(**cron_params)
                     
                 # Sprawdź czy job już istnieje w schedulerze
                 if job_id in scheduled_job_ids:
@@ -763,8 +763,8 @@ class SyncController:
             
             logger.info(f"✅ Synchronizacja schedulera zakończona: dodano={added_count}, zaktualizowano={updated_count}, usunięto={removed_count}")
             return True
-                    
-                except Exception as e:
+        
+        except Exception as e:
             logger.error(f"❌ Błąd podczas synchronizacji schedulera z bazą: {e}")
             logger.error(traceback.format_exc())
             return False
