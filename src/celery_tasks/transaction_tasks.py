@@ -14,6 +14,7 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
+from .utils import run_async_task_safely
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +57,10 @@ def sync_transactions_wallets_task(
         )
         
         # Uruchom synchronizację portfeli
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_transactions_wallets_sync(phase=phase)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_transactions_wallets_sync,
+            phase=phase
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -139,16 +134,11 @@ def sync_transactions_task(
         )
         
         # Uruchom synchronizację transakcji
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_transactions_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_transactions_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)

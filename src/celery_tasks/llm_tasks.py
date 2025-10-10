@@ -16,6 +16,7 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
+from .utils import run_async_task_safely
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +56,11 @@ def sync_llm_technical_interpretation_task(
         )
         
         # Uruchom interpretację LLM analiz technicznych
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_llm_technical_interpretation_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_llm_technical_interpretation_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -138,16 +134,11 @@ def sync_llm_fundamental_interpretation_task(
         )
         
         # Uruchom interpretację LLM analiz fundamentalnych
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_llm_fundamental_interpretation_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_llm_fundamental_interpretation_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -221,16 +212,11 @@ def sync_llm_analysis_parallel_task(
         )
         
         # Uruchom równoległą interpretację LLM
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            fundamental_success, technical_success = loop.run_until_complete(
-                sync_controller._run_parallel_llm_interpretations(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        fundamental_success, technical_success = run_async_task_safely(
+            sync_controller._run_parallel_llm_interpretations,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -308,16 +294,11 @@ def sync_llm_general_decision_task(
         )
         
         # Uruchom generalne decyzje LLM
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_llm_general_decision_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_llm_general_decision_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
