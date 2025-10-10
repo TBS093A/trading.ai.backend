@@ -153,22 +153,46 @@ class SyncController:
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
+        loop = None
         try:
             # Utwórz nową pętlę asyncio dla wątku
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-            try:
-                # Uruchom metodę async w nowej pętli
-                result = loop.run_until_complete(sync_method(limit=limit, offset=offset))
-                return True
-            finally:
-                loop.close()
+            # Uruchom metodę async w nowej pętli
+            result = loop.run_until_complete(sync_method(limit=limit, offset=offset))
+            
+            # Poczekaj na zakończenie wszystkich oczekujących zadań
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                logger.debug(f"Oczekiwanie na {len(pending)} oczekujących zadań przed zamknięciem pętli dla {sync_method.__name__}")
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            
+            return True
                 
         except Exception as e:
             logger.error(f"Błąd w wątku dla metody {sync_method.__name__}: {e}")
             logger.error(traceback.format_exc())
             return False
+        finally:
+            # Upewnij się, że pętla jest prawidłowo zamknięta
+            if loop is not None and not loop.is_closed():
+                try:
+                    # Anuluj wszystkie pozostałe zadania
+                    pending = asyncio.all_tasks(loop)
+                    if pending:
+                        logger.debug(f"Anulowanie {len(pending)} pozostałych zadań w finally dla {sync_method.__name__}")
+                        for task in pending:
+                            task.cancel()
+                        
+                        # Poczekaj na anulowanie zadań
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    
+                    # Zamknij pętlę
+                    loop.close()
+                    logger.debug(f"Event loop zamknięta pomyślnie dla {sync_method.__name__}")
+                except Exception as e:
+                    logger.warning(f"Błąd podczas zamykania event loop dla {sync_method.__name__}: {e}")
     
     async def _run_exchanges_sync(self) -> bool:
         """
