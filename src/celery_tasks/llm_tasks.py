@@ -15,7 +15,9 @@ from typing import Dict, Any, Tuple, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
-from main_controller_sync import SyncController
+from ..sync_llm_technical_analysis_interpretation import LlmTechnicalAnalysisInterpretation
+from ..sync_llm_fundamental_analysis_interpretation import LlmFundamentalAnalysisInterpretation
+from ..sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
 from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
@@ -56,7 +58,7 @@ def sync_llm_technical_interpretation_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        llm_technical_interpretation = LlmTechnicalAnalysisInterpretation(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -65,7 +67,7 @@ def sync_llm_technical_interpretation_task(
         
         # Uruchom interpretację LLM analiz technicznych
         result = run_async_task_safely(
-            sync_controller._run_llm_technical_interpretation_sync,
+            llm_technical_interpretation.sync,
             limit=limit,
             offset=offset
         )
@@ -142,7 +144,7 @@ def sync_llm_fundamental_interpretation_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        llm_fundamental_interpretation = LlmFundamentalAnalysisInterpretation(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -151,7 +153,7 @@ def sync_llm_fundamental_interpretation_task(
         
         # Uruchom interpretację LLM analiz fundamentalnych
         result = run_async_task_safely(
-            sync_controller._run_llm_fundamental_interpretation_sync,
+            llm_fundamental_interpretation.sync_crypto_fundamental_analysis_interpretations,
             limit=limit,
             offset=offset
         )
@@ -202,6 +204,7 @@ def sync_llm_analysis_parallel_task(
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla równoległej interpretacji LLM (techniczna + fundamentalna).
+    Wywołuje obie interpretacje sekwencyjnie.
     
     Args:
         limit: Limit rekordów do przetworzenia
@@ -220,16 +223,28 @@ def sync_llm_analysis_parallel_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
-        
+        # Uruchom interpretację LLM techniczną
         self.update_state(
             state='PROGRESS',
-            meta={'stage': 'running_llm_parallel_interpretations', 'progress': 50}
+            meta={'stage': 'running_llm_technical_interpretation', 'progress': 25}
+        )
+        logger.info("🤖📈 Running LLM technical interpretation")
+        llm_technical_interpretation = LlmTechnicalAnalysisInterpretation(test_mode=test_mode)
+        technical_success = run_async_task_safely(
+            llm_technical_interpretation.sync,
+            limit=limit,
+            offset=offset
         )
         
-        # Uruchom równoległą interpretację LLM
-        fundamental_success, technical_success = run_async_task_safely(
-            sync_controller._run_parallel_llm_interpretations,
+        # Uruchom interpretację LLM fundamentalną
+        self.update_state(
+            state='PROGRESS',
+            meta={'stage': 'running_llm_fundamental_interpretation', 'progress': 75}
+        )
+        logger.info("🤖📊 Running LLM fundamental interpretation")
+        llm_fundamental_interpretation = LlmFundamentalAnalysisInterpretation(test_mode=test_mode)
+        fundamental_success = run_async_task_safely(
+            llm_fundamental_interpretation.sync_crypto_fundamental_analysis_interpretations,
             limit=limit,
             offset=offset
         )
@@ -237,7 +252,7 @@ def sync_llm_analysis_parallel_task(
         end_time = datetime.now()
         duration = str(end_time - start_time)
         
-        overall_success = fundamental_success or technical_success
+        overall_success = fundamental_success and technical_success
         
         self.update_state(
             state='SUCCESS',
@@ -313,7 +328,7 @@ def sync_llm_general_decision_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        llm_general_decision = LlmGeneralAnalysisTransactionDecision(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -322,7 +337,7 @@ def sync_llm_general_decision_task(
         
         # Uruchom generalne decyzje LLM
         result = run_async_task_safely(
-            sync_controller._run_llm_general_decision_sync,
+            llm_general_decision.sync,
             limit=limit,
             offset=offset
         )
