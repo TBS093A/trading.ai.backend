@@ -6,7 +6,8 @@ import os
 import multiprocessing
 import math
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
+from functools import wraps
 from celery.result import AsyncResult
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -32,6 +33,99 @@ from src.celery_tasks.transaction_tasks import (
 from src.controller_rest_celery_worker import get_celery_app
 
 logger = logging.getLogger(__name__)
+
+
+def sync_with_cron_db(func: Callable) -> Callable:
+    """
+    Dekorator sprawdzający stan crona w bazie przed wykonaniem metody.
+    
+    Sprawdza czy:
+    - Proces ma przypisany cron job w bazie
+    - Cron job jest włączony (enabled=True)
+    - Synchronizuje scheduler z bazą danych przed wykonaniem
+    
+    Jeśli cron jest wyłączony lub nie istnieje, metoda nie zostanie wykonana.
+    Obsługuje zarówno synchroniczne jak i asynchroniczne metody.
+    
+    Args:
+        func: Dekorowana metoda synchronizacji
+        
+    Returns:
+        Callable: Opakowana funkcja z walidacją crona
+    """
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        # Pobierz nazwę procesu z nazwy metody
+        process_name = func.__name__
+        
+        try:
+            # Sprawdź czy baza jest zainicjalizowana
+            if not hasattr(self, 'db') or self.db is None:
+                logger.warning(f"⚠️ Baza danych nie zainicjalizowana - wykonuję {process_name} bez sprawdzenia crona")
+                if asyncio.iscoroutinefunction(func):
+                    return await func(self, *args, **kwargs)
+                else:
+                    return func(self, *args, **kwargs)
+            
+            # Zainicjalizuj bazę jeśli potrzeba
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+            
+            # Synchronizuj scheduler z bazą danych przed sprawdzeniem crona
+            logger.debug(f"🔄 Synchronizacja schedulera z bazą przed wykonaniem {process_name}")
+            try:
+                await self.sync_scheduler_with_database()
+            except Exception as sync_error:
+                logger.warning(f"⚠️ Błąd synchronizacji schedulera: {sync_error} - kontynuuję bez synchronizacji")
+            
+            # Pobierz tabele
+            system_sync_job_table = self.db.get_factory().get_system_sync_job_table()
+            cron_table = self.db.get_factory().get_cron_system_sync_job_table()
+            
+            # Sprawdź czy proces istnieje w bazie
+            process_record = await system_sync_job_table.get_by_process(process_name)
+            if not process_record:
+                logger.warning(f"⚠️ Proces {process_name} nie znaleziony w bazie - wykonuję bez sprawdzenia crona")
+                if asyncio.iscoroutinefunction(func):
+                    return await func(self, *args, **kwargs)
+                else:
+                    return func(self, *args, **kwargs)
+            
+            # Pobierz crony dla tego procesu
+            cron_jobs = await cron_table.get_by_process(process_name)
+            
+            if not cron_jobs:
+                logger.info(f"ℹ️ Brak cron jobów dla procesu {process_name} - task nie będzie wykonany")
+                return None
+            
+            # Sprawdź czy któryś z cronów jest włączony
+            enabled_crons = [cron for cron in cron_jobs if cron.get('enabled', False)]
+            
+            if not enabled_crons:
+                logger.info(f"🚫 Wszystkie cron joby dla {process_name} są wyłączone - task nie będzie wykonany")
+                return None
+            
+            # Loguj informacje o włączonych cronach
+            for cron in enabled_crons:
+                logger.info(f"✅ Cron job '{cron['name']}' jest aktywny dla {process_name}")
+            
+            # Wykonaj oryginalną funkcję (sync lub async)
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
+            
+        except Exception as e:
+            logger.error(f"❌ Błąd podczas sprawdzania crona dla {process_name}: {e}")
+            logger.error(traceback.format_exc())
+            # W przypadku błędu - wykonaj funkcję (fail-safe)
+            logger.warning(f"⚠️ Wykonuję {process_name} pomimo błędu sprawdzania crona (fail-safe)")
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
+    
+    return wrapper
 
 
 class SyncController:
@@ -160,7 +254,8 @@ class SyncController:
             
         return chunks
     
-    def _run_exchanges_sync(self, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_exchanges_sync(self, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadanie synchronizacji giełd do kolejki Celery bez czekania.
         
@@ -189,7 +284,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_fundamental_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_fundamental_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji analizy fundamentalnej do kolejki bez czekania.
         
@@ -226,7 +322,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_technical_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_technical_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji analizy technicznej do kolejki bez czekania.
         
@@ -263,7 +360,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_llm_fundamental_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_llm_fundamental_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM fundamentalnej do kolejki bez czekania.
         
@@ -300,7 +398,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_llm_technical_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_llm_technical_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM technicznej do kolejki bez czekania.
         
@@ -337,7 +436,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_llm_general_decision_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_llm_general_decision_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania decyzji generalnej LLM do kolejki bez czekania.
         
@@ -374,7 +474,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_transactions_wallets_sync(self, phase: str = "pre", custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_transactions_wallets_sync(self, phase: str = "pre", custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadanie synchronizacji portfeli do kolejki bez czekania.
         
@@ -406,7 +507,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
 
-    def _run_transactions_sync(self, limit: int = 500, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_transactions_sync(self, limit: int = 500, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji transakcji do kolejki bez czekania.
         
@@ -443,7 +545,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_parallel_analysis(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_parallel_analysis(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania analiz (fundamental + technical) równolegle do kolejki bez czekania.
         
@@ -500,7 +603,8 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
+    @sync_with_cron_db
+    async def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM (fundamental + technical) równolegle do kolejki bez czekania.
         
@@ -557,155 +661,46 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
-    async def run_full_sync_workflow(self) -> Dict[str, List[str]]:
+    async def sync_scheduler_with_database(self) -> bool:
         """
-        Wysyła wszystkie zadania workflow do kolejki Celery bez czekania.
-        Zadania same zarządzają swoimi zależnościami przez wait_for_dependencies().
+        Synchronizuje APScheduler z bazą danych - dodaje, usuwa i modyfikuje joby zgodnie z bazą.
         
-        Workflow (zależności zarządzane w taskach):
-        1. Exchanges (brak zależności)
-        2. Fundamental + Technical Analysis (czeka na Exchanges)
-        3. LLM Fundamental + Technical (czeka na odpowiednie analizy)
-        4. LLM General Decision (czeka na obie interpretacje LLM)
-        5. TransactionsWallets pre (czeka na LLM General)
-        6. Transactions (czeka na TransactionsWallets pre)
-        7. TransactionsWallets post (czeka na Transactions)
+        Metoda ta powinna być wywoływana okresowo aby utrzymać synchronizację między
+        schedulerem a bazą danych (w przypadku zmian w bazie przez REST API).
         
         Returns:
-            Dict[str, List[str]]: Słownik z task_id dla każdego etapu workflow
+            bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("🚀 ROZPOCZĘCIE WYSYŁANIA WORKFLOW DO KOLEJKI CELERY 🚀")
-            start_time = datetime.now()
+            logger.info("🔄 Rozpoczęcie synchronizacji schedulera z bazą danych")
             
-            all_tasks = {}
-            
-            # KROK 1: Exchanges
-            logger.info("📊 KROK 1: Wysyłanie synchronizacji giełd")
-            exchanges_tasks = self._run_exchanges_sync()
-            all_tasks['exchanges'] = [t.id for t in exchanges_tasks]
-            
-            # KROK 2: Analizy (Fundamental + Technical) - czekają na Exchanges w taskach
-            logger.info("📈 KROK 2: Wysyłanie analiz (Fundamental + Technical)")
-            analysis_tasks = self._run_parallel_analysis(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges'
-                ]
-            )
-            all_tasks['analysis'] = [t.id for t in analysis_tasks]
-            
-            # KROK 3: Interpretacje LLM - czekają na analizy w taskach
-            logger.info("🤖 KROK 3: Wysyłanie interpretacji LLM")
-            llm_interpretation_tasks = self._run_parallel_llm_interpretations(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis'
-                ]
-            )
-            all_tasks['llm_interpretations'] = [t.id for t in llm_interpretation_tasks]
-            
-            # KROK 4: Decyzja generalna LLM - czeka na interpretacje w taskach
-            logger.info("🎯 KROK 4: Wysyłanie decyzji generalnej LLM")
-            llm_general_tasks = self._run_llm_general_decision_sync(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation'
-                ]
-            )
-            all_tasks['llm_general'] = [t.id for t in llm_general_tasks]
-            
-            # KROK 5: Portfele przed transakcjami - czeka na LLM General w taskach
-            logger.info("💼 KROK 5: Wysyłanie portfeli (pre-transactions)")
-            wallets_pre_tasks = self._run_transactions_wallets_sync(
-                phase="pre", 
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision'
-                ]
-            )
-            all_tasks['wallets_pre'] = [t.id for t in wallets_pre_tasks]
-            
-            # KROK 6: Transakcje - czeka na portfele pre w taskach
-            logger.info("💰 KROK 6: Wysyłanie transakcji")
-            transactions_tasks = self._run_transactions_sync(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision',
-                    'transaction_tasks.sync_transactions_wallets'
-                ]
-            )
-            all_tasks['transactions'] = [t.id for t in transactions_tasks]
-            
-            # KROK 7: Portfele po transakcjach - czeka na transakcje w taskach
-            logger.info("💼 KROK 7: Wysyłanie portfeli (post-transactions)")
-            wallets_post_tasks = self._run_transactions_wallets_sync(
-                phase="post",
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision',
-                    'transaction_tasks.sync_transactions_wallets',
-                    'transaction_tasks.sync_transactions'
-                ]
-            )
-            all_tasks['wallets_post'] = [t.id for t in wallets_post_tasks]
-            
-            end_time = datetime.now()
-            duration = end_time - start_time
-            
-            # Podsumowanie
-            total_tasks = sum(len(tasks) for tasks in all_tasks.values())
-            logger.info("📋 PODSUMOWANIE WYSYŁANIA WORKFLOW:")
-            logger.info(f"⏱️ Czas wysyłania: {duration}")
-            logger.info(f"📊 Wysłano łącznie {total_tasks} zadań do kolejki")
-            for stage, task_ids in all_tasks.items():
-                logger.info(f"   {stage}: {len(task_ids)} zadań")
-            logger.info("✅ Wszystkie zadania workflow zostały wysłane do kolejki")
-            logger.info("🔄 Zadania będą się wykonywać zgodnie z zależnościami zdefiniowanymi w taskach")
-            
-            return all_tasks
-            
-        except Exception as e:
-            logger.error(f"❌ Krytyczny błąd podczas wysyłania workflow: {e}")
-            logger.error(traceback.format_exc())
-            return {}
-    
-    async def setup_cron_jobs(self) -> None:
-        """Konfiguruje cronjobs dla automatycznego uruchamiania workflow na podstawie bazy danych."""
-        try:
-            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+            # Zainicjalizuj bazę jeśli potrzeba
             if not hasattr(self.db, 'factory') or self.db.factory is None:
                 await self.db.init_db()
             
-            # Pobierz wszystkie włączone cron jobs z bazy danych
+            # Pobierz wszystkie włączone cron jobs z bazy
             cron_table = self.db.get_factory().get_cron_system_sync_job_table()
             enabled_jobs = await cron_table.get_all_enabled()
             
-            logger.info(f"🔍 Znaleziono {len(enabled_jobs)} włączonych cron jobs w bazie danych")
+            # Pobierz aktualnie zaplanowane joby z schedulera
+            scheduled_jobs = self.scheduler.get_jobs()
+            scheduled_job_ids = {job.id for job in scheduled_jobs}
+            
+            # Sprawdź które joby trzeba dodać/zaktualizować/usunąć
+            expected_job_ids = set()
+            added_count = 0
+            updated_count = 0
             
             for job_config in enabled_jobs:
-                try:
-                    # Pobierz nazwę procesu i znajdź odpowiadającą mu metodę
+                job_id = f"cron_job_{job_config['id']}"
+                expected_job_ids.add(job_id)
+                
+                # Pobierz metodę do wykonania
                     process_name = job_config['process']
                     method = getattr(self, process_name, None)
                     
                     if method is None:
-                        logger.warning(f"⚠️ Nie znaleziono metody {process_name} w SyncController")
+                    logger.warning(f"⚠️ Nie znaleziono metody {process_name} w SyncController - pomijam")
                         continue
                     
                     # Przygotuj parametry dla CronTrigger
@@ -735,30 +730,197 @@ class SyncController:
                     if job_config['jitter'] is not None and job_config['jitter'] > 0:
                         cron_params['jitter'] = job_config['jitter']
                     
-                    # Utwórz CronTrigger z parametrami
                     trigger = CronTrigger(**cron_params)
                     
-                    # Dodaj job do schedulera
+                # Sprawdź czy job już istnieje w schedulerze
+                if job_id in scheduled_job_ids:
+                    # Zaktualizuj istniejący job
+                    self.scheduler.reschedule_job(
+                        job_id=job_id,
+                        trigger=trigger
+                    )
+                    updated_count += 1
+                    logger.debug(f"🔄 Zaktualizowano job: {job_config['name']} (ID: {job_id})")
+                else:
+                    # Dodaj nowy job
                     self.scheduler.add_job(
                         func=method,
                         trigger=trigger,
-                        id=f"cron_job_{job_config['id']}",
+                        id=job_id,
                         name=job_config['name'],
                         replace_existing=True
                     )
-                    
-                    logger.info(f"✅ Skonfigurowano cron job: {job_config['name']} (ID: {job_config['id']})")
+                    added_count += 1
+                    logger.info(f"➕ Dodano nowy job: {job_config['name']} (ID: {job_id})")
+            
+            # Usuń joby które są w schedulerze ale nie ma ich w bazie (lub są wyłączone)
+            removed_count = 0
+            for job_id in scheduled_job_ids:
+                if job_id.startswith('cron_job_') and job_id not in expected_job_ids:
+                    self.scheduler.remove_job(job_id)
+                    removed_count += 1
+                    logger.info(f"➖ Usunięto job: {job_id}")
+            
+            logger.info(f"✅ Synchronizacja schedulera zakończona: dodano={added_count}, zaktualizowano={updated_count}, usunięto={removed_count}")
+            return True
                     
                 except Exception as e:
-                    logger.error(f"❌ Błąd podczas konfiguracji cron job {job_config.get('name', 'Unknown')}: {e}")
+            logger.error(f"❌ Błąd podczas synchronizacji schedulera z bazą: {e}")
+            logger.error(traceback.format_exc())
+            return False
+    
+    @sync_with_cron_db
+    async def run_full_sync_workflow(self) -> Dict[str, List[str]]:
+        """
+        Wysyła wszystkie zadania workflow do kolejki Celery bez czekania.
+        Zadania same zarządzają swoimi zależnościami przez wait_for_dependencies().
+        
+        Workflow (zależności zarządzane w taskach):
+        1. Exchanges (brak zależności)
+        2. Fundamental + Technical Analysis (czeka na Exchanges)
+        3. LLM Fundamental + Technical (czeka na odpowiednie analizy)
+        4. LLM General Decision (czeka na obie interpretacje LLM)
+        5. TransactionsWallets pre (czeka na LLM General)
+        6. Transactions (czeka na TransactionsWallets pre)
+        7. TransactionsWallets post (czeka na Transactions)
+        
+        Returns:
+            Dict[str, List[str]]: Słownik z task_id dla każdego etapu workflow
+        """
+        try:
+            logger.info("🚀 ROZPOCZĘCIE WYSYŁANIA WORKFLOW DO KOLEJKI CELERY 🚀")
+            start_time = datetime.now()
             
-            if len(enabled_jobs) == 0:
-                logger.warning("⚠️ Brak włączonych cron jobs w bazie danych")
-            else:
-                logger.info(f"✅ Skonfigurowano {len(enabled_jobs)} cron jobs z bazy danych")
+            all_tasks = {}
+            
+            # KROK 1: Exchanges
+            logger.info("📊 KROK 1: Wysyłanie synchronizacji giełd")
+            exchanges_tasks = await self._run_exchanges_sync()
+            all_tasks['exchanges'] = [t.id for t in exchanges_tasks] if exchanges_tasks else []
+            
+            # KROK 2: Analizy (Fundamental + Technical) - czekają na Exchanges w taskach
+            logger.info("📈 KROK 2: Wysyłanie analiz (Fundamental + Technical)")
+            analysis_tasks = await self._run_parallel_analysis(
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges'
+                ]
+            )
+            all_tasks['analysis'] = [t.id for t in analysis_tasks] if analysis_tasks else []
+            
+            # KROK 3: Interpretacje LLM - czekają na analizy w taskach
+            logger.info("🤖 KROK 3: Wysyłanie interpretacji LLM")
+            llm_interpretation_tasks = await self._run_parallel_llm_interpretations(
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges',
+                    'analysis_tasks.sync_fundamental_analysis',
+                    'analysis_tasks.sync_technical_analysis'
+                ]
+            )
+            all_tasks['llm_interpretations'] = [t.id for t in llm_interpretation_tasks] if llm_interpretation_tasks else []
+            
+            # KROK 4: Decyzja generalna LLM - czeka na interpretacje w taskach
+            logger.info("🎯 KROK 4: Wysyłanie decyzji generalnej LLM")
+            llm_general_tasks = await self._run_llm_general_decision_sync(
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges',
+                    'analysis_tasks.sync_fundamental_analysis',
+                    'analysis_tasks.sync_technical_analysis',
+                    'llm_tasks.sync_llm_fundamental_interpretation',
+                    'llm_tasks.sync_llm_technical_interpretation'
+                ]
+            )
+            all_tasks['llm_general'] = [t.id for t in llm_general_tasks] if llm_general_tasks else []
+            
+            # KROK 5: Portfele przed transakcjami - czeka na LLM General w taskach
+            logger.info("💼 KROK 5: Wysyłanie portfeli (pre-transactions)")
+            wallets_pre_tasks = await self._run_transactions_wallets_sync(
+                phase="pre", 
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges',
+                    'analysis_tasks.sync_fundamental_analysis',
+                    'analysis_tasks.sync_technical_analysis',
+                    'llm_tasks.sync_llm_fundamental_interpretation',
+                    'llm_tasks.sync_llm_technical_interpretation',
+                    'llm_tasks.sync_llm_general_decision'
+                ]
+            )
+            all_tasks['wallets_pre'] = [t.id for t in wallets_pre_tasks] if wallets_pre_tasks else []
+            
+            # KROK 6: Transakcje - czeka na portfele pre w taskach
+            logger.info("💰 KROK 6: Wysyłanie transakcji")
+            transactions_tasks = await self._run_transactions_sync(
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges',
+                    'analysis_tasks.sync_fundamental_analysis',
+                    'analysis_tasks.sync_technical_analysis',
+                    'llm_tasks.sync_llm_fundamental_interpretation',
+                    'llm_tasks.sync_llm_technical_interpretation',
+                    'llm_tasks.sync_llm_general_decision',
+                    'transaction_tasks.sync_transactions_wallets'
+                ]
+            )
+            all_tasks['transactions'] = [t.id for t in transactions_tasks] if transactions_tasks else []
+            
+            # KROK 7: Portfele po transakcjach - czeka na transakcje w taskach
+            logger.info("💼 KROK 7: Wysyłanie portfeli (post-transactions)")
+            wallets_post_tasks = await self._run_transactions_wallets_sync(
+                phase="post",
+                custom_dependencies=[
+                    'sync_tasks.sync_exchanges',
+                    'analysis_tasks.sync_fundamental_analysis',
+                    'analysis_tasks.sync_technical_analysis',
+                    'llm_tasks.sync_llm_fundamental_interpretation',
+                    'llm_tasks.sync_llm_technical_interpretation',
+                    'llm_tasks.sync_llm_general_decision',
+                    'transaction_tasks.sync_transactions_wallets',
+                    'transaction_tasks.sync_transactions'
+                ]
+            )
+            all_tasks['wallets_post'] = [t.id for t in wallets_post_tasks] if wallets_post_tasks else []
+            
+            end_time = datetime.now()
+            duration = end_time - start_time
+            
+            # Podsumowanie
+            total_tasks = sum(len(tasks) for tasks in all_tasks.values())
+            logger.info("📋 PODSUMOWANIE WYSYŁANIA WORKFLOW:")
+            logger.info(f"⏱️ Czas wysyłania: {duration}")
+            logger.info(f"📊 Wysłano łącznie {total_tasks} zadań do kolejki")
+            for stage, task_ids in all_tasks.items():
+                logger.info(f"   {stage}: {len(task_ids)} zadań")
+            logger.info("✅ Wszystkie zadania workflow zostały wysłane do kolejki")
+            logger.info("🔄 Zadania będą się wykonywać zgodnie z zależnościami zdefiniowanymi w taskach")
+            
+            return all_tasks
+            
+        except Exception as e:
+            logger.error(f"❌ Krytyczny błąd podczas wysyłania workflow: {e}")
+            logger.error(traceback.format_exc())
+            return {}
+    
+    async def setup_cron_jobs(self) -> None:
+        """
+        Konfiguruje cronjobs dla automatycznego uruchamiania workflow na podstawie bazy danych.
+        Używa metody sync_scheduler_with_database do synchronizacji.
+        """
+        try:
+            # Wykonaj początkową synchronizację schedulera z bazą
+            await self.sync_scheduler_with_database()
+            
+            # Dodaj periodic job do synchronizacji schedulera z bazą co 5 minut
+            from apscheduler.triggers.interval import IntervalTrigger
+            self.scheduler.add_job(
+                func=self.sync_scheduler_with_database,
+                trigger=IntervalTrigger(minutes=5),
+                id='sync_scheduler_periodic',
+                name='Periodic Scheduler-Database Sync',
+                replace_existing=True
+            )
+            logger.info("✅ Dodano periodic job do synchronizacji schedulera z bazą (co 5 minut)")
             
         except Exception as e:
             logger.error(f"❌ Błąd podczas konfiguracji cron jobs: {e}")
+            logger.error(traceback.format_exc())
             raise
     
     async def start(self) -> None:
