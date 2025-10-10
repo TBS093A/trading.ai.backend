@@ -83,16 +83,21 @@ class SyncStatus(BaseModel):
 
 
 class WorkflowStatus(BaseModel):
-    """Status workflow synchronizacji."""
-    exchanges_completed: bool
-    fundamental_analysis_completed: bool
-    technical_analysis_completed: bool
-    llm_fundamental_completed: bool
-    llm_technical_completed: bool
-    llm_general_completed: bool
-    transactions_wallets_pre_completed: bool
-    transactions_completed: bool
-    transactions_wallets_post_completed: bool
+    """
+    Status workflow synchronizacji (DEPRECATED).
+    
+    Ten model jest przestarzały - workflow jest teraz zarządzany przez Celery tasks.
+    Endpoint /workflow zwraca aktywne zadania Celery zamiast tego modelu.
+    """
+    exchanges_completed: bool = False
+    fundamental_analysis_completed: bool = False
+    technical_analysis_completed: bool = False
+    llm_fundamental_completed: bool = False
+    llm_technical_completed: bool = False
+    llm_general_completed: bool = False
+    transactions_wallets_pre_completed: bool = False
+    transactions_completed: bool = False
+    transactions_wallets_post_completed: bool = False
 
 
 class HealthCheckResult(BaseModel):
@@ -164,7 +169,7 @@ async def sync_info():
             "transactions_wallets": "POST /sync/transactions/wallets - Synchronizacja portfeli",
             "transactions": "POST /sync/transactions - Synchronizacja transakcji",
             "status": "GET /sync/status - Status operacji",
-            "workflow": "GET /sync/workflow - Status workflow",
+            "workflow": "GET /sync/workflow - Status workflow (Celery tasks)",
             "health": "GET /sync/health - Health check systemu"
         }
     }
@@ -291,10 +296,84 @@ async def cancel_operation(task_id: str = Path(..., description="ID zadania Cele
         )
 
 
-@router.get("/workflow", response_model=WorkflowStatus)
-async def get_workflow_status(sync_controller: SyncController = Depends(get_sync_controller)):
-    """Pobiera status workflow synchronizacji."""
-    return WorkflowStatus(**sync_controller.workflow_status)
+@router.get("/workflow", response_model=Dict[str, Any])
+async def get_workflow_status():
+    """
+    Pobiera status workflow synchronizacji z Celery.
+    
+    Workflow jest teraz zarządzany przez zadania Celery z wewnętrznymi zależnościami.
+    Ten endpoint zwraca aktywne zadania Celery zamiast wewnętrznego statusu.
+    """
+    try:
+        celery_app = get_celery_app()
+        inspect = celery_app.control.inspect()
+        
+        # Pobierz aktywne i zaplanowane zadania
+        active_tasks = inspect.active() or {}
+        scheduled_tasks = inspect.scheduled() or {}
+        reserved_tasks = inspect.reserved() or {}
+        
+        # Grupuj zadania według typu
+        workflow_status = {
+            "exchanges": [],
+            "technical_analysis": [],
+            "fundamental_analysis": [],
+            "llm_technical_interpretation": [],
+            "llm_fundamental_interpretation": [],
+            "llm_general_decision": [],
+            "transactions_wallets": [],
+            "transactions": []
+        }
+        
+        # Przetwórz aktywne zadania
+        for worker, tasks in active_tasks.items():
+            for task in tasks:
+                task_name = task['name'].split('.')[-1]  # Pobierz ostatnią część nazwy
+                for key in workflow_status.keys():
+                    if key in task_name:
+                        workflow_status[key].append({
+                            'task_id': task['id'],
+                            'status': 'RUNNING',
+                            'worker': worker
+                        })
+        
+        # Przetwórz zaplanowane zadania
+        for worker, tasks in scheduled_tasks.items():
+            for task in tasks:
+                task_name = task['request']['name'].split('.')[-1]
+                for key in workflow_status.keys():
+                    if key in task_name:
+                        workflow_status[key].append({
+                            'task_id': task['request']['id'],
+                            'status': 'SCHEDULED',
+                            'worker': worker,
+                            'eta': task.get('eta')
+                        })
+        
+        # Przetwórz zarezerwowane zadania
+        for worker, tasks in reserved_tasks.items():
+            for task in tasks:
+                task_name = task['name'].split('.')[-1]
+                for key in workflow_status.keys():
+                    if key in task_name:
+                        workflow_status[key].append({
+                            'task_id': task['id'],
+                            'status': 'RESERVED',
+                            'worker': worker
+                        })
+        
+        return {
+            "message": "Workflow status from Celery tasks",
+            "note": "Dependencies are managed internally by tasks",
+            "workflow": workflow_status,
+            "summary": {
+                key: len(tasks) for key, tasks in workflow_status.items()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting workflow status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {str(e)}")
 
 
 # ===================
@@ -641,13 +720,23 @@ async def health_check(sync_controller: SyncController = Depends(get_sync_contro
         # Check SyncController
         try:
             if sync_controller:
+                # Pobierz informacje o workerach Celery
+                celery_app = get_celery_app()
+                inspect = celery_app.control.inspect()
+                stats = inspect.stats() or {}
+                active = inspect.active() or {}
+                
+                total_workers = len(stats)
+                active_tasks = sum(len(tasks) for tasks in active.values())
+                
                 components["SyncController"] = HealthCheckResult(
                     healthy=True,
                     message="Dostępny",
                     details={
-                        "cpu_count": sync_controller.cpu_count,
-                        "max_workers": sync_controller.max_workers,
-                        "workflow_status": sync_controller.workflow_status
+                        "type": "Celery-based dispatcher",
+                        "celery_workers": total_workers,
+                        "active_tasks": active_tasks,
+                        "test_mode": sync_controller.test_mode
                     }
                 )
             else:
