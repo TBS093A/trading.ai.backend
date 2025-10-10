@@ -14,6 +14,7 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
+from .utils import run_async_task_safely
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +48,10 @@ def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
             meta={'stage': 'running_sync', 'progress': 50}
         )
         
-        # Uruchom synchronizację giełd (synchronicznie w taskg)
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(sync_controller._run_exchanges_sync())
-        finally:
-            loop.close()
+        # Uruchom synchronizację giełd
+        result = run_async_task_safely(
+            sync_controller._run_exchanges_sync
+        )
         
         # Oblicz czas wykonania
         end_time = datetime.now()
@@ -132,22 +128,17 @@ def sync_all_task(self, test_mode: bool = False) -> Dict[str, Any]:
         ]
         
         # Uruchom pełny workflow synchronizacji
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # Aktualizuj progress przez workflow
-            for stage, progress in stages:
-                self.update_state(
-                    state='PROGRESS',
-                    meta={'stage': stage, 'progress': progress}
-                )
-                
-            # Uruchom pełny workflow
-            result = loop.run_until_complete(sync_controller.run_full_sync_workflow())
-        finally:
-            loop.close()
+        # Aktualizuj progress przez workflow
+        for stage, progress in stages:
+            self.update_state(
+                state='PROGRESS',
+                meta={'stage': stage, 'progress': progress}
+            )
+            
+        # Uruchom pełny workflow
+        result = run_async_task_safely(
+            sync_controller.run_full_sync_workflow
+        )
         
         # Oblicz czas wykonania
         end_time = datetime.now()

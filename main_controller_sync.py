@@ -7,20 +7,29 @@ import multiprocessing
 import math
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from celery.result import AsyncResult
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# Import klas synchronizacyjnych
-from src.sync_exchanges import Exchanges
-from src.sync_fundamental_analysis import FundamentalAnalysis
-from src.sync_technical_analysis import TechnicalAnalysis
-from src.sync_llm_fundamental_analysis_interpretation import LlmFundamentalAnalysisInterpretation
-from src.sync_llm_technical_analysis_interpretation import LlmTechnicalAnalysisInterpretation
-from src.sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysisTransactionDecision
-from src.sync_transactions import Transactions
-from src.sync_transactions_wallets import TransactionsWallets
+# Import bazy danych
 from src.db.database_facade import DatabaseFacade
+
+# Import Celery tasks
+from src.celery_tasks.sync_tasks import sync_exchanges_task
+from src.celery_tasks.analysis_tasks import (
+    sync_technical_analysis_task,
+    sync_fundamental_analysis_task
+)
+from src.celery_tasks.llm_tasks import (
+    sync_llm_technical_interpretation_task,
+    sync_llm_fundamental_interpretation_task,
+    sync_llm_general_decision_task
+)
+from src.celery_tasks.transaction_tasks import (
+    sync_transactions_wallets_task,
+    sync_transactions_task
+)
+from src.controller_rest_celery_worker import get_celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +60,9 @@ class SyncController:
         self.test_mode = test_mode
         self.scheduler = AsyncIOScheduler()
         
-        # Pobierz informacje o zasobach CPU
-        self.cpu_count = multiprocessing.cpu_count()
-        self.max_workers = max(2, self.cpu_count)  # minimum 2 wątki
-        self.thread_executor = ThreadPoolExecutor(max_workers=self.max_workers)
-        
-        logger.info(f"💻 Zainicjalizowano ThreadPool z {self.max_workers} wątkami (dostępne CPU: {self.cpu_count})")
+        # Inicjalizacja Celery
+        self.celery_app = get_celery_app()
+        logger.info("🔧 Zainicjalizowano Celery app")
         
         # Inicjalizacja bazy danych
         self._init_database()
@@ -92,21 +98,11 @@ class SyncController:
             raise
     
     def _init_sync_classes(self) -> None:
-        """Inicjalizuje instancje wszystkich klas synchronizacyjnych."""
-        try:
-            self.exchanges = Exchanges(test_mode=self.test_mode)
-            self.fundamental_analysis = FundamentalAnalysis(test_mode=self.test_mode)
-            self.technical_analysis = TechnicalAnalysis(test_mode=self.test_mode)
-            self.llm_fundamental = LlmFundamentalAnalysisInterpretation(test_mode=self.test_mode)
-            self.llm_technical = LlmTechnicalAnalysisInterpretation(test_mode=self.test_mode)
-            self.llm_general = LlmGeneralAnalysisTransactionDecision(test_mode=self.test_mode)
-            self.transactions_wallets = TransactionsWallets(test_mode=self.test_mode)
-            self.transactions = Transactions(test_mode=self.test_mode)
-            
-            logger.info("Zainicjalizowano wszystkie klasy synchronizacyjne")
-        except Exception as e:
-            logger.error(f"Błąd podczas inicjalizacji klas synchronizacyjnych: {e}")
-            raise
+        """
+        Metoda zastępcza - klasy synchronizacyjne nie są już bezpośrednio używane.
+        Wszystkie operacje synchronizacji są teraz wykonywane przez Celery workers.
+        """
+        logger.info("Klasy synchronizacyjne są zarządzane przez Celery workers")
     
     def _reset_workflow_status(self) -> None:
         """Resetuje status workflow do stanu początkowego."""
@@ -114,13 +110,55 @@ class SyncController:
             self.workflow_status[key] = False
         logger.info("Status workflow został zresetowany")
     
-    def _calculate_chunk_params(self, total_limit: int, num_workers: int) -> List[Tuple[int, int]]:
+    def _get_available_celery_workers(self, queue: str = None) -> int:
         """
-        Oblicza parametry chunków (limit, offset) dla podziału zadań między wątki.
+        Pobiera liczbę dostępnych (wolnych) workerów Celery.
+        
+        Args:
+            queue: Nazwa kolejki (opcjonalnie - jeśli None, liczy wszystkich)
+            
+        Returns:
+            int: Liczba dostępnych workerów
+        """
+        try:
+            inspect = self.celery_app.control.inspect()
+            
+            # Pobierz statystyki workerów
+            stats = inspect.stats()
+            active_tasks = inspect.active()
+            
+            if stats is None or active_tasks is None:
+                logger.warning("⚠️ Nie można pobrać statystyk workerów Celery - używam wartości domyślnej (2)")
+                return 2  # Domyślna wartość
+            
+            # Policz dostępnych workerów
+            total_workers = 0
+            busy_workers = 0
+            
+            for worker_name in stats.keys():
+                total_workers += 1
+                # Sprawdź czy worker ma aktywne zadania
+                if worker_name in active_tasks and len(active_tasks[worker_name]) > 0:
+                    busy_workers += 1
+            
+            available_workers = max(1, total_workers - busy_workers)  # Minimum 1
+            
+            logger.info(f"👷 Celery workers: total={total_workers}, busy={busy_workers}, available={available_workers}")
+            
+            return available_workers
+            
+        except Exception as e:
+            logger.error(f"❌ Błąd podczas pobierania informacji o workerach Celery: {e}")
+            return 2  # Domyślna wartość w przypadku błędu
+    
+    def _calculate_chunk_params(self, total_limit: int, num_workers: int, global_offset: int = 0) -> List[Tuple[int, int]]:
+        """
+        Oblicza parametry chunków (limit, offset) dla podziału zadań między workerów.
         
         Args:
             total_limit: Całkowita liczba elementów do przetworzenia
-            num_workers: Liczba wątków roboczych
+            num_workers: Liczba workerów
+            global_offset: Globalny offset (opcjonalny)
             
         Returns:
             List[Tuple[int, int]]: Lista tupli (limit, offset) dla każdego chunka
@@ -129,8 +167,8 @@ class SyncController:
         chunks = []
         
         for i in range(num_workers):
-            offset = i * chunk_size
-            limit = min(chunk_size, total_limit - offset)
+            offset = global_offset + (i * chunk_size)
+            limit = min(chunk_size, total_limit - (i * chunk_size))
             
             if limit > 0:  # Dodaj chunk tylko jeśli ma elementy do przetworzenia
                 chunks.append((limit, offset))
@@ -141,72 +179,87 @@ class SyncController:
             
         return chunks
     
-    def _run_sync_method_in_thread_sync(self, sync_method, limit: int, offset: int) -> bool:
+    async def _wait_for_celery_tasks(self, task_results: List[AsyncResult], task_name: str = "tasks") -> bool:
         """
-        Synchroniczna metoda do uruchamiania metod sync w wątku przez ThreadPoolExecutor.
+        Czeka na zakończenie zadań Celery i zbiera wyniki.
         
         Args:
-            sync_method: Metoda synchronizacyjna do uruchomienia
-            limit: Limit dla metody sync
-            offset: Offset dla metody sync
+            task_results: Lista AsyncResult z Celery
+            task_name: Nazwa zadań (do logowania)
             
         Returns:
-            bool: True jeśli synchronizacja się udała, False w przeciwnym razie
+            bool: True jeśli wszystkie zadania się udały, False w przeciwnym razie
         """
-        loop = None
         try:
-            # Utwórz nową pętlę asyncio dla wątku
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            logger.info(f"⏳ Oczekiwanie na zakończenie {len(task_results)} zadań {task_name}")
             
-            # Uruchom metodę async w nowej pętli
-            result = loop.run_until_complete(sync_method(limit=limit, offset=offset))
+            all_success = True
+            completed_tasks = 0
             
-            # Poczekaj na zakończenie wszystkich oczekujących zadań
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                logger.debug(f"Oczekiwanie na {len(pending)} oczekujących zadań przed zamknięciem pętli dla {sync_method.__name__}")
-                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            # Czekaj na zakończenie wszystkich zadań
+            for i, task_result in enumerate(task_results):
+                try:
+                    # Czekaj na zakończenie zadania (blocking call, ale w async context używamy sleep)
+                    while not task_result.ready():
+                        await asyncio.sleep(1)  # Sprawdzaj co sekundę
+                    
+                    # Pobierz wynik
+                    result = task_result.result
+                    
+                    if isinstance(result, dict):
+                        success = result.get('success', False)
+                        if success:
+                            completed_tasks += 1
+                            logger.info(f"✅ Zadanie {i+1}/{len(task_results)} {task_name} zakończone pomyślnie")
+                        else:
+                            all_success = False
+                            error_msg = result.get('error', 'Unknown error')
+                            logger.error(f"❌ Zadanie {i+1}/{len(task_results)} {task_name} nieudane: {error_msg}")
+                    else:
+                        logger.warning(f"⚠️ Zadanie {i+1}/{len(task_results)} {task_name} zwróciło nieoczekiwany wynik")
+                        all_success = False
+                        
+                except Exception as e:
+                    logger.error(f"❌ Błąd podczas oczekiwania na zadanie {i+1}/{len(task_results)} {task_name}: {e}")
+                    all_success = False
             
-            return True
-                
+            logger.info(f"📊 Zadania {task_name}: {completed_tasks}/{len(task_results)} pomyślnych")
+            return all_success
+            
         except Exception as e:
-            logger.error(f"Błąd w wątku dla metody {sync_method.__name__}: {e}")
+            logger.error(f"❌ Błąd podczas czekania na zadania {task_name}: {e}")
             logger.error(traceback.format_exc())
             return False
-        finally:
-            # Upewnij się, że pętla jest prawidłowo zamknięta
-            if loop is not None and not loop.is_closed():
-                try:
-                    # Anuluj wszystkie pozostałe zadania
-                    pending = asyncio.all_tasks(loop)
-                    if pending:
-                        logger.debug(f"Anulowanie {len(pending)} pozostałych zadań w finally dla {sync_method.__name__}")
-                        for task in pending:
-                            task.cancel()
-                        
-                        # Poczekaj na anulowanie zadań
-                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                    
-                    # Zamknij pętlę
-                    loop.close()
-                    logger.debug(f"Event loop zamknięta pomyślnie dla {sync_method.__name__}")
-                except Exception as e:
-                    logger.warning(f"Błąd podczas zamykania event loop dla {sync_method.__name__}: {e}")
     
     async def _run_exchanges_sync(self) -> bool:
         """
-        Uruchamia synchronizację giełd.
+        Uruchamia synchronizację giełd przez Celery.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI GIEŁD ===")
-            await self.exchanges.sync_assets()
-            self.workflow_status['exchanges_completed'] = True
-            logger.info("=== SYNCHRONIZACJA GIEŁD ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI GIEŁD (CELERY) ===")
+            
+            # Wyślij zadanie do Celery
+            task_result = sync_exchanges_task.apply_async(
+                kwargs={'test_mode': self.test_mode},
+                queue='sync_queue'
+            )
+            
+            logger.info(f"📤 Wysłano zadanie synchronizacji giełd: task_id={task_result.id}")
+            
+            # Czekaj na zakończenie zadania
+            success = await self._wait_for_celery_tasks([task_result], "exchanges_sync")
+            
+            if success:
+                self.workflow_status['exchanges_completed'] = True
+                logger.info("=== SYNCHRONIZACJA GIEŁD ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA GIEŁD NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji giełd: {e}")
             logger.error(traceback.format_exc())
@@ -214,17 +267,47 @@ class SyncController:
     
     async def _run_fundamental_analysis_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację analizy fundamentalnej.
+        Uruchamia synchronizację analizy fundamentalnej przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY FUNDAMENTALNEJ ===")
-            await self.fundamental_analysis.sync_news(limit=limit, offset=offset)
-            self.workflow_status['fundamental_analysis_completed'] = True
-            logger.info("=== SYNCHRONIZACJA ANALIZY FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY FUNDAMENTALNEJ (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("📰 Uruchamianie zadań analizy fundamentalnej w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_fundamental_analysis_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='analysis_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie fundamentalne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "fundamental_analysis")
+            
+            if success:
+                self.workflow_status['fundamental_analysis_completed'] = True
+                logger.info("=== SYNCHRONIZACJA ANALIZY FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA ANALIZY FUNDAMENTALNEJ NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji analizy fundamentalnej: {e}")
             logger.error(traceback.format_exc())
@@ -232,17 +315,47 @@ class SyncController:
     
     async def _run_technical_analysis_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację analizy technicznej.
+        Uruchamia synchronizację analizy technicznej przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY TECHNICZNEJ ===")
-            await self.technical_analysis.sync_technical_analysis(limit=limit, offset=offset)
-            self.workflow_status['technical_analysis_completed'] = True
-            logger.info("=== SYNCHRONIZACJA ANALIZY TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI ANALIZY TECHNICZNEJ (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("📈 Uruchamianie zadań analizy technicznej w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_technical_analysis_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='analysis_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie techniczne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "technical_analysis")
+            
+            if success:
+                self.workflow_status['technical_analysis_completed'] = True
+                logger.info("=== SYNCHRONIZACJA ANALIZY TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA ANALIZY TECHNICZNEJ NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji analizy technicznej: {e}")
             logger.error(traceback.format_exc())
@@ -250,17 +363,47 @@ class SyncController:
     
     async def _run_llm_fundamental_interpretation_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację interpretacji LLM analizy fundamentalnej.
+        Uruchamia synchronizację interpretacji LLM analizy fundamentalnej przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM FUNDAMENTALNEJ ===")
-            await self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations(limit=limit, offset=offset)
-            self.workflow_status['llm_fundamental_completed'] = True
-            logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM FUNDAMENTALNEJ (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("🤖📊 Uruchamianie zadań interpretacji LLM fundamentalnej w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_llm_fundamental_interpretation_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='llm_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie LLM fundamentalne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "llm_fundamental_interpretation")
+            
+            if success:
+                self.workflow_status['llm_fundamental_completed'] = True
+                logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM FUNDAMENTALNEJ ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA INTERPRETACJI LLM FUNDAMENTALNEJ NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji interpretacji LLM fundamentalnej: {e}")
             logger.error(traceback.format_exc())
@@ -268,17 +411,47 @@ class SyncController:
     
     async def _run_llm_technical_interpretation_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację interpretacji LLM analizy technicznej.
+        Uruchamia synchronizację interpretacji LLM analizy technicznej przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM TECHNICZNEJ ===")
-            await self.llm_technical.sync(limit=limit, offset=offset)
-            self.workflow_status['llm_technical_completed'] = True
-            logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI INTERPRETACJI LLM TECHNICZNEJ (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("🤖📈 Uruchamianie zadań interpretacji LLM technicznej w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_llm_technical_interpretation_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='llm_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie LLM techniczne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "llm_technical_interpretation")
+            
+            if success:
+                self.workflow_status['llm_technical_completed'] = True
+                logger.info("=== SYNCHRONIZACJA INTERPRETACJI LLM TECHNICZNEJ ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA INTERPRETACJI LLM TECHNICZNEJ NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji interpretacji LLM technicznej: {e}")
             logger.error(traceback.format_exc())
@@ -286,17 +459,47 @@ class SyncController:
     
     async def _run_llm_general_decision_sync(self, limit: int = 50, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację decyzji transakcyjnych LLM.
+        Uruchamia synchronizację decyzji transakcyjnych LLM przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI DECYZJI LLM GENERALNEJ ===")
-            await self.llm_general.sync(limit=limit, offset=offset)
-            self.workflow_status['llm_general_completed'] = True
-            logger.info("=== SYNCHRONIZACJA DECYZJI LLM GENERALNEJ ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI DECYZJI LLM GENERALNEJ (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("🎯 Uruchamianie zadań decyzji LLM generalnej w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_llm_general_decision_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='llm_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie LLM generalne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "llm_general_decision")
+            
+            if success:
+                self.workflow_status['llm_general_completed'] = True
+                logger.info("=== SYNCHRONIZACJA DECYZJI LLM GENERALNEJ ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA DECYZJI LLM GENERALNEJ NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji decyzji LLM generalnej: {e}")
             logger.error(traceback.format_exc())
@@ -304,7 +507,7 @@ class SyncController:
     
     async def _run_transactions_wallets_sync(self, phase: str = "pre") -> bool:
         """
-        Uruchamia synchronizację portfeli/walletów z giełd.
+        Uruchamia synchronizację portfeli/walletów z giełd przez Celery.
         
         Args:
             phase: Faza synchronizacji ("pre" lub "post")
@@ -314,20 +517,35 @@ class SyncController:
         """
         try:
             phase_label = "PRZED TRANSAKCJAMI" if phase == "pre" else "PO TRANSAKCJACH"
-            logger.info(f"=== ROZPOCZĘCIE SYNCHRONIZACJI PORTFELI {phase_label} ===")
+            logger.info(f"=== ROZPOCZĘCIE SYNCHRONIZACJI PORTFELI {phase_label} (CELERY) ===")
             
-            sync_report = await self.transactions_wallets.sync()
+            # Wyślij zadanie do Celery
+            task_result = sync_transactions_wallets_task.apply_async(
+                kwargs={
+                    'phase': phase,
+                    'test_mode': self.test_mode
+                },
+                queue='transaction_queue'
+            )
             
-            # Oznacz odpowiednią fazę jako ukończoną
-            if phase == "pre":
-                self.workflow_status['transactions_wallets_pre_completed'] = True
+            logger.info(f"📤 Wysłano zadanie synchronizacji portfeli: task_id={task_result.id}, phase={phase}")
+            
+            # Czekaj na zakończenie zadania
+            success = await self._wait_for_celery_tasks([task_result], f"transactions_wallets_{phase}")
+            
+            if success:
+                # Oznacz odpowiednią fazę jako ukończoną
+                if phase == "pre":
+                    self.workflow_status['transactions_wallets_pre_completed'] = True
+                else:
+                    self.workflow_status['transactions_wallets_post_completed'] = True
+                
+                logger.info(f"=== SYNCHRONIZACJA PORTFELI {phase_label} ZAKOŃCZONA POMYŚLNIE ===")
             else:
-                self.workflow_status['transactions_wallets_post_completed'] = True
+                logger.error(f"=== SYNCHRONIZACJA PORTFELI {phase_label} NIEUDANA ===")
             
-            logger.info(f"=== SYNCHRONIZACJA PORTFELI {phase_label} ZAKOŃCZONA POMYŚLNIE ===")
-            logger.info(f"Portfele zsynchronizowane: {sync_report['successful_wallets']}/{sync_report['total_wallets_processed']}")
+            return success
             
-            return True
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji portfeli ({phase}): {e}")
             logger.error(traceback.format_exc())
@@ -335,17 +553,47 @@ class SyncController:
 
     async def _run_transactions_sync(self, limit: int = 500, offset: int = 0) -> bool:
         """
-        Uruchamia synchronizację transakcji.
+        Uruchamia synchronizację transakcji przez Celery z podziałem na workerów.
         
         Returns:
             bool: True jeśli synchronizacja się udała, False w przeciwnym razie
         """
         try:
-            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI TRANSAKCJI ===")
-            await self.transactions.sync(limit=limit, offset=offset)
-            self.workflow_status['transactions_completed'] = True
-            logger.info("=== SYNCHRONIZACJA TRANSAKCJI ZAKOŃCZONA POMYŚLNIE ===")
-            return True
+            logger.info("=== ROZPOCZĘCIE SYNCHRONIZACJI TRANSAKCJI (CELERY) ===")
+            
+            # Pobierz liczbę dostępnych workerów
+            available_workers = self._get_available_celery_workers()
+            
+            # Oblicz chunki
+            chunks = self._calculate_chunk_params(limit, available_workers, offset)
+            
+            # Przygotuj zadania dla Celery
+            tasks = []
+            
+            logger.info("💰 Uruchamianie zadań synchronizacji transakcji w Celery")
+            for chunk_limit, chunk_offset in chunks:
+                task_result = sync_transactions_task.apply_async(
+                    kwargs={
+                        'limit': chunk_limit,
+                        'offset': chunk_offset,
+                        'test_mode': self.test_mode
+                    },
+                    queue='transaction_queue'
+                )
+                tasks.append(task_result)
+                logger.info(f"📤 Wysłano zadanie transakcji: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
+            
+            # Czekaj na zakończenie wszystkich zadań
+            success = await self._wait_for_celery_tasks(tasks, "transactions")
+            
+            if success:
+                self.workflow_status['transactions_completed'] = True
+                logger.info("=== SYNCHRONIZACJA TRANSAKCJI ZAKOŃCZONA POMYŚLNIE ===")
+            else:
+                logger.error("=== SYNCHRONIZACJA TRANSAKCJI NIEUDANA ===")
+            
+            return success
+            
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji transakcji: {e}")
             logger.error(traceback.format_exc())
@@ -353,70 +601,65 @@ class SyncController:
     
     async def _run_parallel_analysis(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
-        Uruchamia równolegle analizę fundamentalną i techniczną z wykorzystaniem ThreadPool.
-        Dzieli zadania między wątki na podstawie dostępnych zasobów CPU.
+        Uruchamia równolegle analizę fundamentalną i techniczną z wykorzystaniem Celery.
+        Dzieli zadania między wolnych workerów na podstawie dostępności.
         
         Returns:
             tuple[bool, bool]: (sukces_fundamental, sukces_technical)
         """
-        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH ANALIZ (FUNDAMENTAL + TECHNICAL) Z THREADPOOL ===")
+        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH ANALIZ (FUNDAMENTAL + TECHNICAL) Z CELERY ===")
         
-        # Podziel dostępne wątki po połowie między analizy
-        workers_per_analysis = max(1, self.max_workers // 2)
+        # Pobierz liczbę dostępnych workerów
+        available_workers = self._get_available_celery_workers()
         
-        logger.info(f"🧵 Przydzielono {workers_per_analysis} wątków dla każdej analizy")
+        # Podziel dostępnych workerów po połowie między analizy
+        workers_per_analysis = max(1, available_workers // 2)
+        
+        logger.info(f"👷 Przydzielono {workers_per_analysis} workerów dla każdej analizy")
         
         # Oblicz chunki dla obu analiz
-        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_analysis)
-        technical_chunks = self._calculate_chunk_params(limit, workers_per_analysis)
+        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_analysis, offset)
+        technical_chunks = self._calculate_chunk_params(limit, workers_per_analysis, offset)
         
-        # Przygotuj zadania dla ThreadPool
-        fundamental_futures = []
-        technical_futures = []
+        # Przygotuj zadania dla Celery
+        fundamental_tasks = []
+        technical_tasks = []
         
         # Uruchom zadania fundamentalne
-        logger.info("📰 Uruchamianie zadań analizy fundamentalnej w ThreadPool")
+        logger.info("📰 Uruchamianie zadań analizy fundamentalnej w Celery")
         for chunk_limit, chunk_offset in fundamental_chunks:
-            future = self.thread_executor.submit(
-                self._run_sync_method_in_thread_sync,
-                self.fundamental_analysis.sync_news,
-                chunk_limit,
-                chunk_offset + offset  # Dodaj globalny offset
+            task_result = sync_fundamental_analysis_task.apply_async(
+                kwargs={
+                    'limit': chunk_limit,
+                    'offset': chunk_offset,
+                    'test_mode': self.test_mode
+                },
+                queue='analysis_queue'
             )
-            fundamental_futures.append(future)
+            fundamental_tasks.append(task_result)
+            logger.info(f"📤 Wysłano zadanie fundamentalne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
         
         # Uruchom zadania techniczne
-        logger.info("📈 Uruchamianie zadań analizy technicznej w ThreadPool")
+        logger.info("📈 Uruchamianie zadań analizy technicznej w Celery")
         for chunk_limit, chunk_offset in technical_chunks:
-            future = self.thread_executor.submit(
-                self._run_sync_method_in_thread_sync,
-                self.technical_analysis.sync_technical_analysis,
-                chunk_limit,
-                chunk_offset + offset  # Dodaj globalny offset
+            task_result = sync_technical_analysis_task.apply_async(
+                kwargs={
+                    'limit': chunk_limit,
+                    'offset': chunk_offset,
+                    'test_mode': self.test_mode
+                },
+                queue='analysis_queue'
             )
-            technical_futures.append(future)
+            technical_tasks.append(task_result)
+            logger.info(f"📤 Wysłano zadanie techniczne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
         
         # Oczekuj na zakończenie wszystkich zadań fundamentalnych
-        fundamental_success = True
-        for future in as_completed(fundamental_futures):
-            try:
-                result = future.result()
-                if not result:
-                    fundamental_success = False
-            except Exception as e:
-                logger.error(f"Wyjątek w zadaniu analizy fundamentalnej: {e}")
-                fundamental_success = False
+        logger.info("⏳ Oczekiwanie na zadania fundamentalne...")
+        fundamental_success = await self._wait_for_celery_tasks(fundamental_tasks, "fundamental_analysis")
         
         # Oczekuj na zakończenie wszystkich zadań technicznych
-        technical_success = True
-        for future in as_completed(technical_futures):
-            try:
-                result = future.result()
-                if not result:
-                    technical_success = False
-            except Exception as e:
-                logger.error(f"Wyjątek w zadaniu analizy technicznej: {e}")
-                technical_success = False
+        logger.info("⏳ Oczekiwanie na zadania techniczne...")
+        technical_success = await self._wait_for_celery_tasks(technical_tasks, "technical_analysis")
         
         # Oznacz jako ukończone w zależności od sukcesu
         if fundamental_success:
@@ -424,77 +667,70 @@ class SyncController:
         if technical_success:
             self.workflow_status['technical_analysis_completed'] = True
         
-        logger.info(f"=== RÓWNOLEGŁE ANALIZY THREADPOOL ZAKOŃCZONE: Fundamental={fundamental_success}, Technical={technical_success} ===")
+        logger.info(f"=== RÓWNOLEGŁE ANALIZY CELERY ZAKOŃCZONE: Fundamental={fundamental_success}, Technical={technical_success} ===")
         return fundamental_success, technical_success
     
     async def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0) -> tuple[bool, bool]:
         """
-        Uruchamia równolegle interpretacje LLM z wykorzystaniem ThreadPool.
-        Dzieli zadania między wątki na podstawie dostępnych zasobów CPU.
+        Uruchamia równolegle interpretacje LLM z wykorzystaniem Celery.
+        Dzieli zadania między wolnych workerów na podstawie dostępności.
         
         Returns:
             tuple[bool, bool]: (sukces_llm_fundamental, sukces_llm_technical)
         """
-        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH INTERPRETACJI LLM Z THREADPOOL ===")
+        logger.info("=== ROZPOCZĘCIE RÓWNOLEGŁYCH INTERPRETACJI LLM Z CELERY ===")
         
-        # Podziel dostępne wątki po połowie między interpretacje
-        workers_per_interpretation = max(1, self.max_workers // 2)
+        # Pobierz liczbę dostępnych workerów
+        available_workers = self._get_available_celery_workers()
         
-        logger.info(f"🧵 Przydzielono {workers_per_interpretation} wątków dla każdej interpretacji LLM")
+        # Podziel dostępnych workerów po połowie między interpretacje
+        workers_per_interpretation = max(1, available_workers // 2)
+        
+        logger.info(f"👷 Przydzielono {workers_per_interpretation} workerów dla każdej interpretacji LLM")
         
         # Oblicz chunki dla obu interpretacji
-        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
-        technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation)
+        fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation, offset)
+        technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation, offset)
         
-        # Przygotuj zadania dla ThreadPool
-        fundamental_futures = []
-        technical_futures = []
+        # Przygotuj zadania dla Celery
+        fundamental_tasks = []
+        technical_tasks = []
         
         # Uruchom zadania interpretacji fundamentalnej LLM
-        logger.info("🤖 Uruchamianie zadań interpretacji LLM fundamentalnej w ThreadPool")
-        
+        logger.info("🤖 Uruchamianie zadań interpretacji LLM fundamentalnej w Celery")
         for chunk_limit, chunk_offset in fundamental_chunks:
-            future = self.thread_executor.submit(
-                self._run_sync_method_in_thread_sync,
-                self.llm_fundamental.sync_crypto_fundamental_analysis_interpretations,
-                chunk_limit,
-                chunk_offset + offset  # Dodaj globalny offset
+            task_result = sync_llm_fundamental_interpretation_task.apply_async(
+                kwargs={
+                    'limit': chunk_limit,
+                    'offset': chunk_offset,
+                    'test_mode': self.test_mode
+                },
+                queue='llm_queue'
             )
-            fundamental_futures.append(future)
+            fundamental_tasks.append(task_result)
+            logger.info(f"📤 Wysłano zadanie LLM fundamentalne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
         
         # Uruchom zadania interpretacji technicznej LLM
-        logger.info("🤖 Uruchamianie zadań interpretacji LLM technicznej w ThreadPool")
-        
+        logger.info("🤖 Uruchamianie zadań interpretacji LLM technicznej w Celery")
         for chunk_limit, chunk_offset in technical_chunks:
-            future = self.thread_executor.submit(
-                self._run_sync_method_in_thread_sync,
-                self.llm_technical.sync,
-                chunk_limit,
-                chunk_offset + offset  # Dodaj globalny offset
+            task_result = sync_llm_technical_interpretation_task.apply_async(
+                kwargs={
+                    'limit': chunk_limit,
+                    'offset': chunk_offset,
+                    'test_mode': self.test_mode
+                },
+                queue='llm_queue'
             )
-            technical_futures.append(future)
+            technical_tasks.append(task_result)
+            logger.info(f"📤 Wysłano zadanie LLM techniczne: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
         
         # Oczekuj na zakończenie zadań interpretacji fundamentalnej LLM
-        llm_fundamental_success = True
-        for future in as_completed(fundamental_futures):
-            try:
-                result = future.result()
-                if not result:
-                    llm_fundamental_success = False
-            except Exception as e:
-                logger.error(f"Wyjątek w zadaniu interpretacji LLM fundamentalnej: {e}")
-                llm_fundamental_success = False
+        logger.info("⏳ Oczekiwanie na zadania LLM fundamentalne...")
+        llm_fundamental_success = await self._wait_for_celery_tasks(fundamental_tasks, "llm_fundamental_interpretation")
         
         # Oczekuj na zakończenie zadań interpretacji technicznej LLM
-        llm_technical_success = True
-        for future in as_completed(technical_futures):
-            try:
-                result = future.result()
-                if not result:
-                    llm_technical_success = False
-            except Exception as e:
-                logger.error(f"Wyjątek w zadaniu interpretacji LLM technicznej: {e}")
-                llm_technical_success = False
+        logger.info("⏳ Oczekiwanie na zadania LLM techniczne...")
+        llm_technical_success = await self._wait_for_celery_tasks(technical_tasks, "llm_technical_interpretation")
         
         # Oznacz jako ukończone w zależności od sukcesu
         if llm_fundamental_success:
@@ -502,7 +738,7 @@ class SyncController:
         if llm_technical_success:
             self.workflow_status['llm_technical_completed'] = True
         
-        logger.info(f"=== RÓWNOLEGŁE INTERPRETACJE LLM THREADPOOL ZAKOŃCZONE: Fundamental={llm_fundamental_success}, Technical={llm_technical_success} ===")
+        logger.info(f"=== RÓWNOLEGŁE INTERPRETACJE LLM CELERY ZAKOŃCZONE: Fundamental={llm_fundamental_success}, Technical={llm_technical_success} ===")
         return llm_fundamental_success, llm_technical_success
     
     async def run_full_sync_workflow(self) -> None:
@@ -712,10 +948,6 @@ class SyncController:
             if self.scheduler.running:
                 self.scheduler.shutdown(wait=True)
                 logger.info("📅 Scheduler zatrzymany")
-            
-            # Zatrzymaj thread executor
-            self.thread_executor.shutdown(wait=True)
-            logger.info("🧵 Thread executor zatrzymany")
             
             logger.info("✅ Sync Controller zatrzymany pomyślnie")
             

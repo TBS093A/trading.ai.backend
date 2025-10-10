@@ -15,6 +15,7 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
+from .utils import run_async_task_safely
 
 logger = logging.getLogger(__name__)
 
@@ -54,16 +55,11 @@ def sync_technical_analysis_task(
         )
         
         # Uruchom synchronizację analiz technicznych
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_technical_analysis_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_technical_analysis_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -137,16 +133,11 @@ def sync_fundamental_analysis_task(
         )
         
         # Uruchom synchronizację analiz fundamentalnych
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(
-                sync_controller._run_fundamental_analysis_sync(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        result = run_async_task_safely(
+            sync_controller._run_fundamental_analysis_sync,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
@@ -220,16 +211,11 @@ def sync_analysis_parallel_task(
         )
         
         # Uruchom równoległą synchronizację analiz
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            fundamental_success, technical_success = loop.run_until_complete(
-                sync_controller._run_parallel_analysis(limit=limit, offset=offset)
-            )
-        finally:
-            loop.close()
+        fundamental_success, technical_success = run_async_task_safely(
+            sync_controller._run_parallel_analysis,
+            limit=limit,
+            offset=offset
+        )
         
         end_time = datetime.now()
         duration = str(end_time - start_time)
