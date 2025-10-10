@@ -14,7 +14,7 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
-from .utils import run_async_task_safely
+from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
 

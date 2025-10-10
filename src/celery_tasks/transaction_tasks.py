@@ -9,12 +9,12 @@ Autor: AI Assistant
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
-from .utils import run_async_task_safely
+from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 def sync_transactions_wallets_task(
     self, 
     phase: str = "pre", 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla synchronizacji portfeli/walletów z giełd.
@@ -43,6 +44,22 @@ def sync_transactions_wallets_task(
         # Walidacja fazy
         if phase not in ["pre", "post"]:
             raise ValueError(f"Invalid phase '{phase}'. Must be 'pre' or 'post'")
+        
+        # Zależności w zależności od fazy (lub custom dependencies)
+        if phase == "pre":
+            # Pre: czekaj na LLM General Decision
+            wait_for_dependencies(
+                default_dependencies=['llm_tasks.sync_llm_general_decision'],
+                custom_dependencies=custom_dependencies,
+                task_label='sync_transactions_wallets (pre)'
+            )
+        else:
+            # Post: czekaj na Transactions
+            wait_for_dependencies(
+                default_dependencies=['transaction_tasks.sync_transactions'],
+                custom_dependencies=custom_dependencies,
+                task_label='sync_transactions_wallets (post)'
+            )
         
         self.update_state(
             state='PROGRESS',
@@ -104,7 +121,8 @@ def sync_transactions_task(
     self, 
     limit: int = 500, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla synchronizacji transakcji.
@@ -120,6 +138,13 @@ def sync_transactions_task(
     try:
         logger.info(f"💰 Starting sync_transactions task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie sync_transactions_wallets (pre) (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=['transaction_tasks.sync_transactions_wallets'],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_transactions'
+        )
         
         self.update_state(
             state='PROGRESS',

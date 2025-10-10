@@ -10,12 +10,12 @@ Autor: AI Assistant
 """
 
 import logging
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
-from .utils import run_async_task_safely
+from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ def sync_technical_analysis_task(
     self, 
     limit: int = 50, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla synchronizacji analiz technicznych.
@@ -41,6 +42,13 @@ def sync_technical_analysis_task(
     try:
         logger.info(f"📈 Starting sync_technical_analysis task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie sync_exchanges (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=['sync_tasks.sync_exchanges'],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_technical_analysis'
+        )
         
         self.update_state(
             state='PROGRESS',
@@ -103,7 +111,8 @@ def sync_fundamental_analysis_task(
     self, 
     limit: int = 50, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla synchronizacji analiz fundamentalnych.
@@ -119,6 +128,13 @@ def sync_fundamental_analysis_task(
     try:
         logger.info(f"📊 Starting sync_fundamental_analysis task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie sync_exchanges (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=['sync_tasks.sync_exchanges'],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_fundamental_analysis'
+        )
         
         self.update_state(
             state='PROGRESS',

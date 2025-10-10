@@ -11,12 +11,12 @@ Autor: AI Assistant
 """
 
 import logging
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from main_controller_sync import SyncController
-from .utils import run_async_task_safely
+from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,8 @@ def sync_llm_technical_interpretation_task(
     self, 
     limit: int = 50, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla interpretacji LLM analiz technicznych.
@@ -42,6 +43,13 @@ def sync_llm_technical_interpretation_task(
     try:
         logger.info(f"🤖📈 Starting sync_llm_technical_interpretation task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie sync_technical_analysis (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=['analysis_tasks.sync_technical_analysis'],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_llm_technical_interpretation'
+        )
         
         self.update_state(
             state='PROGRESS',
@@ -104,7 +112,8 @@ def sync_llm_fundamental_interpretation_task(
     self, 
     limit: int = 50, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla interpretacji LLM analiz fundamentalnych.
@@ -120,6 +129,13 @@ def sync_llm_fundamental_interpretation_task(
     try:
         logger.info(f"🤖📊 Starting sync_llm_fundamental_interpretation task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie sync_fundamental_analysis (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=['analysis_tasks.sync_fundamental_analysis'],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_llm_fundamental_interpretation'
+        )
         
         self.update_state(
             state='PROGRESS',
@@ -264,7 +280,8 @@ def sync_llm_general_decision_task(
     self, 
     limit: int = 50, 
     offset: int = 0, 
-    test_mode: bool = False
+    test_mode: bool = False,
+    custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla generalnych decyzji LLM.
@@ -280,6 +297,16 @@ def sync_llm_general_decision_task(
     try:
         logger.info(f"🎯 Starting sync_llm_general_decision task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie obu interpretacji LLM (lub custom dependencies)
+        wait_for_dependencies(
+            default_dependencies=[
+                'llm_tasks.sync_llm_technical_interpretation',
+                'llm_tasks.sync_llm_fundamental_interpretation'
+            ],
+            custom_dependencies=custom_dependencies,
+            task_label='sync_llm_general_decision'
+        )
         
         self.update_state(
             state='PROGRESS',
