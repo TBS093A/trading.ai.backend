@@ -124,6 +124,11 @@ class TransactionsWallets:
         """
         logger.info("Rozpoczynam synchronizację portfeli z giełd")
         
+        # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+        if not hasattr(self.db, 'factory') or self.db.factory is None:
+            await self.db.init_db()
+            logger.info("Zainicjalizowano połączenie z bazą danych")
+        
         sync_report = {
             'total_exchanges': len(self.exchanges),
             'successful_exchanges': 0,
