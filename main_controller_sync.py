@@ -568,7 +568,7 @@ class SyncController:
             
             # Fundamental analysis
             fundamental_chunks = self._calculate_chunk_params(limit, workers_per_analysis, offset)
-        for chunk_limit, chunk_offset in fundamental_chunks:
+            for chunk_limit, chunk_offset in fundamental_chunks:
                 task_result = sync_fundamental_analysis_task.apply_async(
                     kwargs={
                         'limit': chunk_limit,
@@ -583,7 +583,7 @@ class SyncController:
             
             # Technical analysis
             technical_chunks = self._calculate_chunk_params(limit, workers_per_analysis, offset)
-        for chunk_limit, chunk_offset in technical_chunks:
+            for chunk_limit, chunk_offset in technical_chunks:
                 task_result = sync_technical_analysis_task.apply_async(
                     kwargs={
                         'limit': chunk_limit,
@@ -598,7 +598,7 @@ class SyncController:
             
             return tasks
             
-            except Exception as e:
+        except Exception as e:
             logger.error(f"Błąd podczas wysyłania równoległych analiz: {e}")
             logger.error(traceback.format_exc())
             return []
@@ -626,7 +626,7 @@ class SyncController:
             
             # LLM Fundamental Interpretation
             fundamental_chunks = self._calculate_chunk_params(limit, workers_per_interpretation, offset)
-        for chunk_limit, chunk_offset in fundamental_chunks:
+            for chunk_limit, chunk_offset in fundamental_chunks:
                 task_result = sync_llm_fundamental_interpretation_task.apply_async(
                     kwargs={
                         'limit': chunk_limit,
@@ -641,7 +641,7 @@ class SyncController:
             
             # LLM Technical Interpretation
             technical_chunks = self._calculate_chunk_params(limit, workers_per_interpretation, offset)
-        for chunk_limit, chunk_offset in technical_chunks:
+            for chunk_limit, chunk_offset in technical_chunks:
                 task_result = sync_llm_technical_interpretation_task.apply_async(
                     kwargs={
                         'limit': chunk_limit,
@@ -656,7 +656,7 @@ class SyncController:
             
             return tasks
             
-            except Exception as e:
+        except Exception as e:
             logger.error(f"Błąd podczas wysyłania równoległych interpretacji LLM: {e}")
             logger.error(traceback.format_exc())
             return []
