@@ -13,7 +13,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
-from main_controller_sync import SyncController
+from ..sync_exchanges import Exchanges
 from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
             meta={'stage': 'initializing', 'progress': 0}
         )
         
-        # Utwórz kontroler synchronizacji
-        sync_controller = SyncController(test_mode=test_mode)
+        # Utwórz instancję klasy Exchanges
+        exchanges = Exchanges(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -50,7 +50,7 @@ def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
         
         # Uruchom synchronizację giełd
         result = run_async_task_safely(
-            sync_controller._run_exchanges_sync
+            exchanges.sync_assets
         )
         
         # Oblicz czas wykonania
@@ -90,92 +90,4 @@ def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
             'task_id': self.request.id,
             'error': str(exc),
             'message': f'Exchanges synchronization failed: {exc}'
-        }
-
-
-@celery.task(bind=True, name='sync_tasks.sync_all')
-def sync_all_task(self, test_mode: bool = False) -> Dict[str, Any]:
-    """
-    Zadanie Celery dla pełnej synchronizacji systemu.
-    
-    Args:
-        test_mode: Czy uruchamiać w trybie testowym
-        
-    Returns:
-        Dict[str, Any]: Wynik synchronizacji
-    """
-    try:
-        logger.info(f"🚀 Starting sync_all task (ID: {self.request.id})")
-        start_time = datetime.now()
-        
-        # Aktualizuj status zadania
-        self.update_state(
-            state='PROGRESS',
-            meta={'stage': 'initializing', 'progress': 0}
-        )
-        
-        # Utwórz kontroler synchronizacji
-        sync_controller = SyncController(test_mode=test_mode)
-        
-        stages = [
-            ('exchanges', 10),
-            ('analysis', 30),
-            ('llm_interpretations', 50),
-            ('llm_general', 70),
-            ('transactions_wallets_pre', 80),
-            ('transactions', 90),
-            ('transactions_wallets_post', 100)
-        ]
-        
-        # Uruchom pełny workflow synchronizacji
-        # Aktualizuj progress przez workflow
-        for stage, progress in stages:
-            self.update_state(
-                state='PROGRESS',
-                meta={'stage': stage, 'progress': progress}
-            )
-            
-        # Uruchom pełny workflow
-        result = run_async_task_safely(
-            sync_controller.run_full_sync_workflow
-        )
-        
-        # Oblicz czas wykonania
-        end_time = datetime.now()
-        duration = str(end_time - start_time)
-        
-        self.update_state(
-            state='SUCCESS',
-            meta={'stage': 'completed', 'progress': 100}
-        )
-        
-        logger.info(f"✅ sync_all task completed (ID: {self.request.id})")
-        
-        return {
-            'success': True,
-            'task_id': self.request.id,
-            'duration': duration,
-            'start_time': start_time.isoformat(),
-            'end_time': end_time.isoformat(),
-            'workflow_status': sync_controller.workflow_status,
-            'message': 'Full system synchronization completed successfully'
-        }
-        
-    except Exception as exc:
-        logger.error(f"❌ sync_all task failed (ID: {self.request.id}): {exc}")
-        
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'stage': 'error',
-                'error': str(exc),
-                'traceback': str(exc.__traceback__)
-            }
-        )
-        
-        return {
-            'success': False,
-            'task_id': self.request.id,
-            'error': str(exc),
-            'message': f'Full synchronization failed: {exc}'
         }

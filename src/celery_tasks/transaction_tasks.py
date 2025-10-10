@@ -13,7 +13,8 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
-from main_controller_sync import SyncController
+from ..sync_transactions_wallets import TransactionsWallets
+from ..sync_transactions import Transactions
 from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def sync_transactions_wallets_task(
             meta={'stage': 'initializing', 'progress': 0, 'phase': phase}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        transactions_wallets = TransactionsWallets(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -75,8 +76,7 @@ def sync_transactions_wallets_task(
         
         # Uruchom synchronizację portfeli
         result = run_async_task_safely(
-            sync_controller._run_transactions_wallets_sync,
-            phase=phase
+            transactions_wallets.sync
         )
         
         end_time = datetime.now()
@@ -151,7 +151,7 @@ def sync_transactions_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        transactions = Transactions(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -160,7 +160,7 @@ def sync_transactions_task(
         
         # Uruchom synchronizację transakcji
         result = run_async_task_safely(
-            sync_controller._run_transactions_sync,
+            transactions.sync,
             limit=limit,
             offset=offset
         )

@@ -14,7 +14,8 @@ from typing import Dict, Any, Tuple, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
-from main_controller_sync import SyncController
+from ..sync_technical_analysis import TechnicalAnalysis
+from ..sync_fundamental_analysis import FundamentalAnalysis
 from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def sync_technical_analysis_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        technical_analysis = TechnicalAnalysis(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -64,7 +65,7 @@ def sync_technical_analysis_task(
         
         # Uruchom synchronizację analiz technicznych
         result = run_async_task_safely(
-            sync_controller._run_technical_analysis_sync,
+            technical_analysis.sync_technical_analysis,
             limit=limit,
             offset=offset
         )
@@ -141,7 +142,7 @@ def sync_fundamental_analysis_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
+        fundamental_analysis = FundamentalAnalysis(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
@@ -150,7 +151,7 @@ def sync_fundamental_analysis_task(
         
         # Uruchom synchronizację analiz fundamentalnych
         result = run_async_task_safely(
-            sync_controller._run_fundamental_analysis_sync,
+            fundamental_analysis.sync_news,
             limit=limit,
             offset=offset
         )
@@ -201,6 +202,7 @@ def sync_analysis_parallel_task(
 ) -> Dict[str, Any]:
     """
     Zadanie Celery dla równoległej synchronizacji analiz (techniczna + fundamentalna).
+    Wywołuje obie analizy sekwencyjnie.
     
     Args:
         limit: Limit rekordów do przetworzenia
@@ -219,16 +221,28 @@ def sync_analysis_parallel_task(
             meta={'stage': 'initializing', 'progress': 0, 'limit': limit, 'offset': offset}
         )
         
-        sync_controller = SyncController(test_mode=test_mode)
-        
+        # Uruchom analizę techniczną
         self.update_state(
             state='PROGRESS',
-            meta={'stage': 'running_parallel_analysis', 'progress': 50}
+            meta={'stage': 'running_technical_analysis', 'progress': 25}
+        )
+        logger.info("📈 Running technical analysis")
+        technical_analysis = TechnicalAnalysis(test_mode=test_mode)
+        technical_success = run_async_task_safely(
+            technical_analysis.sync_technical_analysis,
+            limit=limit,
+            offset=offset
         )
         
-        # Uruchom równoległą synchronizację analiz
-        fundamental_success, technical_success = run_async_task_safely(
-            sync_controller._run_parallel_analysis,
+        # Uruchom analizę fundamentalną
+        self.update_state(
+            state='PROGRESS',
+            meta={'stage': 'running_fundamental_analysis', 'progress': 75}
+        )
+        logger.info("📊 Running fundamental analysis")
+        fundamental_analysis = FundamentalAnalysis(test_mode=test_mode)
+        fundamental_success = run_async_task_safely(
+            fundamental_analysis.sync_news,
             limit=limit,
             offset=offset
         )
@@ -236,7 +250,7 @@ def sync_analysis_parallel_task(
         end_time = datetime.now()
         duration = str(end_time - start_time)
         
-        overall_success = fundamental_success or technical_success
+        overall_success = fundamental_success and technical_success
         
         self.update_state(
             state='SUCCESS',
@@ -272,3 +286,4 @@ def sync_analysis_parallel_task(
             'error': str(exc),
             'message': f'Parallel analysis sync failed: {exc}'
         }
+
