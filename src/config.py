@@ -89,7 +89,7 @@ class Config:
         self.minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
 
         # Local Storage konfiguracja
-        self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED")
+        self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED", "false").lower() == "true"
         self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
 
         # Celery konfiguracja

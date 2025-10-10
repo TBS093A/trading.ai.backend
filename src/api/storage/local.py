@@ -20,6 +20,7 @@ class LocalStorage(AbstractStorage):
         Inicjalizacja Local Storage
         
         Args:
+            is_enabled (bool): Czy storage jest włączony
             storage_path (str): Ścieżka do katalogu gdzie będą przechowywane pliki
         """
         super().__init__()
@@ -27,7 +28,11 @@ class LocalStorage(AbstractStorage):
         self.is_enabled = is_enabled
         self.storage_path = storage_path
         
-        # Utwórz katalog storage jeśli nie istnieje
+        # Utwórz katalog storage tylko jeśli storage jest włączony
+        if not self.is_enabled:
+            logger.info(f"LocalStorage jest wyłączony - katalog storage nie zostanie utworzony")
+            return
+            
         try:
             if not os.path.exists(self.storage_path):
                 os.makedirs(self.storage_path, exist_ok=True)
