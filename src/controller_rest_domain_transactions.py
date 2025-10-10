@@ -75,25 +75,56 @@ class TransactionResponse(BaseModel):
 
 
 class TransactionCreate(BaseModel):
-    """Model do tworzenia nowej transakcji poprzez wykonanie jej na giełdzie."""
+    """
+    Model do tworzenia nowej transakcji poprzez wykonanie jej na giełdzie.
+    
+    Dwa podejścia:
+    1. Z strategią - podaj buy_strategy_id (dla BUY) lub sell_strategy_id (dla SELL).
+       Kwoty są obliczane automatycznie na podstawie strategii.
+    2. Bez strategii (manual) - podaj asset_amount i quote_amount bezpośrednio.
+       Używane dla ręcznych transakcji (nie przez cronjob).
+    """
     exchange_id: int = Field(..., ge=1, description="ID giełdy")
     asset_id: int = Field(..., ge=1, description="ID assetu")
     exchange_account_state_id: int = Field(..., ge=1, description="ID stanu konta (wallet)")
     type: str = Field(..., pattern="^(BUY|SELL)$", description="Typ transakcji (BUY/SELL)")
-    buy_strategy_id: Optional[int] = Field(None, ge=1, description="ID strategii kupna (wymagane dla BUY)")
-    sell_strategy_id: Optional[int] = Field(None, ge=1, description="ID strategii sprzedaży (wymagane dla SELL)")
+    
+    # Podejście 1: Z strategią (dla automatycznych transakcji)
+    buy_strategy_id: Optional[int] = Field(None, ge=1, description="ID strategii kupna (dla transakcji automatycznych BUY)")
+    sell_strategy_id: Optional[int] = Field(None, ge=1, description="ID strategii sprzedaży (dla transakcji automatycznych SELL)")
+    
+    # Podejście 2: Bez strategii (dla ręcznych transakcji)
+    asset_amount: Optional[Decimal] = Field(None, gt=0, description="Ilość assetu (dla transakcji ręcznych)")
+    quote_amount: Optional[Decimal] = Field(None, gt=0, description="Ilość quote (dla transakcji ręcznych)")
+    
     general_interpretation_id: Optional[int] = Field(None, ge=1, description="ID interpretacji generalnej (opcjonalne)")
     
     class Config:
         json_schema_extra = {
-            "example": {
-                "exchange_id": 1,
-                "asset_id": 1,
-                "exchange_account_state_id": 1,
-                "type": "BUY",
-                "buy_strategy_id": 1,
-                "general_interpretation_id": 1
-            }
+            "examples": [
+                {
+                    "description": "Transakcja z strategią (automatyczna)",
+                    "value": {
+                        "exchange_id": 1,
+                        "asset_id": 1,
+                        "exchange_account_state_id": 1,
+                        "type": "BUY",
+                        "buy_strategy_id": 1,
+                        "general_interpretation_id": 1
+                    }
+                },
+                {
+                    "description": "Transakcja bez strategii (ręczna)",
+                    "value": {
+                        "exchange_id": 1,
+                        "asset_id": 1,
+                        "exchange_account_state_id": 1,
+                        "type": "BUY",
+                        "quote_amount": 100.0,
+                        "asset_amount": 0.005
+                    }
+                }
+            ]
         }
 
 
@@ -273,7 +304,7 @@ def _get_exchange_api(exchange_name: str):
         return None
 
 
-async def _execute_transaction_on_exchange(exchange, transaction_side: str, strategy: Dict[str, Any], 
+async def _execute_transaction_on_exchange(exchange, transaction_side: str, strategy: Optional[Dict[str, Any]], 
                                          asset: Dict[str, Any], transaction_amount: float, 
                                          account_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
@@ -282,7 +313,7 @@ async def _execute_transaction_on_exchange(exchange, transaction_side: str, stra
     Args:
         exchange: Obiekt giełdy
         transaction_side: BUY lub SELL
-        strategy: Strategia transakcyjna
+        strategy: Strategia transakcyjna (None dla transakcji ręcznych)
         asset: Informacje o assecie
         transaction_amount: Kwota do wykorzystania
         account_state: Stan konta dla obliczania procentów
@@ -293,7 +324,9 @@ async def _execute_transaction_on_exchange(exchange, transaction_side: str, stra
     try:
         asset_name = asset['asset']
         quote_name = asset['quote']
-        strategy_type = strategy['type']  # MARKET lub LIMIT
+        
+        # Jeśli nie ma strategii, użyj domyślnie MARKET
+        strategy_type = strategy['type'] if strategy else 'MARKET'
         
         logger.info(f"Wykonuję transakcję {transaction_side} {strategy_type} dla {asset_name}/{quote_name} z kwotą {transaction_amount}")
         
@@ -323,7 +356,7 @@ async def _execute_transaction_on_exchange(exchange, transaction_side: str, stra
                 )
             else:
                 # Dla sprzedaży limit - oblicz wartość procentową na podstawie strategii
-                if strategy['is_percent']:
+                if strategy and strategy['is_percent']:
                     # Jeśli strategia ma is_percent=true, użyj tej wartości procentowej
                     coin_percent_to_sell = strategy['movement_amount']
                 else:
@@ -361,12 +394,26 @@ async def transactions_info():
         "message": "Exchange Transactions REST API",
         "version": "1.0.0",
         "description": "API for managing exchange transactions (BUY/SELL operations)",
+        "transaction_modes": {
+            "strategy_based": {
+                "description": "Transakcje automatyczne oparte na strategiach buy/sell",
+                "usage": "Podaj buy_strategy_id (dla BUY) lub sell_strategy_id (dla SELL)",
+                "amounts": "Kwoty obliczane automatycznie na podstawie strategii i stanu portfela",
+                "use_case": "Cronjob - transakcje automatyczne"
+            },
+            "manual": {
+                "description": "Transakcje ręczne z określonymi kwotami",
+                "usage": "Podaj asset_amount i quote_amount bezpośrednio",
+                "amounts": "Kwoty podawane wprost przez użytkownika",
+                "use_case": "Transakcje manualne - bez przypisywania strategii"
+            }
+        },
         "available_endpoints": {
             "crud": {
                 "list": "GET /transactions/list - Lista wszystkich transakcji",
                 "get": "GET /transactions/{id} - Szczegóły transakcji",
-                "create": "POST /transactions - Wykonanie transakcji na giełdzie i zapis w bazie",
-                "create_batch": "POST /transactions/batch - Wykonanie wielu transakcji na giełdach"
+                "create": "POST /transactions - Wykonanie transakcji (z strategią lub manual z kwotami)",
+                "create_batch": "POST /transactions/batch - Wykonanie wielu transakcji (batch)"
             },
             "filtering": {
                 "by_asset": "GET /transactions/asset/{asset_id} - Transakcje dla assetu",
@@ -1463,11 +1510,16 @@ async def create_transaction(
     """
     Wykonuje transakcję na giełdzie i zapisuje ją w bazie danych.
     
-    Ten endpoint:
-    1. Waliduje wszystkie powiązania (giełda, asset, portfel, strategia)
-    2. Oblicza kwotę transakcji na podstawie strategii i stanu portfela
-    3. Wykonuje transakcję na giełdzie przez API
-    4. Zapisuje wynik w bazie danych
+    Dwa tryby działania:
+    
+    1. **Z strategią (automatyczna)**: Podaj buy_strategy_id (dla BUY) lub sell_strategy_id (dla SELL).
+       - Kwoty są obliczane automatycznie na podstawie strategii i stanu portfela
+       - Używane przez cronjob dla transakcji automatycznych
+       
+    2. **Bez strategii (ręczna)**: Podaj asset_amount i quote_amount bezpośrednio.
+       - Kwoty są podane wprost przez użytkownika
+       - Używane dla transakcji manualnych
+       - Strategie buy/sell nie są przypisywane w bazie
     
     UWAGA: Ten endpoint faktycznie wykonuje transakcję na giełdzie!
     Używaj ostrożnie w środowisku produkcyjnym.
@@ -1538,47 +1590,69 @@ async def create_transaction(
                 error="INSUFFICIENT_FUNDS"
             )
         
-        # KROK 2: Pobierz strategię
-        strategy = None
-        if transaction_data.type == "BUY":
-            if not transaction_data.buy_strategy_id:
-                return TransactionCreateResponse(
-                    success=False,
-                    message="Buy strategy ID is required for BUY transactions",
-                    error="MISSING_BUY_STRATEGY"
-                )
-            strategy = await buy_strategies_table.get_by_id(transaction_data.buy_strategy_id)
-            if not strategy:
-                return TransactionCreateResponse(
-                    success=False,
-                    message=f"Buy strategy with ID {transaction_data.buy_strategy_id} not found",
-                    error="BUY_STRATEGY_NOT_FOUND"
-                )
-        else:  # SELL
-            if not transaction_data.sell_strategy_id:
-                return TransactionCreateResponse(
-                    success=False,
-                    message="Sell strategy ID is required for SELL transactions",
-                    error="MISSING_SELL_STRATEGY"
-                )
-            strategy = await sell_strategies_table.get_by_id(transaction_data.sell_strategy_id)
-            if not strategy:
-                return TransactionCreateResponse(
-                    success=False,
-                    message=f"Sell strategy with ID {transaction_data.sell_strategy_id} not found",
-                    error="SELL_STRATEGY_NOT_FOUND"
-                )
+        # KROK 2: Określ tryb transakcji (z strategią czy bez)
+        # Sprawdź czy mamy strategię czy kwoty ręczne
+        has_strategy = (transaction_data.type == "BUY" and transaction_data.buy_strategy_id) or \
+                       (transaction_data.type == "SELL" and transaction_data.sell_strategy_id)
+        has_manual_amounts = transaction_data.asset_amount is not None and transaction_data.quote_amount is not None
         
-        # KROK 3: Oblicz kwotę transakcji na podstawie strategii
-        transaction_amount = _calculate_transaction_amount(strategy, wallet)
-        if transaction_amount <= 0:
+        # Walidacja: musi być albo strategia albo kwoty ręczne (nie oba, nie żadne)
+        if not has_strategy and not has_manual_amounts:
             return TransactionCreateResponse(
                 success=False,
-                message="Calculated transaction amount is zero or negative",
-                error="INVALID_TRANSACTION_AMOUNT"
+                message=f"Either strategy_id or both asset_amount and quote_amount must be provided for {transaction_data.type} transaction",
+                error="MISSING_STRATEGY_OR_AMOUNTS"
             )
         
-        logger.info(f"Calculated transaction amount: {transaction_amount} for {transaction_data.type} transaction")
+        if has_strategy and has_manual_amounts:
+            return TransactionCreateResponse(
+                success=False,
+                message="Cannot provide both strategy_id and manual amounts. Choose one approach.",
+                error="CONFLICTING_PARAMETERS"
+            )
+        
+        # KROK 3a: Pobierz strategię (jeśli używamy trybu ze strategią)
+        strategy = None
+        transaction_amount = None
+        
+        if has_strategy:
+            if transaction_data.type == "BUY":
+                strategy = await buy_strategies_table.get_by_id(transaction_data.buy_strategy_id)
+                if not strategy:
+                    return TransactionCreateResponse(
+                        success=False,
+                        message=f"Buy strategy with ID {transaction_data.buy_strategy_id} not found",
+                        error="BUY_STRATEGY_NOT_FOUND"
+                    )
+            else:  # SELL
+                strategy = await sell_strategies_table.get_by_id(transaction_data.sell_strategy_id)
+                if not strategy:
+                    return TransactionCreateResponse(
+                        success=False,
+                        message=f"Sell strategy with ID {transaction_data.sell_strategy_id} not found",
+                        error="SELL_STRATEGY_NOT_FOUND"
+                    )
+            
+            # Oblicz kwotę transakcji na podstawie strategii
+            transaction_amount = _calculate_transaction_amount(strategy, wallet)
+            if transaction_amount <= 0:
+                return TransactionCreateResponse(
+                    success=False,
+                    message="Calculated transaction amount is zero or negative",
+                    error="INVALID_TRANSACTION_AMOUNT"
+                )
+            
+            logger.info(f"Strategy-based transaction: calculated amount = {transaction_amount} for {transaction_data.type}")
+        
+        # KROK 3b: Użyj kwot ręcznych (jeśli używamy trybu manualnego)
+        else:  # has_manual_amounts
+            # Dla transakcji BUY używamy quote_amount, dla SELL używamy asset_amount
+            if transaction_data.type == "BUY":
+                transaction_amount = float(transaction_data.quote_amount)
+            else:  # SELL
+                transaction_amount = float(transaction_data.asset_amount)
+            
+            logger.info(f"Manual transaction: using amount = {transaction_amount} for {transaction_data.type}")
         
         # KROK 4: Pobierz API giełdy
         exchange_name = exchange.get('name')
@@ -1595,7 +1669,7 @@ async def create_transaction(
         exchange_result = await _execute_transaction_on_exchange(
             exchange_api, 
             transaction_data.type, 
-            strategy, 
+            strategy,  # None dla transakcji manualnych
             asset_dict, 
             transaction_amount, 
             wallet
@@ -1609,13 +1683,21 @@ async def create_transaction(
             )
         
         # KROK 6: Zapisz transakcję w bazie danych
-        # Wyciągnij kwoty z wyniku transakcji
-        if transaction_data.type == 'BUY':
-            quote_amount = transaction_amount
-            asset_amount = exchange_result.get('bought_asset_size', 0.0)
-        else:  # SELL
-            asset_amount = transaction_amount
-            quote_amount = exchange_result.get('sold_asset_price', 0.0)
+        # Wyciągnij kwoty z wyniku transakcji lub użyj ręcznych kwot
+        if has_manual_amounts:
+            # Dla transakcji manualnych używamy podanych kwot
+            quote_amount = float(transaction_data.quote_amount)
+            asset_amount = float(transaction_data.asset_amount)
+            logger.info(f"Using manual amounts: quote={quote_amount}, asset={asset_amount}")
+        else:
+            # Dla transakcji ze strategią wyciągamy z wyniku giełdy
+            if transaction_data.type == 'BUY':
+                quote_amount = transaction_amount
+                asset_amount = exchange_result.get('bought_asset_size', 0.0)
+            else:  # SELL
+                asset_amount = transaction_amount
+                quote_amount = exchange_result.get('sold_asset_price', 0.0)
+            logger.info(f"Using exchange result amounts: quote={quote_amount}, asset={asset_amount}")
         
         transaction_id = await transactions_table.create(
             exchange_id=transaction_data.exchange_id,
@@ -1625,8 +1707,8 @@ async def create_transaction(
             quote_amount=quote_amount,
             asset_amount=asset_amount,
             general_interpretation_id=transaction_data.general_interpretation_id,
-            buy_strategy_id=transaction_data.buy_strategy_id if transaction_data.type == 'BUY' else None,
-            sell_strategy_id=transaction_data.sell_strategy_id if transaction_data.type == 'SELL' else None
+            buy_strategy_id=transaction_data.buy_strategy_id if has_strategy and transaction_data.type == 'BUY' else None,
+            sell_strategy_id=transaction_data.sell_strategy_id if has_strategy and transaction_data.type == 'SELL' else None
         )
         
         if not transaction_id:
@@ -1638,11 +1720,12 @@ async def create_transaction(
                 exchange_result=exchange_result
             )
         
-        logger.info(f"Successfully executed and saved transaction {transaction_id}")
+        transaction_mode = "strategy-based" if has_strategy else "manual"
+        logger.info(f"Successfully executed and saved {transaction_mode} transaction {transaction_id}")
         
         return TransactionCreateResponse(
             success=True,
-            message=f"Transaction executed successfully on {exchange_name} and saved to database",
+            message=f"Transaction ({transaction_mode}) executed successfully on {exchange_name} and saved to database",
             transaction_id=transaction_id,
             exchange_result=exchange_result
         )
@@ -1665,9 +1748,14 @@ async def create_transactions_batch(
     """
     Wykonuje wiele transakcji na giełdach i zapisuje je w bazie danych.
     
-    Każda transakcja jest przetwarzana niezależnie:
-    - Walidacja powiązań (giełda, asset, portfel, strategia)
-    - Obliczenie kwoty na podstawie strategii
+    Każda transakcja jest przetwarzana niezależnie w jednym z dwóch trybów:
+    
+    1. **Z strategią (automatyczna)**: Podaj strategy_id - kwoty obliczane automatycznie
+    2. **Bez strategii (ręczna)**: Podaj asset_amount i quote_amount bezpośrednio
+    
+    Dla każdej transakcji:
+    - Walidacja powiązań (giełda, asset, portfel, opcjonalnie strategia)
+    - Obliczenie kwoty na podstawie strategii LUB użycie kwot ręcznych
     - Wykonanie na giełdzie przez API
     - Zapis wyniku w bazie
     
@@ -1769,60 +1857,78 @@ async def create_transactions_batch(
                     failed += 1
                     continue
                 
-                # KROK 2: Pobierz strategię
+                # KROK 2: Określ tryb transakcji (z strategią czy bez)
+                has_strategy = (transaction_data.type == "BUY" and transaction_data.buy_strategy_id) or \
+                               (transaction_data.type == "SELL" and transaction_data.sell_strategy_id)
+                has_manual_amounts = transaction_data.asset_amount is not None and transaction_data.quote_amount is not None
+                
+                # Walidacja: musi być albo strategia albo kwoty ręczne
+                if not has_strategy and not has_manual_amounts:
+                    results.append(BatchTransactionResult(
+                        index=idx,
+                        success=False,
+                        message=f"Either strategy_id or both asset_amount and quote_amount must be provided",
+                        error="MISSING_STRATEGY_OR_AMOUNTS"
+                    ))
+                    failed += 1
+                    continue
+                
+                if has_strategy and has_manual_amounts:
+                    results.append(BatchTransactionResult(
+                        index=idx,
+                        success=False,
+                        message="Cannot provide both strategy_id and manual amounts",
+                        error="CONFLICTING_PARAMETERS"
+                    ))
+                    failed += 1
+                    continue
+                
+                # KROK 3a: Pobierz strategię (jeśli używamy trybu ze strategią)
                 strategy = None
-                if transaction_data.type == "BUY":
-                    if not transaction_data.buy_strategy_id:
+                transaction_amount = None
+                
+                if has_strategy:
+                    if transaction_data.type == "BUY":
+                        strategy = await buy_strategies_table.get_by_id(transaction_data.buy_strategy_id)
+                        if not strategy:
+                            results.append(BatchTransactionResult(
+                                index=idx,
+                                success=False,
+                                message=f"Buy strategy with ID {transaction_data.buy_strategy_id} not found",
+                                error="BUY_STRATEGY_NOT_FOUND"
+                            ))
+                            failed += 1
+                            continue
+                    else:  # SELL
+                        strategy = await sell_strategies_table.get_by_id(transaction_data.sell_strategy_id)
+                        if not strategy:
+                            results.append(BatchTransactionResult(
+                                index=idx,
+                                success=False,
+                                message=f"Sell strategy with ID {transaction_data.sell_strategy_id} not found",
+                                error="SELL_STRATEGY_NOT_FOUND"
+                            ))
+                            failed += 1
+                            continue
+                    
+                    # Oblicz kwotę transakcji na podstawie strategii
+                    transaction_amount = _calculate_transaction_amount(strategy, wallet)
+                    if transaction_amount <= 0:
                         results.append(BatchTransactionResult(
                             index=idx,
                             success=False,
-                            message="Buy strategy ID is required for BUY transactions",
-                            error="MISSING_BUY_STRATEGY"
-                        ))
-                        failed += 1
-                        continue
-                    strategy = await buy_strategies_table.get_by_id(transaction_data.buy_strategy_id)
-                    if not strategy:
-                        results.append(BatchTransactionResult(
-                            index=idx,
-                            success=False,
-                            message=f"Buy strategy with ID {transaction_data.buy_strategy_id} not found",
-                            error="BUY_STRATEGY_NOT_FOUND"
-                        ))
-                        failed += 1
-                        continue
-                else:  # SELL
-                    if not transaction_data.sell_strategy_id:
-                        results.append(BatchTransactionResult(
-                            index=idx,
-                            success=False,
-                            message="Sell strategy ID is required for SELL transactions",
-                            error="MISSING_SELL_STRATEGY"
-                        ))
-                        failed += 1
-                        continue
-                    strategy = await sell_strategies_table.get_by_id(transaction_data.sell_strategy_id)
-                    if not strategy:
-                        results.append(BatchTransactionResult(
-                            index=idx,
-                            success=False,
-                            message=f"Sell strategy with ID {transaction_data.sell_strategy_id} not found",
-                            error="SELL_STRATEGY_NOT_FOUND"
+                            message="Calculated transaction amount is zero or negative",
+                            error="INVALID_TRANSACTION_AMOUNT"
                         ))
                         failed += 1
                         continue
                 
-                # KROK 3: Oblicz kwotę
-                transaction_amount = _calculate_transaction_amount(strategy, wallet)
-                if transaction_amount <= 0:
-                    results.append(BatchTransactionResult(
-                        index=idx,
-                        success=False,
-                        message="Calculated transaction amount is zero or negative",
-                        error="INVALID_TRANSACTION_AMOUNT"
-                    ))
-                    failed += 1
-                    continue
+                # KROK 3b: Użyj kwot ręcznych (jeśli używamy trybu manualnego)
+                else:  # has_manual_amounts
+                    if transaction_data.type == "BUY":
+                        transaction_amount = float(transaction_data.quote_amount)
+                    else:  # SELL
+                        transaction_amount = float(transaction_data.asset_amount)
                 
                 # KROK 4: Pobierz API giełdy
                 exchange_name = exchange.get('name')
@@ -1859,12 +1965,19 @@ async def create_transactions_batch(
                     continue
                 
                 # KROK 6: Zapisz w bazie
-                if transaction_data.type == 'BUY':
-                    quote_amount = transaction_amount
-                    asset_amount = exchange_result.get('bought_asset_size', 0.0)
-                else:  # SELL
-                    asset_amount = transaction_amount
-                    quote_amount = exchange_result.get('sold_asset_price', 0.0)
+                # Wyciągnij kwoty z wyniku transakcji lub użyj ręcznych kwot
+                if has_manual_amounts:
+                    # Dla transakcji manualnych używamy podanych kwot
+                    quote_amount = float(transaction_data.quote_amount)
+                    asset_amount = float(transaction_data.asset_amount)
+                else:
+                    # Dla transakcji ze strategią wyciągamy z wyniku giełdy
+                    if transaction_data.type == 'BUY':
+                        quote_amount = transaction_amount
+                        asset_amount = exchange_result.get('bought_asset_size', 0.0)
+                    else:  # SELL
+                        asset_amount = transaction_amount
+                        quote_amount = exchange_result.get('sold_asset_price', 0.0)
                 
                 transaction_id = await transactions_table.create(
                     exchange_id=transaction_data.exchange_id,
@@ -1874,8 +1987,8 @@ async def create_transactions_batch(
                     quote_amount=quote_amount,
                     asset_amount=asset_amount,
                     general_interpretation_id=transaction_data.general_interpretation_id,
-                    buy_strategy_id=transaction_data.buy_strategy_id if transaction_data.type == 'BUY' else None,
-                    sell_strategy_id=transaction_data.sell_strategy_id if transaction_data.type == 'SELL' else None
+                    buy_strategy_id=transaction_data.buy_strategy_id if has_strategy and transaction_data.type == 'BUY' else None,
+                    sell_strategy_id=transaction_data.sell_strategy_id if has_strategy and transaction_data.type == 'SELL' else None
                 )
                 
                 if transaction_id:
