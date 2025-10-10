@@ -5,6 +5,7 @@ import traceback
 import os
 import multiprocessing
 import math
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple, Callable
 from functools import wraps
@@ -34,6 +35,9 @@ from src.controller_rest_celery_worker import get_celery_app
 
 logger = logging.getLogger(__name__)
 
+# Context variable dla thread-safe pomijania sprawdzenia crona (używane w async)
+_skip_cron_check_context: ContextVar[bool] = ContextVar('skip_cron_check', default=False)
+
 
 def sync_with_cron_db(func: Callable) -> Callable:
     """
@@ -47,6 +51,10 @@ def sync_with_cron_db(func: Callable) -> Callable:
     Jeśli cron jest wyłączony lub nie istnieje, metoda nie zostanie wykonana.
     Obsługuje zarówno synchroniczne jak i asynchroniczne metody.
     
+    Można pominąć sprawdzenie crona używając ContextVar _skip_cron_check_context
+    (używane gdy metody są wywoływane z run_full_sync_workflow).
+    ContextVar zapewnia thread-safety i izolację między różnymi async tasks.
+    
     Args:
         func: Dekorowana metoda synchronizacji
         
@@ -57,6 +65,18 @@ def sync_with_cron_db(func: Callable) -> Callable:
     async def wrapper(self, *args, **kwargs):
         # Pobierz nazwę procesu z nazwy metody
         process_name = func.__name__
+        
+        # Sprawdź czy należy pominąć sprawdzenie crona (używane w run_full_sync_workflow)
+        # Używamy ContextVar dla thread-safety w async
+        skip_cron_check = _skip_cron_check_context.get()
+        
+        if skip_cron_check:
+            logger.debug(f"⏭️ Pomijam sprawdzenie crona dla {process_name} (wywołane z workflow)")
+            # Wykonaj funkcję bez sprawdzania crona
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
         
         try:
             # Sprawdź czy baza jest zainicjalizowana
@@ -787,6 +807,11 @@ class SyncController:
         Returns:
             Dict[str, List[str]]: Słownik z task_id dla każdego etapu workflow
         """
+        # Ustaw context variable pomijania sprawdzenia crona dla wszystkich wywołań _run_*
+        # (te metody są wywoływane przez run_full_sync_workflow, który już ma własny cron job)
+        # Używamy ContextVar dla thread-safety - każdy async task ma swój własny kontekst
+        token = _skip_cron_check_context.set(True)
+        
         try:
             logger.info("🚀 ROZPOCZĘCIE WYSYŁANIA WORKFLOW DO KOLEJKI CELERY 🚀")
             start_time = datetime.now()
@@ -897,6 +922,10 @@ class SyncController:
             logger.error(f"❌ Krytyczny błąd podczas wysyłania workflow: {e}")
             logger.error(traceback.format_exc())
             return {}
+        
+        finally:
+            # Przywróć domyślne sprawdzanie crona (reset context variable)
+            _skip_cron_check_context.reset(token)
     
     async def setup_cron_jobs(self) -> None:
         """
