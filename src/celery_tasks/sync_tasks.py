@@ -9,7 +9,7 @@ Autor: AI Assistant
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 @celery.task(bind=True, name='sync_tasks.sync_exchanges')
-def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
+def sync_exchanges_task(self, test_mode: bool = False, custom_dependencies: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Zadanie Celery dla synchronizacji assetów z giełd.
     
     Args:
         test_mode: Czy uruchamiać w trybie testowym
+        custom_dependencies: Opcjonalne custom zależności dla zadania
         
     Returns:
         Dict[str, Any]: Wynik synchronizacji
@@ -33,6 +34,14 @@ def sync_exchanges_task(self, test_mode: bool = False) -> Dict[str, Any]:
     try:
         logger.info(f"🔄 Starting sync_exchanges task (ID: {self.request.id})")
         start_time = datetime.now()
+        
+        # Czekaj na zakończenie zależności (jeśli są)
+        if custom_dependencies:
+            wait_for_dependencies(
+                default_dependencies=[],
+                custom_dependencies=custom_dependencies,
+                task_label='sync_exchanges'
+            )
         
         # Aktualizuj status zadania
         self.update_state(
