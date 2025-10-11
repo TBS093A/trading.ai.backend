@@ -38,6 +38,151 @@ logger = logging.getLogger(__name__)
 # Context variable dla thread-safe pomijania sprawdzenia crona (używane w async)
 _skip_cron_check_context: ContextVar[bool] = ContextVar('skip_cron_check', default=False)
 
+# Mapowanie nazw metod do nazw tasków Celery
+METHOD_TO_TASK_MAPPING = {
+    '_run_exchanges_sync': 'sync_tasks.sync_exchanges',
+    '_run_fundamental_analysis_sync': 'analysis_tasks.sync_fundamental_analysis',
+    '_run_technical_analysis_sync': 'analysis_tasks.sync_technical_analysis',
+    '_run_llm_fundamental_interpretation_sync': 'llm_tasks.sync_llm_fundamental_interpretation',
+    '_run_llm_technical_interpretation_sync': 'llm_tasks.sync_llm_technical_interpretation',
+    '_run_llm_general_decision_sync': 'llm_tasks.sync_llm_general_decision',
+    '_run_transactions_wallets_sync': 'transaction_tasks.sync_transactions_wallets',
+    '_run_transactions_sync': 'transaction_tasks.sync_transactions',
+    '_run_parallel_analysis': ['analysis_tasks.sync_fundamental_analysis', 'analysis_tasks.sync_technical_analysis'],
+    '_run_parallel_llm_interpretations': ['llm_tasks.sync_llm_fundamental_interpretation', 'llm_tasks.sync_llm_technical_interpretation'],
+    'run_full_sync_workflow': 'run_full_sync_workflow'  # Special case
+}
+
+
+def prevent_duplicate_tasks(func: Callable) -> Callable:
+    """
+    Dekorator sprawdzający czy takie same zadania nie są już w kolejce lub w trakcie przetwarzania.
+    
+    Sprawdza:
+    - Czy zadanie o tej samej nazwie nie jest aktualnie wykonywane (active)
+    - Czy zadanie o tej samej nazwie nie czeka w kolejce (scheduled/reserved)
+    
+    Jeśli zadanie już istnieje, metoda nie zostanie wykonana i zwróci pustą listę.
+    Dekorator jest stosowany PO sync_with_cron_db.
+    
+    Args:
+        func: Dekorowana metoda synchronizacji
+        
+    Returns:
+        Callable: Opakowana funkcja z walidacją duplikatów
+    """
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        method_name = func.__name__
+        
+        # Pobierz nazwę taska/tasków Celery dla tej metody
+        task_names = METHOD_TO_TASK_MAPPING.get(method_name)
+        
+        if not task_names:
+            # Jeśli nie ma mapowania, wykonaj normalnie
+            logger.debug(f"⚠️ Brak mapowania dla {method_name} - pomijam sprawdzenie duplikatów")
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
+        
+        # Obsługa listy tasków (dla parallel operations)
+        if isinstance(task_names, list):
+            check_tasks = task_names
+        else:
+            check_tasks = [task_names]
+        
+        try:
+            # Sprawdź czy Celery app jest dostępne
+            if not hasattr(self, 'celery_app') or self.celery_app is None:
+                logger.warning(f"⚠️ Celery app niedostępne - wykonuję {method_name} bez sprawdzenia duplikatów")
+                if asyncio.iscoroutinefunction(func):
+                    return await func(self, *args, **kwargs)
+                else:
+                    return func(self, *args, **kwargs)
+            
+            # Pobierz aktywne zadania
+            inspect = self.celery_app.control.inspect()
+            active_tasks = inspect.active()
+            scheduled_tasks = inspect.scheduled()
+            reserved_tasks = inspect.reserved()
+            
+            if active_tasks is None:
+                active_tasks = {}
+            if scheduled_tasks is None:
+                scheduled_tasks = {}
+            if reserved_tasks is None:
+                reserved_tasks = {}
+            
+            # Sprawdź czy któryś z tasków już istnieje
+            found_duplicate = False
+            for task_name in check_tasks:
+                # Sprawdź w aktywnych
+                for worker, tasks in active_tasks.items():
+                    for task in tasks:
+                        if task.get('name') == task_name:
+                            logger.info(f"🔄 Task {task_name} jest już aktywny (worker: {worker}, task_id: {task.get('id')}) - pomijam wysyłanie")
+                            found_duplicate = True
+                            break
+                    if found_duplicate:
+                        break
+                
+                if found_duplicate:
+                    break
+                
+                # Sprawdź w zaplanowanych
+                for worker, tasks in scheduled_tasks.items():
+                    for task in tasks:
+                        if task.get('request', {}).get('name') == task_name:
+                            logger.info(f"⏰ Task {task_name} jest już zaplanowany (worker: {worker}, task_id: {task.get('request', {}).get('id')}) - pomijam wysyłanie")
+                            found_duplicate = True
+                            break
+                    if found_duplicate:
+                        break
+                
+                if found_duplicate:
+                    break
+                
+                # Sprawdź w zarezerwowanych
+                for worker, tasks in reserved_tasks.items():
+                    for task in tasks:
+                        if task.get('name') == task_name:
+                            logger.info(f"📦 Task {task_name} jest już zarezerwowany (worker: {worker}, task_id: {task.get('id')}) - pomijam wysyłanie")
+                            found_duplicate = True
+                            break
+                    if found_duplicate:
+                        break
+                
+                if found_duplicate:
+                    break
+            
+            if found_duplicate:
+                logger.info(f"⏭️ Pomijam wykonanie {method_name} - zadanie już w kolejce lub w trakcie przetwarzania")
+                # Zwróć odpowiedni typ w zależności od metody
+                if method_name == 'run_full_sync_workflow':
+                    return {}  # Dict dla workflow
+                else:
+                    return []  # List dla pozostałych metod
+            
+            # Brak duplikatów - wykonaj funkcję
+            logger.debug(f"✅ Brak duplikatów dla {method_name} - wykonuję zadanie")
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Błąd podczas sprawdzania duplikatów dla {method_name}: {e}")
+            logger.debug(traceback.format_exc())
+            # W przypadku błędu - wykonaj funkcję (fail-safe)
+            logger.info(f"⚠️ Wykonuję {method_name} pomimo błędu sprawdzania duplikatów (fail-safe)")
+            if asyncio.iscoroutinefunction(func):
+                return await func(self, *args, **kwargs)
+            else:
+                return func(self, *args, **kwargs)
+    
+    return wrapper
+
 
 def sync_with_cron_db(func: Callable) -> Callable:
     """
@@ -275,6 +420,7 @@ class SyncController:
         return chunks
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_exchanges_sync(self, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadanie synchronizacji giełd do kolejki Celery bez czekania.
@@ -306,6 +452,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_fundamental_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji analizy fundamentalnej do kolejki bez czekania.
@@ -345,6 +492,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_technical_analysis_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji analizy technicznej do kolejki bez czekania.
@@ -384,6 +532,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_llm_fundamental_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM fundamentalnej do kolejki bez czekania.
@@ -423,6 +572,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_llm_technical_interpretation_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM technicznej do kolejki bez czekania.
@@ -462,6 +612,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_llm_general_decision_sync(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania decyzji generalnej LLM do kolejki bez czekania.
@@ -501,6 +652,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_transactions_wallets_sync(self, phase: str = "pre", custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadanie synchronizacji portfeli do kolejki bez czekania.
@@ -538,6 +690,7 @@ class SyncController:
             return []
 
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_transactions_sync(self, limit: int = 500, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania synchronizacji transakcji do kolejki bez czekania.
@@ -577,6 +730,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_parallel_analysis(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania analiz (fundamental + technical) równolegle do kolejki bez czekania.
@@ -637,6 +791,7 @@ class SyncController:
             return []
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def _run_parallel_llm_interpretations(self, limit: int = 50, offset: int = 0, custom_dependencies: Optional[List[str]] = None) -> List[AsyncResult]:
         """
         Wysyła zadania interpretacji LLM (fundamental + technical) równolegle do kolejki bez czekania.
@@ -805,6 +960,7 @@ class SyncController:
             return False
     
     @sync_with_cron_db
+    @prevent_duplicate_tasks
     async def run_full_sync_workflow(self) -> Dict[str, List[str]]:
         """
         Wysyła wszystkie zadania workflow do kolejki Celery bez czekania.
