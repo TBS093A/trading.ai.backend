@@ -142,7 +142,36 @@ spec:
                 secretKeyRef:
                   name: trading-ai-secrets
                   key: DATABASE_PASSWORD
-                  
+            
+            # RabbitMQ configuration
+            - name: RABBITMQ_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: RABBITMQ_PORT
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: RABBITMQ_PASSWORD
+            
+            # Redis configuration
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: REDIS_PORT
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: REDIS_PASSWORD
+            
             # Telethon credentials
             - name: TELETHON_BOT_NAME
               valueFrom:
