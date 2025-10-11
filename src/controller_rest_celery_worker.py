@@ -78,8 +78,13 @@ def create_celery_app() -> Celery:
         broker_transport_options={
             'visibility_timeout': 0,  # Brak timeout dla visibility (unlimited)
             'fanout_prefix': True,
-            'fanout_patterns': True
+            'fanout_patterns': True,
+            'priority_steps': [0, 3, 6, 9]  # Enable priority queues with 4 steps (0=lowest, 9=highest)
         },
+        
+        # Task priority configuration
+        task_default_priority=5,  # Default priority (middle)
+        task_inherit_parent_priority=True,
         
         # Monitoring
         worker_send_task_events=True,

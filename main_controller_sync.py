@@ -293,7 +293,8 @@ class SyncController:
                     'test_mode': self.test_mode,
                     'custom_dependencies': custom_dependencies
                 },
-                queue='sync_queue'
+                queue='sync_queue',
+                priority=9  # Highest priority - executes first in workflow
             )
             
             logger.info(f"✅ Wysłano sync_exchanges: task_id={task_result.id}")
@@ -330,7 +331,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='analysis_queue'
+                    queue='analysis_queue',
+                    priority=8  # High priority - executes after exchanges
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_fundamental_analysis: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -368,7 +370,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='analysis_queue'
+                    queue='analysis_queue',
+                    priority=8  # High priority - executes after exchanges
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_technical_analysis: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -406,7 +409,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='llm_queue'
+                    queue='llm_queue',
+                    priority=7  # Medium-high priority - executes after analysis
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_llm_fundamental_interpretation: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -444,7 +448,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='llm_queue'
+                    queue='llm_queue',
+                    priority=7  # Medium-high priority - executes after analysis
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_llm_technical_interpretation: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -482,7 +487,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='llm_queue'
+                    queue='llm_queue',
+                    priority=6  # Medium priority - executes after LLM interpretations
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_llm_general_decision: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -510,13 +516,17 @@ class SyncController:
             phase_label = "PRE-TRANSACTIONS" if phase == "pre" else "POST-TRANSACTIONS"
             logger.info(f"=== WYSYŁANIE PORTFELI ({phase_label}) DO KOLEJKI ===")
             
+            # Set priority based on phase: pre=5, post=3
+            priority = 5 if phase == "pre" else 3
+            
             task_result = sync_transactions_wallets_task.apply_async(
                 kwargs={
                     'phase': phase,
                     'test_mode': self.test_mode,
                     'custom_dependencies': custom_dependencies
                 },
-                queue='transaction_queue'
+                queue='transaction_queue',
+                priority=priority  # pre=5 (before transactions), post=3 (lowest, after transactions)
             )
             
             logger.info(f"✅ Wysłano sync_transactions_wallets ({phase}): task_id={task_result.id}")
@@ -553,7 +563,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='transaction_queue'
+                    queue='transaction_queue',
+                    priority=4  # Medium-low priority - executes after wallets pre
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_transactions: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -596,7 +607,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='analysis_queue'
+                    queue='analysis_queue',
+                    priority=8  # High priority - executes after exchanges
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_fundamental_analysis: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -611,7 +623,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='analysis_queue'
+                    queue='analysis_queue',
+                    priority=8  # High priority - executes after exchanges
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_technical_analysis: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -654,7 +667,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='llm_queue'
+                    queue='llm_queue',
+                    priority=7  # Medium-high priority - executes after analysis
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_llm_fundamental_interpretation: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
@@ -669,7 +683,8 @@ class SyncController:
                         'test_mode': self.test_mode,
                         'custom_dependencies': custom_dependencies
                     },
-                    queue='llm_queue'
+                    queue='llm_queue',
+                    priority=7  # Medium-high priority - executes after analysis
                 )
                 tasks.append(task_result)
                 logger.info(f"✅ Wysłano sync_llm_technical_interpretation: task_id={task_result.id}, limit={chunk_limit}, offset={chunk_offset}")
