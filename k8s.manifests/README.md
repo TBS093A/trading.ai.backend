@@ -103,6 +103,9 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout
 kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
+
+# 4. Expose Rest api on localhost for CLI
+kubectl port-forward service/ 9090:9090
 ```
 
 ### 3. Weryfikacja deploymentu
