@@ -105,7 +105,7 @@ kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
 
 # 4. Expose Rest api on localhost for CLI
-kubectl port-forward service/ 9090:9090
+kubectl port-forward service/trading-ai-backend-rest-api-service 9090:9090
 ```
 
 ### 3. Weryfikacja deploymentu
