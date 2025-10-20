@@ -195,6 +195,64 @@ class TechnicalAnalysis:
         """
         return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
+    async def save_harmonic_patterns_to_database(self, harmonic_patterns_objects: List[Dict[str, any]]) -> int:
+        """
+        Zapisuje wzorce harmoniczne do bazy danych z obiektów HarmonicPatterns.
+        
+        Args:
+            harmonic_patterns_objects: Lista obiektów HarmonicPatterns z obliczonymi wzorcami
+            
+        Returns:
+            int: Liczba zapisanych wzorców
+        """
+        saved_count = 0
+        
+        try:
+            technical_analysis_harmonic_patterns_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
+            
+            for harmonic_patterns_obj in harmonic_patterns_objects:
+                # Pobierz obliczone wzorce z obiektu
+                calculated_patterns = harmonic_patterns_obj.get_calculated_objects()
+                
+                logger.debug(f"Przetwarzam {len(calculated_patterns)} wzorców do zapisu w bazie danych")
+                
+                for pattern_data in calculated_patterns:
+                    try:
+                        # Sprawdź czy wzorzec już istnieje w bazie danych
+                        pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
+                            pattern_data['asset_id'],
+                            pattern_data['x_point_timestamp'],
+                            pattern_data['a_point_timestamp'],
+                            pattern_data['b_point_timestamp'],
+                            pattern_data['c_point_timestamp'],
+                            pattern_data['d_point_timestamp'],
+                            interval=pattern_data['interval']
+                        )
+                        
+                        if pattern_exists:
+                            logger.debug(f"Wzorzec już istnieje w bazie danych - pomijam")
+                            continue
+                        
+                        # Zapisz do bazy danych
+                        new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
+                        
+                        if new_pattern_id:
+                            saved_count += 1
+                            logger.debug(f"Zapisano wzorzec do bazy danych z ID: {new_pattern_id}")
+                        else:
+                            logger.error(f"Nie udało się zapisać wzorca do bazy danych")
+                            
+                    except Exception as e:
+                        logger.error(f"Błąd podczas zapisywania pojedynczego wzorca do bazy danych: {e}")
+                        continue
+            
+            logger.info(f"Zapisano {saved_count} wzorców harmonicznych do bazy danych")
+            return saved_count
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas zapisywania wzorców harmonicznych do bazy danych: {e}")
+            return saved_count
+    
     async def sync_technical_analysis(self, limit: int = 1, offset: int = 0) -> None:
         """
         Synchronizuje analizę techniczną dla wszystkich assetów i interwałów.
@@ -296,8 +354,6 @@ class TechnicalAnalysis:
                                     general_fibonacci_levels=config['general_fibonacci_levels'],
                                     all_points_fibonacci_levels=config['all_points_fibonacci_levels'],
                                     all_fibonacci_targets=config['all_fibonacci_targets'],
-                                    use_database=True,
-                                    database_factory=self.db.get_factory(),
                                     asset_id=asset['id'],
                                     interval=interval
                                 )
@@ -317,6 +373,10 @@ class TechnicalAnalysis:
                                         enabled_indicators=indicators,
                                         enabled_objects={'HarmonicPatterns': harmonic_patterns}
                                     )
+                                    
+                                    # Zapisz nowoobliczone wzorce harmoniczne do bazy danych
+                                    calculated_harmonic_patterns = harmonic_patterns.get_calculated_objects()
+                                    await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
                                      
                                     # KROK 8: Wygeneruj wykres
                                     chart_base64 = await self.technical_analysis_facade.create_candlestick_chart(
