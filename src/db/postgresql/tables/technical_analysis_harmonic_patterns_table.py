@@ -393,18 +393,32 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         return results 
      
     async def check_pattern_exists(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
-                                 b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> bool:
-        """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
-        result = await self.fetch_one("""
-        SELECT COUNT(*) as count
-        FROM technical_analysis_harmonic_patterns 
-        WHERE asset_id = $1 
-        AND x_point_timestamp = $2 
-        AND a_point_timestamp = $3 
-        AND b_point_timestamp = $4 
-        AND c_point_timestamp = $5 
-        AND d_point_timestamp = $6
-        """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
+                                 b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int,
+                                 interval: str = None) -> bool:
+        """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset i interwału."""
+        if interval:
+            result = await self.fetch_one("""
+            SELECT COUNT(*) as count
+            FROM technical_analysis_harmonic_patterns 
+            WHERE asset_id = $1 
+            AND x_point_timestamp = $2 
+            AND a_point_timestamp = $3 
+            AND b_point_timestamp = $4 
+            AND c_point_timestamp = $5 
+            AND d_point_timestamp = $6
+            AND interval = $7
+            """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, interval)
+        else:
+            result = await self.fetch_one("""
+            SELECT COUNT(*) as count
+            FROM technical_analysis_harmonic_patterns 
+            WHERE asset_id = $1 
+            AND x_point_timestamp = $2 
+            AND a_point_timestamp = $3 
+            AND b_point_timestamp = $4 
+            AND c_point_timestamp = $5 
+            AND d_point_timestamp = $6
+            """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
         
         return result['count'] > 0 if result else False
     

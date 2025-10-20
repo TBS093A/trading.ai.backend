@@ -76,8 +76,6 @@ class TechnicalAnalysisFactory:
                              general_fibonacci_levels: dict[str, bool] = None,
                              all_points_fibonacci_levels: dict[str, bool] = None,
                              all_fibonacci_targets: dict[str, bool] = None,
-                             use_database: bool = False,
-                             database_factory = None,
                              interval: str = None,
                              asset_id: int = None) -> HarmonicPatterns:
         """Zwraca obiekt HarmonicPatterns z opcjonalnymi parametrami konfiguracyjnymi"""
@@ -103,8 +101,6 @@ class TechnicalAnalysisFactory:
             general_fibonacci_levels=general_fibonacci_levels,
             all_points_fibonacci_levels=all_points_fibonacci_levels,
             all_fibonacci_targets=all_fibonacci_targets,
-            use_database=use_database,
-            database_factory=database_factory,
             asset_id=asset_id,
             interval=interval
         )

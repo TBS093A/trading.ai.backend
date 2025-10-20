@@ -21,16 +21,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from ..draw_utils import DrawUtils
-from .abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern, TechnicalAnalysisObjectDatabase
+from .abstract_technical_analysis_object import TechnicalAnalysisObject, HarmonicPattern
 from .tao_fibonacci import Fibonacci
 from .tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
 from .tao_fibonacci_targets import FibonacciTargets
 
 
-class HarmonicPatterns(
-    TechnicalAnalysisObject, 
-    TechnicalAnalysisObjectDatabase
-):
+class HarmonicPatterns(TechnicalAnalysisObject):
     """Wzorce harmoniczne XABCD"""
     
     def __init__(
@@ -48,8 +45,6 @@ class HarmonicPatterns(
         all_fibonacci_targets: dict[str, bool] = {
             'show': False
         },
-        use_database: bool = False,
-        database_factory = None,
         asset_id: int = None,
         interval: str = None
     ):
@@ -57,23 +52,60 @@ class HarmonicPatterns(
         self.general_fibonacci_levels = general_fibonacci_levels
         self.all_points_fibonacci_levels = all_points_fibonacci_levels
         self.all_fibonacci_targets = all_fibonacci_targets
-        self.use_database = use_database
-        self.database_factory = database_factory
         self.asset_id = asset_id
         self.interval = interval
         # Inicjalizuj obiekty Fibonacci do współpracy
         self.fibonacci = Fibonacci()
         self.fibonacci_all_levels = FibonacciAllHarmonicPatternPointsLevels()
         self.fibonacci_targets = FibonacciTargets()
-        # Inicjalizuj listy wzorców
-        self.existing_patterns = []
-        self.patterns_to_delete = []
-        self.regenerated_patterns = set()
+        # Inicjalizuj listę obliczonych wzorców
+        self.__calculated_harmonic_patterns = []
     
-    async def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
+    def get_calculated_objects(self) -> List[Dict[str, any]]:
+        """
+        Zwraca obliczone wzorce harmoniczne gotowe do zapisu w bazie danych.
+        
+        Returns:
+            List[Dict[str, any]]: Lista wzorców harmonicznych jako słowniki:
+
+            [
+                ...
+                {
+                    'asset_id': self.asset_id,
+                    'interval': self.interval,
+                    'ta_object_json': {
+                        'pattern_name': pattern_name,
+                        'pattern_type': str(pattern.name),
+                        'is_bullish': bool(pattern.bullish),
+                        'is_formed': bool(pattern.formed),
+                        'completion_max_price': float(pattern.completion_max_price),
+                        'completion_min_price': float(pattern.completion_min_price),
+                        'fib_tolerance_strategy': fib_tolerance_strategy_name,
+                        'fib_tolerance': fib_tolerance,
+                        'peak_spacing_strategy': peak_spacing_strategy_name,
+                        'peak_spacing': peak_spacing,
+                        'retraces': pattern.retraces,
+                        'points': pattern_points,
+                        'fibonacci_levels': fibonacci_levels
+                    },
+                    'x_point_timestamp': x_timestamp,
+                    'a_point_timestamp': a_timestamp,
+                    'b_point_timestamp': b_timestamp,
+                    'c_point_timestamp': c_timestamp,
+                    'd_point_timestamp': d_timestamp
+                }
+                ...
+            ]
+        """
+        return self.__calculated_harmonic_patterns
+    
+    def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
                   min_points: int = 5, symbol: str = '', interval: str = '',
                   find_only_xabcd: bool = True, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
+        # Wyczyść listę obliczonych wzorców przed nowym obliczeniem
+        self.__calculated_harmonic_patterns = []
+        
         # Aktualizuj interval w instancji jeśli został przekazany
         if interval:
             self.interval = interval
@@ -81,12 +113,12 @@ class HarmonicPatterns(
         # Usuń chart_config z kwargs przed przekazaniem do __calculate_harmonic_patterns
         calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
         
-        patterns_count = await self.__calculate_harmonic_patterns(
+        patterns_count = self.__calculate_harmonic_patterns(
             klines, min_points, symbol, interval, find_only_xabcd, **calculate_kwargs
         )
         self.calculated_data = patterns_count
     
-    async def __calculate_harmonic_patterns(
+    def __calculate_harmonic_patterns(
         self,
         klines: List[Dict[str, Union[int, float, str]]],
         min_points: int = 5,
@@ -149,9 +181,6 @@ class HarmonicPatterns(
         if len(klines) < min_points:
             logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_points}")
             return 0
-
-        # Integracja z bazą danych
-        await self.sync_objects_from_database(klines)
 
         try:
             # Inicjalizuj licznik wzorców
@@ -397,13 +426,17 @@ class HarmonicPatterns(
                                 # Zarejestruj wzorzec jako dodany
                                 added_patterns[pattern_key] = patterns_count
                                 
-                                # Zapisz wzorzec do bazy danych jeśli używamy bazy
-                                await self.save_objects_to_database(
+                                # Parsuj wzorzec i dodaj do listy obliczonych wzorców
+                                parsed_pattern = self.__parse_harmonic_pattern(
                                     pattern_name, pattern, x_points, y_points, 
                                     pattern_points, fibonacci_levels,
                                     fib_tolerance_strategy_name, fib_tolerance,
                                     peak_spacing_strategy_name, peak_spacing
                                 )
+                                
+                                if parsed_pattern:
+                                    self.__calculated_harmonic_patterns.append(parsed_pattern)
+                                    logger.debug(f"Dodano wzorzec {pattern_name} do listy obliczonych wzorców")
                                 
                                 patterns_count += 1
 
@@ -414,9 +447,7 @@ class HarmonicPatterns(
 
             logger.debug(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
             logger.debug(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
-            
-            # Usuń wzorce z bazy danych, które nie zostały ponownie wygenerowane
-            await self.delete_deprecated_objects_from_database()
+            logger.debug(f"Obliczono {len(self.__calculated_harmonic_patterns)} wzorców gotowych do zapisu")
             
             return patterns_count
 
@@ -425,111 +456,12 @@ class HarmonicPatterns(
             logger.error(traceback.format_exc())
             return 0
     
-    def _generate_pattern_hash(self, x_points, y_points, pattern_name):
+    def __parse_harmonic_pattern(self, pattern_name: str, pattern, x_points, y_points,
+                                  pattern_points: dict, fibonacci_levels: dict,
+                                  fib_tolerance_strategy_name: str, fib_tolerance: float,
+                                  peak_spacing_strategy_name: str, peak_spacing: int) -> Dict[str, any]:
         """
-        Generuje unikalny hash dla wzorca na podstawie jego punktów i nazwy.
-        
-        Args:
-            x_points: Lista współrzędnych X punktów wzorca
-            y_points: Lista współrzędnych Y punktów wzorca
-            pattern_name: Nazwa wzorca
-            
-        Returns:
-            str: Unikalny hash wzorca
-        """
-        try:
-            # Konwertuj punkty na string z zaokrągleniem do 6 miejsc po przecinku
-            # (żeby uniknąć problemów z precyzją liczb zmiennoprzecinkowych)
-            x_str = ','.join([f"{x:.6f}" for x in x_points])
-            y_str = ','.join([f"{y:.6f}" for y in y_points])
-            
-            # Połącz nazwę wzorca z punktami
-            pattern_string = f"{pattern_name}|{x_str}|{y_str}"
-            
-            # Generuj hash (można użyć prostego hash lub bardziej zaawansowanego)
-            import hashlib
-            pattern_hash = hashlib.md5(pattern_string.encode()).hexdigest()
-            
-            logger.debug(f"Wygenerowano hash dla wzorca {pattern_name}: {pattern_hash[:8]}...")
-            return pattern_hash
-            
-        except Exception as e:
-            logger.warning(f"Błąd podczas generowania hasha wzorca: {e}")
-            # Fallback - użyj prostego hash
-            return str(hash(str(x_points) + str(y_points) + str(pattern_name)))
-    
-    def _convert_klines_to_dataframe(self, klines):
-        """Konwertuje dane klines na DataFrame wymagany przez pyharmonics"""
-        df = pd.DataFrame(klines)
-        df['date'] = pd.to_datetime(df['open_time'], unit='ms')
-        df.set_index('date', inplace=True)
-        
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            if col in df.columns:
-                df[col] = df[col].astype(float)
-        
-        columns_to_keep = ['open', 'high', 'low', 'close', 'volume']
-        df = df[columns_to_keep]
-        return df
-
-    async def sync_objects_from_database(self, klines: List[Dict[str, Union[int, float, str]]]) -> None:
-        """
-        Pobiera istniejące wzorce z bazy danych dla danego zakresu czasowego.
-        
-        Args:
-            klines: Lista świeczek w formacie zwracanym przez _get_klines
-        """
-        if not (self.use_database and self.database_factory and self.asset_id is not None):
-            return
-            
-        try:
-            # Pobierz zakres czasowy z klines (jako inty)
-            if klines:
-                start_timestamp = int(klines[0]['open_time'])
-                end_timestamp = int(klines[-1]['close_time'])
-                
-                # Pobierz istniejące wzorce z bazy dla tego zakresu czasowego
-                technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
-                
-                # Debug: sprawdź wartości przed zapytaniem
-                logger.debug(f"DEBUG: Pobieranie wzorców z bazy - asset_id: {self.asset_id}, interval: {self.interval}, start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}")
-                
-                # Jeśli interval jest ustawiony, użyj nowej metody get_by_timestamp_range_and_asset_id_and_interval
-                if self.interval:
-                    self.existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
-                        start_timestamp, end_timestamp, self.asset_id, self.interval
-                    )
-                
-                logger.debug(f"Pobrano {len(self.existing_patterns)} istniejących wzorców z bazy danych")
-                
-                # Debug: sprawdź wszystkie wzorce dla tego asset_id (bez filtrowania czasowego)
-                all_patterns_for_asset = await technical_analysis_harmonic_patterns_table.get_by_asset_id(self.asset_id)
-                logger.debug(f"DEBUG: Wszystkie wzorce dla asset_id {self.asset_id}: {len(all_patterns_for_asset)}")
-                
-                if all_patterns_for_asset:
-                    logger.debug(f"DEBUG: Przykładowe wzorce w bazie:")
-                    for i, pattern in enumerate(all_patterns_for_asset[:3]):  # Pierwsze 3
-                        logger.debug(f"  Wzorzec {i+1}: ID={pattern['id']}, X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
-                        # Debug: sprawdź typy danych
-                        logger.debug(f"    Typy: X={type(pattern['x_point_timestamp'])}, A={type(pattern['a_point_timestamp'])}")
-                        logger.debug(f"    Wartości: X={pattern['x_point_timestamp']}, A={pattern['a_point_timestamp']}")
-                    
-                    # Przygotuj listę wzorców do usunięcia (wszystkie istniejące)
-                    self.patterns_to_delete = [pattern['id'] for pattern in self.existing_patterns]
-                    # Lista wzorców, które zostały ponownie wygenerowane (nie będą usunięte)
-                    self.regenerated_patterns = set()
-                    
-        except Exception as e:
-            logger.error(f"Błąd podczas pobierania wzorców z bazy danych: {e}")
-            self.existing_patterns = []
-            self.patterns_to_delete = []
-
-    async def save_objects_to_database(self, pattern_name: str, pattern, x_points, y_points, 
-                                     pattern_points: dict, fibonacci_levels: dict,
-                                     fib_tolerance_strategy_name: str, fib_tolerance: float,
-                                     peak_spacing_strategy_name: str, peak_spacing: int) -> bool:
-        """
-        Zapisuje wzorzec harmoniczny do bazy danych.
+        Parsuje wzorzec harmoniczny do formatu gotowego do zapisu w bazie danych.
         
         Args:
             pattern_name: Nazwa wzorca
@@ -544,13 +476,9 @@ class HarmonicPatterns(
             peak_spacing: Wartość spacji między punktami
             
         Returns:
-            bool: True jeśli wzorzec został zapisany lub już istnieje, False w przypadku błędu
+            Dict[str, any]: Słownik z danymi wzorca gotowy do zapisu w bazie
         """
-        if not (self.use_database and self.database_factory and self.asset_id is not None):
-            return False
-            
         try:
-            # Przygotuj dane wzorca do zapisania
             # Konwertuj timestamps z pandas na milisekundy
             def convert_timestamp_to_ms(ts):
                 if ts is None:
@@ -602,62 +530,58 @@ class HarmonicPatterns(
                 'd_point_timestamp': d_timestamp
             }
             
-            # Sprawdź czy wzorzec już istnieje w bazie danych
-            technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
-            pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
-                self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
-            )
+            return pattern_data
             
-            if pattern_exists:
-                logger.debug(f"Wzorzec {pattern_name} już istnieje w bazie danych - pomijam")
-                # Znajdź ID istniejącego wzorca i dodaj do self.regenerated_patterns
-                existing_pattern = await technical_analysis_harmonic_patterns_table.get_by_point_timestamps(
-                    self.asset_id, x_timestamp, a_timestamp, b_timestamp, c_timestamp, d_timestamp
-                )
-                if existing_pattern:
-                    self.regenerated_patterns.add(existing_pattern['id'])
-                return True
-            else:
-                # Zapisz do bazy danych
-                new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
-                
-                if new_pattern_id:
-                    logger.debug(f"Zapisano wzorzec {pattern_name} do bazy danych z ID: {new_pattern_id}")
-                    return True
-                else:
-                    logger.error(f"Nie udało się zapisać wzorca {pattern_name} do bazy danych")
-                    return False
-                    
         except Exception as e:
-            logger.error(f"Błąd podczas zapisywania wzorca {pattern_name} do bazy danych: {e}")
-            return False
-
-    async def delete_deprecated_objects_from_database(self) -> None:
+            logger.error(f"Błąd podczas parsowania wzorca {pattern_name}: {e}")
+            return None
+    
+    def _generate_pattern_hash(self, x_points, y_points, pattern_name):
         """
-        Usuwa wzorce z bazy danych, które nie zostały ponownie wygenerowane.
-        """
-        if not (self.use_database and self.database_factory and self.patterns_to_delete):
-            return
+        Generuje unikalny hash dla wzorca na podstawie jego punktów i nazwy.
+        
+        Args:
+            x_points: Lista współrzędnych X punktów wzorca
+            y_points: Lista współrzędnych Y punktów wzorca
+            pattern_name: Nazwa wzorca
             
+        Returns:
+            str: Unikalny hash wzorca
+        """
         try:
-            technical_analysis_harmonic_patterns_table = self.database_factory.get_technical_analysis_harmonic_patterns_table()
-            deleted_count = 0
+            # Konwertuj punkty na string z zaokrągleniem do 6 miejsc po przecinku
+            # (żeby uniknąć problemów z precyzją liczb zmiennoprzecinkowych)
+            x_str = ','.join([f"{x:.6f}" for x in x_points])
+            y_str = ','.join([f"{y:.6f}" for y in y_points])
             
-            for pattern_id in self.patterns_to_delete:
-                # Usuń tylko wzorce, które nie zostały ponownie wygenerowane
-                if pattern_id not in self.regenerated_patterns:
-                    if await technical_analysis_harmonic_patterns_table.delete(pattern_id):
-                        deleted_count += 1
-                        logger.debug(f"Usunięto wzorzec z bazy danych o ID: {pattern_id}")
-                    else:
-                        logger.warning(f"Nie udało się usunąć wzorca z bazy danych o ID: {pattern_id}")
-                else:
-                    logger.debug(f"Wzorzec o ID: {pattern_id} został ponownie wygenerowany - zachowuję w bazie")
+            # Połącz nazwę wzorca z punktami
+            pattern_string = f"{pattern_name}|{x_str}|{y_str}"
             
-            logger.debug(f"Usunięto {deleted_count} wzorców z bazy danych, które nie zostały ponownie wygenerowane")
+            # Generuj hash (można użyć prostego hash lub bardziej zaawansowanego)
+            import hashlib
+            pattern_hash = hashlib.md5(pattern_string.encode()).hexdigest()
+            
+            logger.debug(f"Wygenerowano hash dla wzorca {pattern_name}: {pattern_hash[:8]}...")
+            return pattern_hash
             
         except Exception as e:
-            logger.error(f"Błąd podczas usuwania wzorców z bazy danych: {e}")
+            logger.warning(f"Błąd podczas generowania hasha wzorca: {e}")
+            # Fallback - użyj prostego hash
+            return str(hash(str(x_points) + str(y_points) + str(pattern_name)))
+    
+    def _convert_klines_to_dataframe(self, klines):
+        """Konwertuje dane klines na DataFrame wymagany przez pyharmonics"""
+        df = pd.DataFrame(klines)
+        df['date'] = pd.to_datetime(df['open_time'], unit='ms')
+        df.set_index('date', inplace=True)
+        
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = df[col].astype(float)
+        
+        columns_to_keep = ['open', 'high', 'low', 'close', 'volume']
+        df = df[columns_to_keep]
+        return df
     
     def draw(self, main_ax, df: pd.DataFrame, klines: List[Dict], **kwargs) -> None:
         """Rysuje wzorce harmoniczne"""
