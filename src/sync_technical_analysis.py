@@ -368,7 +368,7 @@ class TechnicalAnalysis:
                                     logger.info(f"Przetwarzam HarmonicPatterns {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
                                     
                                     # Oblicz wskaźniki i obiekty analizy technicznej
-                                    await self.technical_analysis_facade.calculate(
+                                    self.technical_analysis_facade.calculate(
                                         klines=klines,
                                         enabled_indicators=indicators,
                                         enabled_objects={'HarmonicPatterns': harmonic_patterns}
