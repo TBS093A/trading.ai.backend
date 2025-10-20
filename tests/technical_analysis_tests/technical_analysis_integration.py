@@ -11,7 +11,7 @@ from src.sync_exchanges import Exchanges
 from src.db import DatabaseFacade
 from src.config import config
 
-@unittest.skip("Skipping basic technical analysis test")
+# @unittest.skip("Skipping basic technical analysis test")
 class TestTechnicalAnalysisIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
