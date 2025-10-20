@@ -72,36 +72,10 @@ class TechnicalAnalysisFactory:
         """Zwraca obiekt FibonacciAllHarmonicPatternPointsLevels"""
         return FibonacciAllHarmonicPatternPointsLevels()
     
-    def get_harmonic_patterns(self, 
-                             general_fibonacci_levels: dict[str, bool] = None,
-                             all_points_fibonacci_levels: dict[str, bool] = None,
-                             all_fibonacci_targets: dict[str, bool] = None,
-                             interval: str = None,
-                             asset_id: int = None) -> HarmonicPatterns:
+    def get_harmonic_patterns(self, interval: str = None, asset_id: int = None) -> HarmonicPatterns:
         """Zwraca obiekt HarmonicPatterns z opcjonalnymi parametrami konfiguracyjnymi"""
-        # Użyj domyślnych wartości jeśli parametry są None
-        if general_fibonacci_levels is None:
-            general_fibonacci_levels = {
-                'show': False,
-                'retracement': False,
-                'extension': False
-            }
-        if all_points_fibonacci_levels is None:
-            all_points_fibonacci_levels = {
-                'show': False,
-                'retracement': False,
-                'extension': False
-            }
-        if all_fibonacci_targets is None:
-            all_fibonacci_targets = {
-                'show': False
-            }
-        
         return HarmonicPatterns(
-            general_fibonacci_levels=general_fibonacci_levels,
-            all_points_fibonacci_levels=all_points_fibonacci_levels,
-            all_fibonacci_targets=all_fibonacci_targets,
-            asset_id=asset_id,
+            asset_id=asset_id, 
             interval=interval
         )
     
