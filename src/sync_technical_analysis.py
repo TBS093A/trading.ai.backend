@@ -222,196 +222,203 @@ class TechnicalAnalysis:
             processed_count = 0
             error_count = 0
             
-            # KROK 0: Pętla po interwałach
-            for interval, interval_timedelta in self.CHART_INTERVALS.items():
-                logger.info(f"=== Przetwarzanie interwału: {interval} ===")
-                
-                # KROK 1: Pobierz assety z harmonic patterns starsze niż aktualnie procesowany interwał
-                time_delta = self._calculate_time_delta_for_assets(interval)
-                assets = await assets_table.get_assets_with_old_harmonic_patterns(
-                    time_delta=time_delta,
-                    limit=limit,
-                    offset=offset
-                )
-                
-                # Jeśli pobrano mniej assetów niż limit, uzupełnij assetami bez harmonic patterns
-                if len(assets) < limit:
-                    remaining_limit = limit - len(assets)
-                    remaining_offset = offset + len(assets)
-                    assets_without_patterns = await assets_table.get_assets_without_harmonic_patterns(
-                        limit=remaining_limit,
-                        offset=remaining_offset
-                    )
-                    assets.extend(assets_without_patterns)
-                    logger.info(f"Uzupełniono listę o {len(assets_without_patterns)} assetów bez harmonic patterns")
-                
-                if not assets:
-                    logger.info(f"Brak assetów do przetworzenia dla interwału {interval}")
-                    continue
-                
-                logger.info(f"Znaleziono {len(assets)} assetów do przetworzenia dla interwału {interval}")
-                
-                # KROK 2: Pętla po assetach
-                for asset in assets:
-                    try:
-                        logger.info(f"Przetwarzam asset: {asset['asset']}/{asset['quote']} dla interwału {interval}")
-                        
-                        # Oblicz czasy dla pobierania klines
-                        start_time = self._calculate_start_time(interval)
-                        end_time = self._calculate_end_time()
-                        
-                        # KROK 2: Pobierz klines z giełd
-                        klines = None
-                        for exchange in self.exchanges_apis:
-                            try:
-                                logger.info(f"Pobieram klines z {exchange.__class__.__name__} dla {asset['asset']}/{asset['quote']}")
-                                klines = exchange._get_klines(
-                                    base_currency=asset['asset'],
-                                    quote_currency=asset['quote'],
-                                    interval=interval,
-                                    start_time=start_time,
-                                    end_time=end_time,
-                                    limit=self.CANDLES_COUNT
-                                )
-                                
-                                if klines and len(klines) > 0:
-                                    logger.info(f"Pobrano {len(klines)} klines z {exchange.__class__.__name__}")
-                                    break
-                                else:
-                                    logger.warning(f"Brak klines z {exchange.__class__.__name__}")
-                                    
-                            except Exception as e:
-                                logger.error(f"Błąd podczas pobierania klines z {exchange.__class__.__name__}: {e}")
-                                continue
-                        
-                        if not klines or len(klines) == 0:
-                            logger.warning(f"Nie udało się pobrać klines dla assetu {asset['asset']}/{asset['quote']}")
-                            continue
-                        
-                        # KROK 3: Stwórz obiekty HarmonicPatterns
-                        harmonic_patterns_objects = []
-                        for config in self.HARMONIC_PATTERNS_CONFIGS:
-                            harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
-                                general_fibonacci_levels=config['general_fibonacci_levels'],
-                                all_points_fibonacci_levels=config['all_points_fibonacci_levels'],
-                                all_fibonacci_targets=config['all_fibonacci_targets'],
-                                use_database=True,
-                                database_factory=self.db.get_factory(),
+            # KROK 1: Pobierz wszystkie assety z bazy danych
+            assets = await assets_table.get_all(limit=limit, offset=offset)
+            
+            if not assets:
+                logger.info("Brak assetów do przetworzenia")
+                return
+            
+            logger.info(f"Znaleziono {len(assets)} assetów do przetworzenia")
+            
+            # KROK 2: Pętla po assetach
+            for asset in assets:
+                try:
+                    logger.info(f"=== Przetwarzam asset: {asset['asset']}/{asset['quote']} ===")
+                    
+                    # KROK 3: Pętla po interwałach
+                    for interval, interval_timedelta in self.CHART_INTERVALS.items():
+                        try:
+                            logger.info(f"Przetwarzam interwał: {interval} dla assetu {asset['asset']}/{asset['quote']}")
+                            
+                            # Oblicz czasy dla pobierania klines
+                            start_time = self._calculate_start_time(interval)
+                            end_time = self._calculate_end_time()
+                            
+                            # KROK 4: Sprawdź czy są jakiekolwiek harmonic patterns
+                            existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
+                                start_timestamp=start_time,
+                                end_timestamp=end_time,
                                 asset_id=asset['id'],
                                 interval=interval
                             )
-                            harmonic_patterns_objects.append(harmonic_patterns)
-                        
-                        # KROK 4: Przetwórz przez wszystkie obiekty HarmonicPatterns
-                        base64_charts = []
-                        fibonacci_types = []
-                        
-                        for i, harmonic_patterns in enumerate(harmonic_patterns_objects):
-                            try:
-                                logger.info(f"Przetwarzam HarmonicPatterns {i+1}/4 dla assetu {asset['asset']}")
-                                
-                                # Oblicz wskaźniki i obiekty analizy technicznej
-                                await self.technical_analysis_facade.calculate(
-                                    klines=klines,
-                                    enabled_indicators=indicators,
-                                    enabled_objects={'HarmonicPatterns': harmonic_patterns}
-                                )
-                                 
-                                # KROK 5: Wygeneruj wykres
-                                chart_base64 = await self.technical_analysis_facade.create_candlestick_chart(
-                                    klines=klines,
-                                    enabled_indicators=indicators,
-                                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
-                                    title=f"{asset['asset']}/{asset['quote']} - {interval}"
-                                )
-                                
-                                if chart_base64:
-                                    base64_charts.append(chart_base64)
-                                    fibonacci_type = self._get_fibonacci_type_name(self.HARMONIC_PATTERNS_CONFIGS[i])
-                                    fibonacci_types.append(fibonacci_type)
-                                    logger.info(f"Wygenerowano wykres {i+1}/4 dla assetu {asset['asset']}")
-                                else:
-                                    logger.warning(f"Nie udało się wygenerować wykresu {i+1}/4 dla assetu {asset['asset']}")
-                                
-                            except Exception as e:
-                                logger.error(f"Błąd podczas przetwarzania HarmonicPatterns {i+1}/4 dla assetu {asset['asset']}: {e}")
-                                continue
-                        
-                        # KROK 6: Zapisz obrazy do storage i bazy danych
-                        if base64_charts:
-                            # Pobierz wzorce harmoniczne z bazy danych dla tego zakresu czasowego
-                            harmonic_patterns_from_db = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id(
-                                start_timestamp=start_time,
-                                end_timestamp=end_time,
-                                asset_id=asset['id']
-                            )
                             
-                            for i, (chart_base64, fibonacci_type) in enumerate(zip(base64_charts, fibonacci_types)):
+                            if existing_patterns and len(existing_patterns) > 0:
+                                # Są już patterns - pomijamy
+                                logger.info(f"Harmonic patterns już istnieją dla tego zakresu - pomijam interwał {interval}")
+                                continue
+                            
+                            # Brak patterns - generujemy nowe
+                            logger.info(f"Brak harmonic patterns - generuję nowe dla interwału {interval}")
+                            
+                            # KROK 5: Pobierz klines z giełd
+                            klines = None
+                            for exchange in self.exchanges_apis:
                                 try:
-                                    # Wygeneruj nazwę pliku
-                                    file_name = self._generate_file_name(
-                                        asset=asset['asset'],
-                                        quote=asset['quote'],
+                                    logger.info(f"Pobieram klines z {exchange.__class__.__name__} dla {asset['asset']}/{asset['quote']}")
+                                    klines = exchange._get_klines(
+                                        base_currency=asset['asset'],
+                                        quote_currency=asset['quote'],
                                         interval=interval,
-                                        start_timestamp=start_time,
-                                        end_timestamp=end_time,
-                                        candles_count=len(klines),
-                                        fibonacci_type=fibonacci_type
+                                        start_time=start_time,
+                                        end_time=end_time,
+                                        limit=self.CANDLES_COUNT
                                     )
                                     
-                                    # Upload do wszystkich dostępnych storage
-                                    uploaded_to_storage = None
-                                    for storage_api in self.storage_apis:
-                                        try:
-                                            if storage_api.upload_file(file_name, chart_base64):
-                                                uploaded_to_storage = storage_api.STORAGE
-                                                logger.info(f"Zapisano wykres do {storage_api.STORAGE}: {file_name}")
-                                                break
-                                        except Exception as e:
-                                            logger.error(f"Błąd podczas uploadu do {storage_api.STORAGE}: {e}")
-                                            continue
-                                    
-                                    if uploaded_to_storage:
-                                        # Oblicz timestampy z klines
-                                        timestamp_start = int(klines[0]['open_time'])
-                                        timestamp_end = int(klines[-1]['close_time'])
+                                    if klines and len(klines) > 0:
+                                        logger.info(f"Pobrano {len(klines)} klines z {exchange.__class__.__name__}")
+                                        break
+                                    else:
+                                        logger.warning(f"Brak klines z {exchange.__class__.__name__}")
                                         
-                                        # Zapisz do bazy danych
-                                        chart_image_id = await chart_images_table.create(
-                                            image_file_path=file_name,
-                                            image_file_name=file_name.split('/')[-1],
-                                            storage=uploaded_to_storage,
+                                except Exception as e:
+                                    logger.error(f"Błąd podczas pobierania klines z {exchange.__class__.__name__}: {e}")
+                                    continue
+                            
+                            if not klines or len(klines) == 0:
+                                logger.warning(f"Nie udało się pobrać klines dla assetu {asset['asset']}/{asset['quote']} i interwału {interval}")
+                                continue
+                            
+                            # KROK 6: Stwórz obiekty HarmonicPatterns
+                            harmonic_patterns_objects = []
+                            for config in self.HARMONIC_PATTERNS_CONFIGS:
+                                harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
+                                    general_fibonacci_levels=config['general_fibonacci_levels'],
+                                    all_points_fibonacci_levels=config['all_points_fibonacci_levels'],
+                                    all_fibonacci_targets=config['all_fibonacci_targets'],
+                                    use_database=True,
+                                    database_factory=self.db.get_factory(),
+                                    asset_id=asset['id'],
+                                    interval=interval
+                                )
+                                harmonic_patterns_objects.append(harmonic_patterns)
+                            
+                            # KROK 7: Przetwórz przez wszystkie obiekty HarmonicPatterns
+                            base64_charts = []
+                            fibonacci_types = []
+                            
+                            for i, harmonic_patterns in enumerate(harmonic_patterns_objects):
+                                try:
+                                    logger.info(f"Przetwarzam HarmonicPatterns {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
+                                    
+                                    # Oblicz wskaźniki i obiekty analizy technicznej
+                                    await self.technical_analysis_facade.calculate(
+                                        klines=klines,
+                                        enabled_indicators=indicators,
+                                        enabled_objects={'HarmonicPatterns': harmonic_patterns}
+                                    )
+                                     
+                                    # KROK 8: Wygeneruj wykres
+                                    chart_base64 = await self.technical_analysis_facade.create_candlestick_chart(
+                                        klines=klines,
+                                        enabled_indicators=indicators,
+                                        enabled_objects={'HarmonicPatterns': harmonic_patterns},
+                                        title=f"{asset['asset']}/{asset['quote']} - {interval}"
+                                    )
+                                    
+                                    if chart_base64:
+                                        base64_charts.append(chart_base64)
+                                        fibonacci_type = self._get_fibonacci_type_name(self.HARMONIC_PATTERNS_CONFIGS[i])
+                                        fibonacci_types.append(fibonacci_type)
+                                        logger.info(f"Wygenerowano wykres {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
+                                    else:
+                                        logger.warning(f"Nie udało się wygenerować wykresu {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
+                                    
+                                except Exception as e:
+                                    logger.error(f"Błąd podczas przetwarzania HarmonicPatterns {i+1}/4 dla assetu {asset['asset']} i interwału {interval}: {e}")
+                                    continue
+                            
+                            # KROK 9: Zapisz obrazy do storage i bazy danych
+                            if base64_charts:
+                                # Pobierz wzorce harmoniczne z bazy danych dla tego zakresu czasowego
+                                harmonic_patterns_from_db = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
+                                    start_timestamp=start_time,
+                                    end_timestamp=end_time,
+                                    asset_id=asset['id'],
+                                    interval=interval
+                                )
+                                
+                                for i, (chart_base64, fibonacci_type) in enumerate(zip(base64_charts, fibonacci_types)):
+                                    try:
+                                        # Wygeneruj nazwę pliku
+                                        file_name = self._generate_file_name(
+                                            asset=asset['asset'],
+                                            quote=asset['quote'],
                                             interval=interval,
-                                            timestamp_start=timestamp_start,
-                                            timestamp_end=timestamp_end
+                                            start_timestamp=start_time,
+                                            end_timestamp=end_time,
+                                            candles_count=len(klines),
+                                            fibonacci_type=fibonacci_type
                                         )
                                         
-                                        if chart_image_id:
-                                            # Utwórz relacje z wzorcami harmonicznymi
-                                            for pattern in harmonic_patterns_from_db:
-                                                await chart_images_harmonic_patterns_table.create(
-                                                    chart_image_id=chart_image_id,
-                                                    harmonic_pattern_id=pattern['id']
-                                                )
+                                        # Upload do wszystkich dostępnych storage
+                                        uploaded_to_storage = None
+                                        for storage_api in self.storage_apis:
+                                            try:
+                                                if storage_api.upload_file(file_name, chart_base64):
+                                                    uploaded_to_storage = storage_api.STORAGE
+                                                    logger.info(f"Zapisano wykres do {storage_api.STORAGE}: {file_name}")
+                                                    break
+                                            except Exception as e:
+                                                logger.error(f"Błąd podczas uploadu do {storage_api.STORAGE}: {e}")
+                                                continue
+                                        
+                                        if uploaded_to_storage:
+                                            # Oblicz timestampy z klines
+                                            timestamp_start = int(klines[0]['open_time'])
+                                            timestamp_end = int(klines[-1]['close_time'])
                                             
-                                            processed_count += 1
-                                            logger.info(f"Zapisano wykres {i+1}/4 do bazy danych z ID: {chart_image_id}")
+                                            # Zapisz do bazy danych
+                                            chart_image_id = await chart_images_table.create(
+                                                image_file_path=file_name,
+                                                image_file_name=file_name.split('/')[-1],
+                                                storage=uploaded_to_storage,
+                                                interval=interval,
+                                                timestamp_start=timestamp_start,
+                                                timestamp_end=timestamp_end
+                                            )
+                                            
+                                            if chart_image_id:
+                                                # Utwórz relacje z wzorcami harmonicznymi
+                                                for pattern in harmonic_patterns_from_db:
+                                                    await chart_images_harmonic_patterns_table.create(
+                                                        chart_image_id=chart_image_id,
+                                                        harmonic_pattern_id=pattern['id']
+                                                    )
+                                                
+                                                processed_count += 1
+                                                logger.info(f"Zapisano wykres {i+1}/4 do bazy danych z ID: {chart_image_id}")
+                                            else:
+                                                error_count += 1
+                                                logger.error(f"Nie udało się zapisać wykresu {i+1}/4 do bazy danych")
                                         else:
                                             error_count += 1
-                                            logger.error(f"Nie udało się zapisać wykresu {i+1}/4 do bazy danych")
-                                    else:
+                                            logger.error(f"Nie udało się zapisać wykresu {i+1}/4 do żadnego storage")
+                                    
+                                    except Exception as e:
                                         error_count += 1
-                                        logger.error(f"Nie udało się zapisać wykresu {i+1}/4 do żadnego storage")
-                                
-                                except Exception as e:
-                                    error_count += 1
-                                    logger.error(f"Błąd podczas zapisywania wykresu {i+1}/4: {e}")
-                                    continue
-                        
-                    except Exception as e:
-                        error_count += 1
-                        logger.error(f"Błąd podczas przetwarzania assetu {asset['asset']}: {e}", exc_info=True)
-                        continue
+                                        logger.error(f"Błąd podczas zapisywania wykresu {i+1}/4: {e}")
+                                        continue
+                            
+                        except Exception as e:
+                            error_count += 1
+                            logger.error(f"Błąd podczas przetwarzania interwału {interval} dla assetu {asset['asset']}: {e}", exc_info=True)
+                            continue
+                    
+                except Exception as e:
+                    error_count += 1
+                    logger.error(f"Błąd podczas przetwarzania assetu {asset['asset']}: {e}", exc_info=True)
+                    continue
             
             logger.info(f"=== Synchronizacja analizy technicznej zakończona ===")
             logger.info(f"Przetworzono: {processed_count} wykresów")
