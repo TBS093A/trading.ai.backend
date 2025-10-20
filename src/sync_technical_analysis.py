@@ -297,7 +297,8 @@ class TechnicalAnalysis:
                                 all_fibonacci_targets=config['all_fibonacci_targets'],
                                 use_database=True,
                                 database_factory=self.db.get_factory(),
-                                asset_id=asset['id']
+                                asset_id=asset['id'],
+                                interval=interval
                             )
                             harmonic_patterns_objects.append(harmonic_patterns)
                         
