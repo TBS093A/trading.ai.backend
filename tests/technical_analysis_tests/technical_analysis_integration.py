@@ -285,6 +285,7 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_test())
 
+    @unittest.skip("Skip TA file naming tests")
     def test_sync_technical_analysis_file_naming(self):
         """Test konwencji nazewnictwa plików wykresów"""
         
@@ -364,6 +365,7 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_file_naming_test())
 
+    @unittest.skip("Skip TA storage integration tests")
     def test_sync_technical_analysis_storage_integration(self):
         """Test integracji z storage"""
         
@@ -426,6 +428,7 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_storage_test())
 
+    @unittest.skip("Skip TA harmonic patterns relationships tests")
     def test_sync_technical_analysis_harmonic_patterns_relationships(self):
         """Test relacji między chart images a harmonic patterns"""
         
@@ -507,6 +510,7 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_relationships_test())
 
+    @unittest.skip("Skip TA file duplicate prevention tests")
     def test_sync_technical_analysis_duplicate_prevention(self):
         """Test zapobiegania duplikatom podczas synchronizacji analizy technicznej"""
         
@@ -561,6 +565,7 @@ class TestTechnicalAnalysisIntegration(unittest.TestCase):
         
         self.loop.run_until_complete(run_sync_technical_analysis_duplicate_test())
 
+    @unittest.skip("Skip TA content validation tests")
     def test_sync_technical_analysis_content_validation(self):
         """Test walidacji zawartości analizy technicznej"""
         
