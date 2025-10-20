@@ -185,15 +185,19 @@ class TechnicalAnalysis:
             asset: Nazwa assetu
             quote: Nazwa quote
             interval: Interwał czasowy
-            start_timestamp: Start timestamp
-            end_timestamp: End timestamp
+            start_timestamp: Start timestamp w milisekundach
+            end_timestamp: End timestamp w milisekundach
             candles_count: Liczba świec
             fibonacci_type: Typ Fibonacci
             
         Returns:
-            str: Nazwa pliku
+            str: Nazwa pliku z datami w formacie dzień-miesiąc-rok+godzina-minuta-sekunda
         """
-        return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
+        # Konwertuj timestampy z milisekund na sekundy i formatuj
+        start_date = datetime.fromtimestamp(start_timestamp / 1000).strftime('%d-%m-%Y+%H-%M-%S')
+        end_date = datetime.fromtimestamp(end_timestamp / 1000).strftime('%d-%m-%Y+%H-%M-%S')
+        
+        return f"{asset}-{quote}/{interval}/range_from_{start_date}_to_{end_date}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
     async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> int:
         """
