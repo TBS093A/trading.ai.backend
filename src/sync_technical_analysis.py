@@ -33,7 +33,7 @@ class TechnicalAnalysis:
     CANDLES_COUNT = 500
 
     # Konfiguracje HarmonicPatterns
-    HARMONIC_PATTERNS_CONFIGS = [
+    HARMONIC_PATTERNS_DRAW_CONFIGS = [
         {
             'general_fibonacci_levels': {
                 'show': True,
@@ -195,7 +195,7 @@ class TechnicalAnalysis:
         """
         return f"{asset}-{quote}/{interval}/range_from_{start_timestamp}_to_{end_timestamp}.candles_{candles_count}.fibonacci_{fibonacci_type}.png"
     
-    async def save_harmonic_patterns_to_database(self, harmonic_patterns_objects: List[Dict[str, any]]) -> int:
+    async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> int:
         """
         Zapisuje wzorce harmoniczne do bazy danych z obiektów HarmonicPatterns.
         
@@ -209,42 +209,36 @@ class TechnicalAnalysis:
         
         try:
             technical_analysis_harmonic_patterns_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            
-            for harmonic_patterns_obj in harmonic_patterns_objects:
-                # Pobierz obliczone wzorce z obiektu
-                calculated_patterns = harmonic_patterns_obj.get_calculated_objects()
-                
-                logger.debug(f"Przetwarzam {len(calculated_patterns)} wzorców do zapisu w bazie danych")
-                
-                for pattern_data in calculated_patterns:
-                    try:
-                        # Sprawdź czy wzorzec już istnieje w bazie danych
-                        pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
-                            pattern_data['asset_id'],
-                            pattern_data['x_point_timestamp'],
-                            pattern_data['a_point_timestamp'],
-                            pattern_data['b_point_timestamp'],
-                            pattern_data['c_point_timestamp'],
-                            pattern_data['d_point_timestamp'],
-                            interval=pattern_data['interval']
-                        )
-                        
-                        if pattern_exists:
-                            logger.debug(f"Wzorzec już istnieje w bazie danych - pomijam")
-                            continue
-                        
-                        # Zapisz do bazy danych
-                        new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
-                        
-                        if new_pattern_id:
-                            saved_count += 1
-                            logger.debug(f"Zapisano wzorzec do bazy danych z ID: {new_pattern_id}")
-                        else:
-                            logger.error(f"Nie udało się zapisać wzorca do bazy danych")
-                            
-                    except Exception as e:
-                        logger.error(f"Błąd podczas zapisywania pojedynczego wzorca do bazy danych: {e}")
+              
+            for pattern_data in calculated_patterns:
+                try:
+                    # Sprawdź czy wzorzec już istnieje w bazie danych
+                    pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
+                        pattern_data['asset_id'],
+                        pattern_data['x_point_timestamp'],
+                        pattern_data['a_point_timestamp'],
+                        pattern_data['b_point_timestamp'],
+                        pattern_data['c_point_timestamp'],
+                        pattern_data['d_point_timestamp'],
+                        interval=pattern_data['interval']
+                    )
+                    
+                    if pattern_exists:
+                        logger.debug(f"Wzorzec już istnieje w bazie danych - pomijam")
                         continue
+                    
+                    # Zapisz do bazy danych
+                    new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
+                    
+                    if new_pattern_id:
+                        saved_count += 1
+                        logger.debug(f"Zapisano wzorzec do bazy danych z ID: {new_pattern_id}")
+                    else:
+                        logger.error(f"Nie udało się zapisać wzorca do bazy danych")
+                        
+                except Exception as e:
+                    logger.error(f"Błąd podczas zapisywania pojedynczego wzorca do bazy danych: {e}")
+                    continue
             
             logger.info(f"Zapisano {saved_count} wzorców harmonicznych do bazy danych")
             return saved_count
@@ -348,55 +342,53 @@ class TechnicalAnalysis:
                                 continue
                             
                             # KROK 6: Stwórz obiekty HarmonicPatterns
-                            harmonic_patterns_objects = []
-                            for config in self.HARMONIC_PATTERNS_CONFIGS:
-                                harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
-                                    general_fibonacci_levels=config['general_fibonacci_levels'],
-                                    all_points_fibonacci_levels=config['all_points_fibonacci_levels'],
-                                    all_fibonacci_targets=config['all_fibonacci_targets'],
-                                    asset_id=asset['id'],
-                                    interval=interval
-                                )
-                                harmonic_patterns_objects.append(harmonic_patterns)
+                            harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
+                                asset_id=asset['id'], 
+                                interval=interval
+                            )
                             
                             # KROK 7: Przetwórz przez wszystkie obiekty HarmonicPatterns
                             base64_charts = []
                             fibonacci_types = []
                             
-                            for i, harmonic_patterns in enumerate(harmonic_patterns_objects):
-                                try:
-                                    logger.info(f"Przetwarzam HarmonicPatterns {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
+                            try:
+                                logger.info(f"Przetwarzam HarmonicPatterns dla assetu {asset['asset']} i interwału {interval}")
+                                
+                                # Oblicz wskaźniki i obiekty analizy technicznej
+                                self.technical_analysis_facade.calculate(
+                                    klines=klines,
+                                    enabled_indicators=indicators,
+                                    enabled_objects={'HarmonicPatterns': harmonic_patterns}
+                                )
+                                
+                                # Zapisz nowoobliczone wzorce harmoniczne do bazy danych
+                                calculated_harmonic_patterns = harmonic_patterns.get_calculated_objects()
+                                await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
+                                 
+                                # KROK 8: Wygeneruj wykres z określonym congfigiem HarmonicPatterns
+                                for config in self.HARMONIC_PATTERNS_DRAW_CONFIGS:
+                                    harmonic_patterns.set_general_fibonacci_levels_visibility(config['general_fibonacci_levels']['show'], config['general_fibonacci_levels']['retracement'], config['general_fibonacci_levels']['extension'])
+                                    harmonic_patterns.set_all_points_fibonacci_levels_visibility(config['all_points_fibonacci_levels']['show'], config['all_points_fibonacci_levels']['retracement'], config['all_points_fibonacci_levels']['extension'])
+                                    harmonic_patterns.set_all_fibonacci_targets_visibility(config['all_fibonacci_targets']['show'])
                                     
-                                    # Oblicz wskaźniki i obiekty analizy technicznej
-                                    self.technical_analysis_facade.calculate(
-                                        klines=klines,
-                                        enabled_indicators=indicators,
-                                        enabled_objects={'HarmonicPatterns': harmonic_patterns}
-                                    )
-                                    
-                                    # Zapisz nowoobliczone wzorce harmoniczne do bazy danych
-                                    calculated_harmonic_patterns = harmonic_patterns.get_calculated_objects()
-                                    await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
-                                     
-                                    # KROK 8: Wygeneruj wykres
-                                    chart_base64 = await self.technical_analysis_facade.create_candlestick_chart(
+                                    chart_base64 = self.technical_analysis_facade.create_candlestick_chart(
                                         klines=klines,
                                         enabled_indicators=indicators,
                                         enabled_objects={'HarmonicPatterns': harmonic_patterns},
                                         title=f"{asset['asset']}/{asset['quote']} - {interval}"
                                     )
-                                    
+
                                     if chart_base64:
                                         base64_charts.append(chart_base64)
-                                        fibonacci_type = self._get_fibonacci_type_name(self.HARMONIC_PATTERNS_CONFIGS[i])
+                                        fibonacci_type = self._get_fibonacci_type_name(config)
                                         fibonacci_types.append(fibonacci_type)
-                                        logger.info(f"Wygenerowano wykres {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
+                                        logger.info(f"Wygenerowano wykres dla assetu {asset['asset']} i interwału {interval} z konfiguracją: {config}")
                                     else:
-                                        logger.warning(f"Nie udało się wygenerować wykresu {i+1}/4 dla assetu {asset['asset']} i interwału {interval}")
-                                    
-                                except Exception as e:
-                                    logger.error(f"Błąd podczas przetwarzania HarmonicPatterns {i+1}/4 dla assetu {asset['asset']} i interwału {interval}: {e}")
-                                    continue
+                                        logger.warning(f"Nie udało się wygenerować wykresu dla assetu {asset['asset']} i interwału {interval} z konfiguracją: {config}")
+                                
+                            except Exception as e:
+                                logger.error(f"Błąd podczas przetwarzania HarmonicPatterns dla assetu {asset['asset']} i interwału {interval} z konfiguracją: {config}: {e}")
+                                continue
                             
                             # KROK 9: Zapisz obrazy do storage i bazy danych
                             if base64_charts:
