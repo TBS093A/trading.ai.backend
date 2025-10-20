@@ -291,7 +291,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             result['ta_object_json'] = json.loads(result['ta_object_json'])
         
         return results
-    
+
     async def get_complete_patterns(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera kompletne wzorce harmoniczne (wszystkie punkty wypełnione)."""
         results = await self.fetch_all("""
@@ -369,7 +369,29 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             result['ta_object_json'] = json.loads(result['ta_object_json'])
         
         return results
-    
+
+    async def get_without_chart_images_by_timestamp_range_asset_interval(self, start_timestamp: int, end_timestamp: int, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Pobiera wzorce harmoniczne bez powiązanych chart images dla określonego zakresu czasowego, asset i interwału."""
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               a.asset, a.quote
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
+        WHERE ta.x_point_timestamp >= $1 
+        AND ta.x_point_timestamp <= $2 
+        AND ta.asset_id = $3 
+        AND ta.interval = $4
+        AND cihp.id IS NULL
+        ORDER BY ta.id DESC LIMIT $5 OFFSET $6
+        """, start_timestamp, end_timestamp, asset_id, interval, limit, offset)
+        
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+        
+        return results 
+     
     async def check_pattern_exists(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
                                  b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> bool:
         """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset."""
@@ -499,4 +521,4 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         SELECT COUNT(*) FROM technical_analysis_harmonic_patterns WHERE asset_id = $1
         """, asset_id)
         
-        return result or 0 
+        return result or 0
