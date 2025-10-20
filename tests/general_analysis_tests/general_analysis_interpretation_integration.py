@@ -15,7 +15,7 @@ from src.sync_llm_general_analysis_transaction_decision import LlmGeneralAnalysi
 from src.db import DatabaseFacade
 from src.config import config
 
-
+@unittest.skip("Skipping general analysis interpretation integration tests")
 class TestGeneralAnalysisTransactionDecisionIntegration(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()

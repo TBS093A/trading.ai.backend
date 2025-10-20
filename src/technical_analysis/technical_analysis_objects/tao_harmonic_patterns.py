@@ -119,11 +119,18 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         return self.__calculated_harmonic_patterns
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
-                  min_points: int = 5, symbol: str = '', interval: str = '',
-                  find_only_xabcd: bool = False, **kwargs) -> None:
+                  min_klines_candles: int = 3, symbol: str = '', interval: str = '',
+                  find_xabcd: bool = True, find_abcd: bool = True, find_abc: bool = False,
+                  **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
+        logger.info(f"=== Przygotowania do Obliczania Harmonic Patterns dla {symbol} na interwale {interval} ===")
+        logger.info(f"Szukanie XABCD - {"Włączone" if find_xabcd else 'Wyłączone'}")
+        logger.info(f"Szukanie ABCD - {"Włączone" if find_abcd else 'Wyłączone'}")
+        logger.info(f"Szukanie ABC - {"Włączone" if find_abc else 'Wyłączone'}")
         # Wyczyść listę obliczonych wzorców przed nowym obliczeniem
-        self.__calculated_harmonic_patterns = []
+        if len(self.__calculated_harmonic_patterns) > 0:
+            logger.info("Czyszczenie poprzednio obliczonych harmonic patterns")
+            self.__calculated_harmonic_patterns = []
         
         # Aktualizuj interval w instancji jeśli został przekazany
         if interval:
@@ -132,18 +139,21 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         # Usuń chart_config z kwargs przed przekazaniem do __calculate_harmonic_patterns
         calculate_kwargs = {k: v for k, v in kwargs.items() if k != 'chart_config'}
         
+        logger.info("=== Rozpoczęcie Oblicznia Harmonic Patterns ===")
         patterns_count = self.__calculate_harmonic_patterns(
-            klines, min_points, symbol, interval, find_only_xabcd, **calculate_kwargs
+            klines, min_klines_candles, symbol, interval, find_xabcd, find_abcd, find_abc, **calculate_kwargs
         )
         self.calculated_data = patterns_count
     
     def __calculate_harmonic_patterns(
         self,
         klines: List[Dict[str, Union[int, float, str]]],
-        min_points: int = 5,
+        min_klines_candles: int = 3,
         symbol: str = '',
         interval: str = '',
-        find_only_xabcd: bool = False,
+        find_xabcd: bool = True, 
+        find_abcd: bool = True, 
+        find_abc: bool = False,
         fib_tolerance_strategy: dict[str, float] = {
             'hard_restricted': 0.03,
         },
@@ -185,7 +195,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         
         Args:
             klines: Lista świeczek w formacie zwracanym przez _get_klines
-            min_points: Minimalna liczba punktów potrzebna do identyfikacji formacji
+            min_klines_candles: Minimalna liczba punktów potrzebna do identyfikacji formacji
             symbol: Symbol krypto
             interval: Interwał czasowy
             find_only_xabcd: Czy szukać tylko wzorców XABCD
@@ -197,8 +207,8 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             Liczba znalezionych wzorców
         """
         
-        if len(klines) < min_points:
-            logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_points}")
+        if len(klines) < min_klines_candles:
+            logger.warning(f"Za mało świeczek do wyszukania wzorców harmonicznych: {len(klines)} < {min_klines_candles}")
             return 0
 
         try:
@@ -223,28 +233,24 @@ class HarmonicPatterns(TechnicalAnalysisObject):
 
                 # Wykonaj wyszukiwanie wzorców
                 for fib_tolerance_strategy_name, fib_tolerance in fib_tolerance_strategy.items():
-                    logger.debug(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
+                    logger.info(f"Wyszukiwanie wzorców z tolerancją {fib_tolerance_strategy_name}: {fib_tolerance} i spacji {peak_spacing_strategy_name}: {peak_spacing}")
                     harmonic_search = HarmonicSearch(
                         technicals,
                         fib_tolerance=fib_tolerance, 
                         check_anchor=check_anchor
                     )
                     harmonic_search.search()
+                    patterns = harmonic_search.get_patterns()
 
-                    # Pobierz wszystkie wzorce
-                    if find_only_xabcd:
-                        patterns = harmonic_search.get_patterns(
-                            family=harmonic_search.XABCD
-                        )
-                    else:
-                        patterns = harmonic_search.get_patterns()
-
-                    logger.debug(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
+                    logger.info(f"Znaleziono wzorce dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}: {list(patterns.keys()) if patterns else 'brak'}")
 
                     # Przetwórz wzorce i nanieś punkty na klines
                     for pattern_type_key in patterns:
+                        if (pattern_type_key == 'XABCD' and find_xabcd == False) or (pattern_type_key == 'ABCD' and find_abcd == False) or (pattern_type_key == 'ABC' and find_abc == False):
+                            logger.info(f"Pomijanie patternów {pattern_type_key}")
+                            continue
                         pattern_list = patterns[pattern_type_key]
-                        logger.debug(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key} dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}")
+                        logger.info(f"Przetwarzanie {len(pattern_list)} wzorców typu {pattern_type_key} dla tolerancji {fib_tolerance_strategy_name} i spacji {peak_spacing_strategy_name}")
 
                         for pattern_idx, pattern in enumerate(pattern_list):
                             try:
@@ -306,7 +312,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 pattern_key = (str(pattern.name), points_hash)
                                 if pattern_key in added_patterns:
                                     existing_pattern_id = added_patterns[pattern_key]
-                                    logger.debug(f"Pominięto zduplikowany wzorzec {pattern.name} (już istnieje jako ID: {existing_pattern_id})")
+                                    logger.info(f"Pominięto zduplikowany wzorzec {pattern.name} (już istnieje jako ID: {existing_pattern_id})")
                                     continue
                                 
                                 for i, (x_point, y_point) in enumerate(zip(x_points, y_points)):
@@ -385,11 +391,11 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                     # Loguj przykłady obliczonych kombinacji i targetów
                                     if all_points_fibonacci:
                                         example_combinations = list(all_points_fibonacci.keys())[:5]  # Pierwsze 5 kombinacji
-                                        logger.debug(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
+                                        logger.info(f"Wzorzec {patterns_count}: obliczono poziomy Fibonacci dla kombinacji: {', '.join(example_combinations)} (i {len(all_points_fibonacci) - len(example_combinations)} więcej)")
                                     
                                     if all_targets:
                                         targets_info = [f"{k}({v['type']})" for k, v in all_targets.items()]
-                                        logger.debug(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
+                                        logger.info(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
 
                                     # Upewnij się że istnieje struktura patterns
                                     if 'patterns' not in klines[first_kline_idx]:
@@ -421,7 +427,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 total_fib_levels = len(fibonacci_levels.get('retracement', {})) + len(fibonacci_levels.get('extension', {})) + len(fibonacci_levels.get('targets', {}))
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
                                 total_all_targets = len(fibonacci_levels.get('all_targets', {}))
-                                logger.debug(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
                                 newline = '\n'
                                 kline_str = str(klines[kline_idx]).replace(',', ',' + newline)
                                 logger.debug(f"Wygląd Świecy: {kline_str}")
@@ -439,7 +445,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 
                                 if parsed_pattern:
                                     self.__calculated_harmonic_patterns.append(parsed_pattern)
-                                    logger.debug(f"Dodano wzorzec {pattern_name} do listy obliczonych wzorców")
+                                    logger.info(f"Dodano wzorzec {pattern_name} do listy obliczonych wzorców")
                                 
                                 patterns_count += 1
 
@@ -448,9 +454,9 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 logger.error(traceback.format_exc())
                                 continue
 
-            logger.debug(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
-            logger.debug(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
-            logger.debug(f"Obliczono {len(self.__calculated_harmonic_patterns)} wzorców gotowych do zapisu")
+            logger.info(f"Pomyślnie naniesiono {patterns_count} wzorców na świece")
+            logger.info(f"Deduplikacja: sprawdzono {len(added_patterns)} unikalnych wzorców")
+            logger.info(f"Obliczono {len(self.__calculated_harmonic_patterns)} wzorców gotowych do zapisu")
             
             return patterns_count
 

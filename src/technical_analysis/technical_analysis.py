@@ -132,7 +132,7 @@ class TechnicalAnalysis:
                 else:
                     # To gotowy obiekt - użyj bezpośrednio
                     object_instance = object_value
-                    if object_instance.get_calculated_objects() is None:
+                    if len(object_instance.get_calculated_objects()) == 0:
                         object_instance.calculate(klines, **kwargs)
                         self.technical_analysis_objects.append(object_instance)
                         logger.info(f"Obliczono obiekt analizy technicznej z gotowego obiektu: {object_key}")
@@ -140,7 +140,7 @@ class TechnicalAnalysis:
                         self.technical_analysis_objects.append(object_instance)
                         logger.info(f"Obiekt analizy technicznej z gotowego obiektu: {object_key} już obliczony")
     
-    async def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
+    def draw_candlestick_chart(self, klines: List[Dict[str, Union[int, float, str]]], 
                               save_path: Optional[str] = None, title: str = "Wykres świecowy",
                               enabled_indicators: Dict[str, Union[Type, object]] = None,
                               enabled_objects: Dict[str, Union[Type, object]] = None,
@@ -162,7 +162,7 @@ class TechnicalAnalysis:
         # Inicjalizuj konfigurację wykresu
         chart_config = self.__init_candlestick_chart_config(klines, title, **kwargs)
 
-        logger.info(f"Rysowanie wykresu z konfiguracją: {chart_config}")
+        logger.debug(f"Rysowanie wykresu z konfiguracją: {chart_config}")
         
         # Jeśli podano enabled_indicators lub enabled_objects, oblicz je
         if enabled_indicators is not None or enabled_objects is not None:

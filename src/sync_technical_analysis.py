@@ -362,7 +362,12 @@ class TechnicalAnalysis:
                                 self.technical_analysis_facade.calculate(
                                     klines=klines,
                                     enabled_indicators=indicators,
-                                    enabled_objects={'HarmonicPatterns': harmonic_patterns}
+                                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
+                                    symbol=f"{asset['asset']}/{asset['quote']}",
+                                    interval=interval,
+                                    find_xabcd=True,
+                                    find_abcd=True,
+                                    find_abc=False
                                 )
                                 
                                 # Zapisz nowoobliczone wzorce harmoniczne do bazy danych
