@@ -120,7 +120,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
     
     def calculate(self, klines: List[Dict[str, Union[int, float, str]]], 
                   min_points: int = 5, symbol: str = '', interval: str = '',
-                  find_only_xabcd: bool = True, **kwargs) -> None:
+                  find_only_xabcd: bool = False, **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
         # Wyczyść listę obliczonych wzorców przed nowym obliczeniem
         self.__calculated_harmonic_patterns = []
@@ -143,7 +143,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         min_points: int = 5,
         symbol: str = '',
         interval: str = '',
-        find_only_xabcd: bool = True,
+        find_only_xabcd: bool = False,
         fib_tolerance_strategy: dict[str, float] = {
             'hard_restricted': 0.03,
         },
