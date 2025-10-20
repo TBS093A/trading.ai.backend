@@ -501,12 +501,27 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 except Exception as e:
                     logger.error(f"Błąd konwersji timestamp {ts} (typ: {type(ts)}): {e}")
                     return None
-            
-            x_timestamp = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
-            a_timestamp = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
-            b_timestamp = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
-            c_timestamp = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
-            d_timestamp = convert_timestamp_to_ms(x_points[4]) if len(x_points) > 4 else None
+
+            timestamp_points = {}
+
+            if len(x_points) > 4:
+                timestamp_points['x_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
+                timestamp_points['d_timestamp'] = convert_timestamp_to_ms(x_points[4]) if len(x_points) > 4 else None
+            if len(x_points) == 4:
+                timestamp_points['x_timestamp'] = None
+                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['d_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
+            elif len(x_points) == 3:
+                timestamp_points['x_timestamp'] = None
+                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['d_timestamp'] = None
             
             pattern_data = {
                 'asset_id': self.asset_id,
@@ -526,11 +541,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                     'points': pattern_points,
                     'fibonacci_levels': fibonacci_levels
                 },
-                'x_point_timestamp': x_timestamp,
-                'a_point_timestamp': a_timestamp,
-                'b_point_timestamp': b_timestamp,
-                'c_point_timestamp': c_timestamp,
-                'd_point_timestamp': d_timestamp
+                **timestamp_points
             }
             
             return pattern_data
