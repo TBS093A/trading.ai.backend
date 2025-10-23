@@ -18,6 +18,7 @@ class ChartImagesTable(AbstractTable):
             interval VARCHAR(10) NOT NULL,
             timestamp_start BIGINT,
             timestamp_end BIGINT,
+            is_archived BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -41,7 +42,7 @@ class ChartImagesTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera obraz wykresu po ID."""
         return await self.fetch_one("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         WHERE id = $1
         """, record_id)
@@ -83,6 +84,11 @@ class ChartImagesTable(AbstractTable):
                 values.append(kwargs['timestamp_end'])
                 param_count += 1
             
+            if 'is_archived' in kwargs:
+                update_fields.append(f"is_archived = ${param_count}")
+                values.append(kwargs['is_archived'])
+                param_count += 1
+            
             if not update_fields:
                 return False
             
@@ -110,7 +116,7 @@ class ChartImagesTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie obrazy wykresów z limitem i offsetem."""
         return await self.fetch_all("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         ORDER BY id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
@@ -118,7 +124,7 @@ class ChartImagesTable(AbstractTable):
     async def get_by_storage(self, storage: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów według storage."""
         return await self.fetch_all("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         WHERE storage = $1
         ORDER BY id DESC LIMIT $2 OFFSET $3
@@ -127,7 +133,7 @@ class ChartImagesTable(AbstractTable):
     async def get_by_interval(self, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów według interwału."""
         return await self.fetch_all("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         WHERE interval = $1
         ORDER BY id DESC LIMIT $2 OFFSET $3
@@ -136,7 +142,7 @@ class ChartImagesTable(AbstractTable):
     async def get_by_image_file_path(self, image_file_path: str) -> Optional[Dict[str, Any]]:
         """Pobiera obraz wykresu według ścieżki pliku."""
         return await self.fetch_one("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         WHERE image_file_path = $1
         """, image_file_path)
@@ -144,7 +150,7 @@ class ChartImagesTable(AbstractTable):
     async def search_by_image_file_path_pattern(self, pattern: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Wyszukuje obrazy wykresów według wzorca w ścieżce pliku."""
         return await self.fetch_all("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         WHERE image_file_path ILIKE $1
         ORDER BY id DESC LIMIT $2 OFFSET $3
@@ -153,7 +159,7 @@ class ChartImagesTable(AbstractTable):
     async def get_latest(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Pobiera najnowsze obrazy wykresów."""
         return await self.fetch_all("""
-        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, created_at, updated_at
+        SELECT id, image_file_path, image_file_name, storage, interval, timestamp_start, timestamp_end, is_archived, created_at, updated_at
         FROM chart_images
         ORDER BY created_at DESC LIMIT $1
         """, limit)
@@ -171,7 +177,7 @@ class ChartImagesTable(AbstractTable):
     async def get_with_harmonic_patterns(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera obraz wykresu wraz z powiązanymi wzorcami harmonicznymi."""
         result = await self.fetch_one("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at,
                ARRAY_AGG(
                    CASE WHEN tahp.id IS NOT NULL THEN 
                        json_build_object(
@@ -193,7 +199,7 @@ class ChartImagesTable(AbstractTable):
         LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
         LEFT JOIN assets a ON tahp.asset_id = a.id
         WHERE ci.id = $1
-        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         """, record_id)
         
         if result:
@@ -212,7 +218,7 @@ class ChartImagesTable(AbstractTable):
     async def get_all_with_harmonic_patterns(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie obrazy wykresów wraz z powiązanymi wzorcami harmonicznymi."""
         results = await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at,
                ARRAY_AGG(
                    CASE WHEN tahp.id IS NOT NULL THEN 
                        json_build_object(
@@ -233,7 +239,7 @@ class ChartImagesTable(AbstractTable):
         LEFT JOIN chart_images_harmonic_patterns cihp ON ci.id = cihp.chart_image_id
         LEFT JOIN technical_analysis_harmonic_patterns tahp ON cihp.harmonic_pattern_id = tahp.id
         LEFT JOIN assets a ON tahp.asset_id = a.id
-        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         ORDER BY ci.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
         
@@ -253,7 +259,7 @@ class ChartImagesTable(AbstractTable):
     async def get_with_technical_analysis_interpretations(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera obraz wykresu wraz z powiązanymi interpretacjami analizy technicznej."""
         result = await self.fetch_one("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at,
                ARRAY_AGG(
                    CASE WHEN tai.id IS NOT NULL THEN 
                        json_build_object(
@@ -273,7 +279,7 @@ class ChartImagesTable(AbstractTable):
         LEFT JOIN technical_analysis_interpretation tai ON taici.technical_analysis_interpretation_id = tai.id
         LEFT JOIN assets a ON tai.asset_id = a.id
         WHERE ci.id = $1
-        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         """, record_id)
         
         if result:
@@ -288,7 +294,7 @@ class ChartImagesTable(AbstractTable):
     async def get_all_with_technical_analysis_interpretations(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie obrazy wykresów wraz z powiązanymi interpretacjami analizy technicznej."""
         results = await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at,
                ARRAY_AGG(
                    CASE WHEN tai.id IS NOT NULL THEN 
                        json_build_object(
@@ -307,7 +313,7 @@ class ChartImagesTable(AbstractTable):
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
         LEFT JOIN technical_analysis_interpretation tai ON taici.technical_analysis_interpretation_id = tai.id
         LEFT JOIN assets a ON tai.asset_id = a.id
-        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        GROUP BY ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         ORDER BY ci.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
         
@@ -323,7 +329,7 @@ class ChartImagesTable(AbstractTable):
     async def get_without_technical_analysis_interpretations(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów które nie mają przypisanych interpretacji analizy technicznej."""
         return await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         FROM chart_images ci
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
         WHERE taici.chart_image_id IS NULL
@@ -333,7 +339,7 @@ class ChartImagesTable(AbstractTable):
     async def get_without_technical_analysis_interpretations_by_asset_and_interval(self, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów bez interpretacji analizy technicznej pogrupowane według asset i interval."""
         return await self.fetch_all("""
-        SELECT DISTINCT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        SELECT DISTINCT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         FROM chart_images ci
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
         WHERE taici.chart_image_id IS NULL 
@@ -344,7 +350,7 @@ class ChartImagesTable(AbstractTable):
     async def get_without_technical_analysis_interpretations_by_asset(self, asset_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów bez interpretacji analizy technicznej dla konkretnego asset."""
         return await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at,
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at,
                a.asset, a.quote
         FROM chart_images ci
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
@@ -358,7 +364,7 @@ class ChartImagesTable(AbstractTable):
     async def get_without_technical_analysis_interpretations_by_interval(self, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera obrazy wykresów bez interpretacji analizy technicznej dla konkretnego interwału."""
         return await self.fetch_all("""
-        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.created_at, ci.updated_at
+        SELECT ci.id, ci.image_file_path, ci.image_file_name, ci.storage, ci.interval, ci.timestamp_start, ci.timestamp_end, ci.is_archived, ci.created_at, ci.updated_at
         FROM chart_images ci
         LEFT JOIN technical_analysis_interpretation_chart_images taici ON ci.id = taici.chart_image_id
         WHERE taici.chart_image_id IS NULL AND ci.interval = $1
@@ -390,3 +396,25 @@ class ChartImagesTable(AbstractTable):
         """, asset_id, interval)
         
         return result['count'] if result else 0
+    
+    async def archive_chart_image(self, record_id: int) -> bool:
+        """
+        Archiwizuje obraz wykresu (ustawia is_archived na false).
+        Oznacza to, że plik został usunięty ze storage, ale rekord pozostaje w bazie.
+        
+        Args:
+            record_id: ID obrazu wykresu
+            
+        Returns:
+            bool: True jeśli operacja się powiodła, False w przeciwnym razie
+        """
+        try:
+            await self.execute_query(
+                "UPDATE chart_images SET is_archived = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                record_id
+            )
+            logger.info(f"Zarchiwizowano obraz wykresu z ID: {record_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Błąd podczas archiwizacji obrazu wykresu {record_id}: {e}", exc_info=True)
+            return False
