@@ -60,6 +60,7 @@ class DatabasePostgreSQL:
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'technical_analysis_harmonic_patterns',
                 'technical_analysis_interpretation',
+                'technical_analysis_interpretation_harmonic_patterns',  # Tabela pośrednia
                 'chart_images',
                 'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
                 'investment_strategies',
@@ -347,6 +348,7 @@ class DatabasePostgreSQL:
                 'chart_images',
                 'general_interpretation',
                 'investment_strategies',
+                'technical_analysis_interpretation_harmonic_patterns',  # Tabela pośrednia
                 'technical_analysis_interpretation',
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'fundamental_analysis_interpretation_assets',  # Tabela pośrednia

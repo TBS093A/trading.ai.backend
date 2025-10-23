@@ -372,13 +372,13 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             logger.error(f"Błąd podczas wysyłania do LLM'a: {e}", exc_info=True)
             return None
     
-    async def _save_interpretation(self, asset_id: int, technical_analysis_id: int, content: str) -> Optional[int]:
+    async def _save_interpretation(self, asset_id: int, harmonic_pattern_ids: List[int], content: str) -> Optional[int]:
         """
         Zapisuje interpretację analizy technicznej do bazy danych.
         
         Args:
             asset_id: ID assetu
-            technical_analysis_id: ID analizy technicznej
+            harmonic_pattern_ids: Lista ID wzorców harmonicznych
             content: Zawartość interpretacji w formacie JSON
             
         Returns:
@@ -390,13 +390,13 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             
             interpretation_id = await technical_analysis_interpretation_table.create(
                 asset_id=asset_id,
-                technical_analysis_id=technical_analysis_id,
+                harmonic_pattern_ids=harmonic_pattern_ids,
                 timestamp=timestamp,
                 content=content
             )
             
             if interpretation_id:
-                logger.info(f"Zapisano interpretację analizy technicznej z ID: {interpretation_id}")
+                logger.info(f"Zapisano interpretację analizy technicznej z ID: {interpretation_id} dla {len(harmonic_pattern_ids)} wzorców harmonicznych")
                 
                 # Utwórz powiązanie z obrazami wykresów
                 await self._create_chart_image_interpretation_relations(interpretation_id, asset_id)
@@ -574,16 +574,19 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                         
                         # 7. Zapisz interpretację do bazy danych
                         if chart_images and harmonic_patterns:
-                            # Użyj pierwszego wzorca harmonicznego jako technical_analysis_id
-                            first_pattern_id = harmonic_patterns[0]['id']
+                            # Pobierz wszystkie ID wzorców harmonicznych
+                            harmonic_pattern_ids = [pattern['id'] for pattern in harmonic_patterns]
+                            
+                            logger.info(f"Zapisuję interpretację dla {asset_name}/{quote_name} - {interval} z {len(harmonic_pattern_ids)} wzorcami harmonicznymi: {harmonic_pattern_ids}")
+                            
                             interpretation_id = await self._save_interpretation(
                                 asset_id=asset_id,
-                                technical_analysis_id=first_pattern_id,
+                                harmonic_pattern_ids=harmonic_pattern_ids,
                                 content=json_content
                             )
                             
                             if interpretation_id:
-                                logger.info(f"Pomyślnie zapisano interpretację dla {asset_name}/{quote_name} - {interval}")
+                                logger.info(f"Pomyślnie zapisano interpretację dla {asset_name}/{quote_name} - {interval} z {len(harmonic_pattern_ids)} wzorcami")
                             else:
                                 logger.error(f"Nie udało się zapisać interpretacji dla {asset_name}/{quote_name} - {interval}")
                         else:
