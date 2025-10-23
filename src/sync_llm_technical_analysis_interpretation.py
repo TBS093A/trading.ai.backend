@@ -413,6 +413,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
     async def _create_chart_image_interpretation_relations(self, interpretation_id: int, asset_id: int) -> None:
         """
         Tworzy powiązania między interpretacją a obrazami wykresów.
+        Po utworzeniu relacji, archiwizuje obrazy i usuwa je ze storage.
         
         Args:
             interpretation_id: ID interpretacji
@@ -439,6 +440,8 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
             created_relations = 0
             skipped_relations = 0
             failed_relations = 0
+            archived_images = 0
+            deleted_from_storage = 0
             
             for chart_image in chart_images:
                 try:
@@ -450,6 +453,34 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                     if relation_id:
                         created_relations += 1
                         logger.debug(f"Utworzono powiązanie interpretacja-obraz: {interpretation_id}-{chart_image['id']} (ID: {relation_id})")
+                        
+                        # Archiwizuj obraz w bazie danych
+                        archived = await chart_images_table.archive_chart_image(chart_image['id'])
+                        if archived:
+                            archived_images += 1
+                            logger.debug(f"Zarchiwizowano obraz w bazie: {chart_image['id']}")
+                            
+                            # Usuń obraz ze storage
+                            file_path = chart_image['image_file_path']
+                            storage_type = chart_image['storage']
+                            
+                            # Znajdź odpowiedni storage API
+                            deleted = False
+                            for storage_api in self.storage_apis:
+                                if storage_api.STORAGE == storage_type:
+                                    try:
+                                        storage_api.delete_file(file_path)
+                                        deleted = True
+                                        deleted_from_storage += 1
+                                        logger.debug(f"Usunięto obraz ze storage: {file_path}")
+                                    except Exception as e:
+                                        logger.error(f"Błąd podczas usuwania obrazu ze storage {file_path}: {e}")
+                                    break
+                            
+                            if not deleted:
+                                logger.warning(f"Nie znaleziono storage API dla typu: {storage_type}, obraz: {file_path}")
+                        else:
+                            logger.warning(f"Nie udało się zarchiwizować obrazu {chart_image['id']}")
                     else:
                         skipped_relations += 1
                         logger.debug(f"Pominięto istniejące powiązanie: {interpretation_id}-{chart_image['id']}")
@@ -460,6 +491,7 @@ Twoim zadaniem jest przeprowadzić **interpretację techniczną danego aktywa** 
                     continue
             
             logger.info(f"Powiązania dla interpretacji {interpretation_id}: utworzono={created_relations}, pominięto={skipped_relations}, błędów={failed_relations}")
+            logger.info(f"Archiwizacja dla interpretacji {interpretation_id}: zarchiwizowano={archived_images}, usunięto ze storage={deleted_from_storage}")
                     
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia powiązań dla interpretacji {interpretation_id}, asset_id {asset_id}: {e}", exc_info=True)
