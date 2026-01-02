@@ -15,7 +15,6 @@ from datetime import datetime
 
 from ..controller_rest_celery_worker import celery
 from ..sync_technical_analysis import TechnicalAnalysis
-from ..sync_fundamental_analysis import FundamentalAnalysis
 from .utils import run_async_task_safely, wait_for_dependencies
 
 logger = logging.getLogger(__name__)
