@@ -21,7 +21,6 @@ import logging
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Query, Path, Body
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 # Import Database
 from .db.database_facade import DatabaseFacade
@@ -68,48 +67,6 @@ class TechnicalAnalysisWithImagesResponse(BaseModel):
     chart_images: List[Dict[str, Any]] = []
 
 
-class TechnicalAnalysisCreate(BaseModel):
-    """Model do tworzenia nowej analizy technicznej."""
-    asset_id: int = Field(..., ge=1, description="ID assetu")
-    ta_object_json: Dict[str, Any] = Field(..., description="Obiekt JSON z danymi analizy technicznej")
-    interval: Optional[str] = Field(None, description="Interwał czasowy (np. 1h, 4h, 1d)")
-    x_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu X")
-    a_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu A")
-    b_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu B")
-    c_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu C")
-    d_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu D")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "asset_id": 1,
-                "interval": "4h",
-                "x_point_timestamp": 1609459200,
-                "a_point_timestamp": 1609545600,
-                "b_point_timestamp": 1609632000,
-                "c_point_timestamp": 1609718400,
-                "d_point_timestamp": 1609804800,
-                "ta_object_json": {
-                    "pattern_type": "Gartley",
-                    "direction": "bullish",
-                    "confidence": 0.85
-                }
-            }
-        }
-
-
-class TechnicalAnalysisUpdate(BaseModel):
-    """Model do aktualizacji analizy technicznej."""
-    asset_id: Optional[int] = Field(None, ge=1, description="ID assetu")
-    ta_object_json: Optional[Dict[str, Any]] = Field(None, description="Obiekt JSON z danymi analizy")
-    interval: Optional[str] = Field(None, description="Interwał czasowy")
-    x_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu X")
-    a_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu A")
-    b_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu B")
-    c_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu C")
-    d_point_timestamp: Optional[int] = Field(None, description="Timestamp punktu D")
-
-
 class PaginationInfo(BaseModel):
     """Informacje o paginacji."""
     total: Optional[int] = None
@@ -136,13 +93,6 @@ class TechnicalAnalysisStatsResponse(BaseModel):
     analyses_by_asset: Optional[Dict[str, int]] = None
     complete_patterns: Optional[int] = None
     incomplete_patterns: Optional[int] = None
-
-
-class StandardResponse(BaseModel):
-    """Standardowa odpowiedź."""
-    success: bool
-    message: str
-    data: Optional[Dict[str, Any]] = None
 
 
 class PatternExistsResponse(BaseModel):
