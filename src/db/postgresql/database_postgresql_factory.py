@@ -12,21 +12,7 @@ class DatabasePostgreSQLFactory:
         'assets': AssetsTable,
         'exchanges': ExchangesTable,
         'asset_exchanges': AssetExchangesTable,
-
-        'fundamental_analysis': FundamentalAnalysisTable,
-        'fundamental_analysis_interpretation': FundamentalAnalysisInterpretationTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
-        'technical_analysis_interpretation': TechnicalAnalysisInterpretationTable,
-        'technical_analysis_interpretation_harmonic_patterns': TechnicalAnalysisInterpretationHarmonicPatternsTable,
-        'technical_analysis_interpretation_chart_images': TechnicalAnalysisInterpretationChartImagesTable,
-        'general_interpretation': GeneralInterpretationTable,
-        'investment_strategies': InvestmentStrategiesTable,
-        'chart_images': ChartImagesTable,
-        'chart_images_harmonic_patterns': ChartImagesHarmonicPatternsTable,
-        'exchange_transactions': ExchangeTransactionsTable,
-        'exchange_account_state': ExchangeAccountStateTable,
-        'exchange_account_state_buy_strategies': ExchangeAccountStateBuyStrategiesTable,
-        'exchange_account_state_sell_strategies': ExchangeAccountStateSellStrategiesTable,
         'system_sync_job': SystemSyncJobTable,
         'cron_system_sync_job': CronSystemSyncJobTable
     }
