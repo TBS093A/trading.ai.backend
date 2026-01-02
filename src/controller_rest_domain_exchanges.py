@@ -23,6 +23,9 @@ from datetime import datetime
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
 
+# Import Celery Task
+from .celery_tasks.sync_tasks import sync_exchanges_task
+
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
@@ -91,6 +94,32 @@ class StandardResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
 
+class SyncExchangesRequest(BaseModel):
+    """Request do uruchomienia synchronizacji giełd."""
+    test_mode: bool = Field(default=False, description="Tryb testowy (bez zapisu do bazy)")
+    custom_dependencies: Optional[List[str]] = Field(
+        default=None, 
+        description="Lista niestandardowych zależności Celery do oczekiwania przed uruchomieniem"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "test_mode": False,
+                "custom_dependencies": None
+            }
+        }
+
+
+class SyncTaskResponse(BaseModel):
+    """Odpowiedź po uruchomieniu zadania synchronizacji."""
+    success: bool
+    message: str
+    task_id: str
+    status_endpoint: str
+    details: Dict[str, Any]
+
+
 # Singleton dla DatabasePostgreSQL
 db_instance: Optional[DatabasePostgreSQL] = None
 
@@ -131,9 +160,60 @@ async def exchanges_info():
             "search": "GET /exchanges/search/{name} - Wyszukiwanie po nazwie",
             "enable": "POST /exchanges/{id}/enable - Włączenie giełdy",
             "disable": "POST /exchanges/{id}/disable - Wyłączenie giełdy",
-            "stats": "GET /exchanges/stats - Statystyki giełd"
+            "stats": "GET /exchanges/stats - Statystyki giełd",
+            "sync": "POST /exchanges/sync - Uruchom synchronizację giełd"
         }
     }
+
+
+# ===================
+# SYNC OPERATIONS
+# ===================
+
+@router.post("/sync", response_model=SyncTaskResponse)
+async def trigger_sync_exchanges(
+    request: SyncExchangesRequest = Body(
+        default=SyncExchangesRequest(),
+        description="Parametry synchronizacji giełd"
+    )
+):
+    """
+    Uruchamia zadanie Celery do synchronizacji assetów z giełd.
+    
+    Parametry:
+        - **test_mode**: Tryb testowy bez zapisu do bazy (domyślnie False)
+        - **custom_dependencies**: Lista niestandardowych zależności Celery 
+          do oczekiwania przed uruchomieniem (domyślnie brak)
+    
+    Returns:
+        SyncTaskResponse: Informacja o uruchomionym zadaniu z task_id do śledzenia statusu
+    """
+    try:
+        # Uruchom zadanie Celery
+        task = sync_exchanges_task.delay(
+            test_mode=request.test_mode,
+            custom_dependencies=request.custom_dependencies
+        )
+        
+        logger.info(f"Started sync_exchanges task (ID: {task.id})")
+        
+        return SyncTaskResponse(
+            success=True,
+            message=f"Synchronizacja giełd rozpoczęta (Task ID: {task.id})",
+            task_id=task.id,
+            status_endpoint=f"/sync/status/{task.id}",
+            details={
+                "test_mode": request.test_mode,
+                "custom_dependencies": request.custom_dependencies
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting sync_exchanges task: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to start exchanges sync: {str(e)}"
+        )
 
 
 # ===================
