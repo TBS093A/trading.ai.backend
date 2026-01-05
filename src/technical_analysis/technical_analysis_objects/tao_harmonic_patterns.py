@@ -388,6 +388,13 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                     )
                                     all_targets = self.fibonacci_targets.calculated_data
                                     
+                                    # Oblicz Fibonacci Extensions (FE) dla boków ABC i BCD
+                                    fe_extensions = self._calculate_fibonacci_extensions(
+                                        pattern_points=pattern_points,
+                                        is_bullish=bool(pattern.bullish),
+                                        pattern_type=str(pattern.name)
+                                    )
+                                    
                                     # Loguj przykłady obliczonych kombinacji i targetów
                                     if all_points_fibonacci:
                                         example_combinations = list(all_points_fibonacci.keys())[:5]  # Pierwsze 5 kombinacji
@@ -396,6 +403,10 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                     if all_targets:
                                         targets_info = [f"{k}({v['type']})" for k, v in all_targets.items()]
                                         logger.info(f"Wzorzec {patterns_count}: obliczono targety: {', '.join(targets_info)}")
+                                    
+                                    if fe_extensions:
+                                        fe_info = [f"{k}={v['price']:.4f}" for k, v in fe_extensions.items()]
+                                        logger.info(f"Wzorzec {patterns_count}: obliczono FE extensions: {', '.join(fe_info)}")
 
                                     # Upewnij się że istnieje struktura patterns
                                     if 'patterns' not in klines[first_kline_idx]:
@@ -409,7 +420,8 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                         'extension': fib_levels.extension,
                                         'targets': fib_levels.targets,
                                         'all_fibos': all_points_fibonacci,
-                                        'all_targets': all_targets
+                                        'all_targets': all_targets,
+                                        'fe_extensions': fe_extensions  # Fibonacci Extensions dla ABC i BCD
                                     }
 
                                 # Teraz dodaj fibonacci do każdego punktu tego wzorca
@@ -427,7 +439,8 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 total_fib_levels = len(fibonacci_levels.get('retracement', {})) + len(fibonacci_levels.get('extension', {})) + len(fibonacci_levels.get('targets', {}))
                                 total_all_fibos = len(fibonacci_levels.get('all_fibos', {}))
                                 total_all_targets = len(fibonacci_levels.get('all_targets', {}))
-                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD i {total_all_targets} targetami")
+                                total_fe_extensions = len(fibonacci_levels.get('fe_extensions', {}))
+                                logger.info(f"Dodano wzorzec {pattern_name} (ID: {patterns_count}) z pattern_retraces, {total_fib_levels} ogólnymi poziomami Fibonacci, {total_all_fibos} kombinacjami punktów XABCD, {total_all_targets} targetami i {total_fe_extensions} FE extensions")
                                 newline = '\n'
                                 kline_str = str(klines[kline_idx]).replace(',', ',' + newline)
                                 logger.debug(f"Wygląd Świecy: {kline_str}")
@@ -556,6 +569,102 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             logger.error(f"Błąd podczas parsowania wzorca {pattern_name}: {e}")
             return None
     
+    def _calculate_fibonacci_extensions(self, pattern_points: dict, is_bullish: bool, pattern_type: str) -> dict:
+        """
+        Oblicza Fibonacci Extensions (FE) dla boków ABC i BCD wzorca harmonicznego.
+        
+        Dla ABC (wszystkie patterny - ABC, ABCD, XABCD):
+        - Trend WZROSTOWY (is_bullish=True): FE = C - abs(B - A) * level
+        - Trend SPADKOWY (is_bullish=False): FE = C + abs(B - A) * level
+        
+        Dla BCD (tylko XABCD z 5 punktami):
+        - Wybicie GÓRĄ (is_bullish=True): FE = D + abs(C - B) * level
+        - Wybicie DOŁEM (is_bullish=False): FE = D - abs(C - B) * level
+        
+        Args:
+            pattern_points: Słownik z punktami wzorca {'A': {'index': x, 'price': y}, ...}
+            is_bullish: Czy wzorzec jest bullish
+            pattern_type: Typ wzorca (np. 'Gartley', 'Bat', etc.)
+            
+        Returns:
+            dict: Słownik z obliczonymi poziomami FE
+        """
+        fe_levels = {}
+        
+        try:
+            # Oblicz FE dla ABC (wymaga punktów A, B, C)
+            if 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points:
+                a_price = pattern_points['A']['price']
+                b_price = pattern_points['B']['price']
+                c_price = pattern_points['C']['price']
+                
+                ab_distance = abs(b_price - a_price)
+                
+                if is_bullish:
+                    # Trend WZROSTOWY - FE idzie w dół od C
+                    fe_abc_127 = c_price - ab_distance * 1.272
+                    fe_abc_161 = c_price - ab_distance * 1.618
+                else:
+                    # Trend SPADKOWY - FE idzie w górę od C
+                    fe_abc_127 = c_price + ab_distance * 1.272
+                    fe_abc_161 = c_price + ab_distance * 1.618
+                
+                fe_levels['FE_ABC_127'] = {
+                    'price': float(fe_abc_127),
+                    'level': 1.272,
+                    'type': 'extension',
+                    'leg': 'ABC',
+                    'is_bullish': is_bullish
+                }
+                fe_levels['FE_ABC_161'] = {
+                    'price': float(fe_abc_161),
+                    'level': 1.618,
+                    'type': 'extension',
+                    'leg': 'ABC',
+                    'is_bullish': is_bullish
+                }
+                
+                logger.debug(f"Obliczono FE_ABC: 127.2%={fe_abc_127:.6f}, 161.8%={fe_abc_161:.6f} (bullish={is_bullish})")
+            
+            # Oblicz FE dla BCD (wymaga punktów B, C, D - tylko dla wzorców XABCD)
+            if 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points and 'X' in pattern_points:
+                b_price = pattern_points['B']['price']
+                c_price = pattern_points['C']['price']
+                d_price = pattern_points['D']['price']
+                
+                cb_distance = abs(c_price - b_price)
+                
+                if is_bullish:
+                    # Wybicie GÓRĄ - FE idzie w górę od D
+                    fe_bcd_127 = d_price + cb_distance * 1.272
+                    fe_bcd_161 = d_price + cb_distance * 1.618
+                else:
+                    # Wybicie DOŁEM - FE idzie w dół od D
+                    fe_bcd_127 = d_price - cb_distance * 1.272
+                    fe_bcd_161 = d_price - cb_distance * 1.618
+                
+                fe_levels['FE_BCD_127'] = {
+                    'price': float(fe_bcd_127),
+                    'level': 1.272,
+                    'type': 'extension',
+                    'leg': 'BCD',
+                    'is_bullish': is_bullish
+                }
+                fe_levels['FE_BCD_161'] = {
+                    'price': float(fe_bcd_161),
+                    'level': 1.618,
+                    'type': 'extension',
+                    'leg': 'BCD',
+                    'is_bullish': is_bullish
+                }
+                
+                logger.debug(f"Obliczono FE_BCD: 127.2%={fe_bcd_127:.6f}, 161.8%={fe_bcd_161:.6f} (bullish={is_bullish})")
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas obliczania Fibonacci Extensions: {e}")
+        
+        return fe_levels
+
     def _generate_pattern_hash(self, x_points, y_points, pattern_name):
         """
         Generuje unikalny hash dla wzorca na podstawie jego punktów i nazwy.
