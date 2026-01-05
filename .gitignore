@@ -5,6 +5,8 @@ config-env.yml
 __pycache__/
 local_storage/
 
+venv/
+
 pump.*
 !pump.py
 
