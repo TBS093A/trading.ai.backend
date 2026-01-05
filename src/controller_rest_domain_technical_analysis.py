@@ -26,8 +26,8 @@ from pydantic import BaseModel, Field
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
 
-# Import Celery Task
-from .celery_tasks.analysis_tasks import sync_technical_analysis_task
+# Import Celery Tasks
+from .celery_tasks.analysis_tasks import sync_technical_analysis_task, sync_single_asset_technical_analysis_task
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,25 @@ class SyncTechnicalAnalysisRequest(BaseModel):
         }
 
 
+class SyncSingleAssetRequest(BaseModel):
+    """Request do uruchomienia synchronizacji analizy technicznej dla pojedynczego assetu."""
+    asset_id: int = Field(..., ge=1, description="ID assetu do synchronizacji")
+    test_mode: bool = Field(default=False, description="Tryb testowy (bez zapisu do bazy)")
+    custom_dependencies: Optional[List[str]] = Field(
+        default=None, 
+        description="Lista niestandardowych zależności Celery (domyślnie: sync_tasks.sync_exchanges)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "asset_id": 1,
+                "test_mode": False,
+                "custom_dependencies": None
+            }
+        }
+
+
 class SyncTaskResponse(BaseModel):
     """Odpowiedź po uruchomieniu zadania synchronizacji."""
     success: bool
@@ -200,7 +219,8 @@ async def technical_analysis_info():
                 "stats": "GET /analysis/technical/stats - Statystyki analiz"
             },
             "sync": {
-                "trigger": "POST /analysis/technical/sync - Uruchom synchronizację analiz technicznych"
+                "trigger": "POST /analysis/technical/sync - Uruchom synchronizację analiz technicznych",
+                "single_asset": "POST /analysis/technical/sync/asset - Uruchom synchronizację dla pojedynczego assetu"
             }
         }
     }
@@ -259,6 +279,55 @@ async def trigger_sync_technical_analysis(
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to start technical analysis sync: {str(e)}"
+        )
+
+
+@router.post("/sync/asset", response_model=SyncTaskResponse)
+async def trigger_sync_single_asset_technical_analysis(
+    request: SyncSingleAssetRequest = Body(
+        ...,
+        description="Parametry synchronizacji analizy technicznej dla pojedynczego assetu"
+    )
+):
+    """
+    Uruchamia zadanie Celery do synchronizacji analizy technicznej dla pojedynczego assetu.
+    
+    Parametry:
+        - **asset_id**: ID assetu do synchronizacji (wymagane)
+        - **test_mode**: Tryb testowy bez zapisu do bazy (domyślnie False)
+        - **custom_dependencies**: Lista niestandardowych zależności Celery 
+          (domyślnie czeka na sync_tasks.sync_exchanges)
+    
+    Returns:
+        SyncTaskResponse: Informacja o uruchomionym zadaniu z task_id do śledzenia statusu
+    """
+    try:
+        # Uruchom zadanie Celery
+        task = sync_single_asset_technical_analysis_task.delay(
+            asset_id=request.asset_id,
+            test_mode=request.test_mode,
+            custom_dependencies=request.custom_dependencies
+        )
+        
+        logger.info(f"Started sync_single_asset_technical_analysis task for asset_id={request.asset_id} (ID: {task.id})")
+        
+        return SyncTaskResponse(
+            success=True,
+            message=f"Synchronizacja analizy technicznej dla assetu {request.asset_id} rozpoczęta (Task ID: {task.id})",
+            task_id=task.id,
+            status_endpoint=f"/sync/status/{task.id}",
+            details={
+                "asset_id": request.asset_id,
+                "test_mode": request.test_mode,
+                "custom_dependencies": request.custom_dependencies
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting sync_single_asset_technical_analysis task: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to start single asset technical analysis sync: {str(e)}"
         )
 
 
