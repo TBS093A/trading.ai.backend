@@ -251,9 +251,14 @@ class TechnicalAnalysis:
             logger.error(f"Błąd podczas zapisywania wzorców harmonicznych do bazy danych: {e}")
             return saved_count
     
-    async def sync_technical_analysis(self, limit: int = 1, offset: int = 0) -> None:
+    async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_id: Optional[int] = None) -> None:
         """
-        Synchronizuje analizę techniczną dla wszystkich assetów i interwałów.
+        Synchronizuje analizę techniczną dla assetów i interwałów.
+        
+        Args:
+            limit: Limit assetów do przetworzenia (ignorowany gdy asset_id != None)
+            offset: Offset assetów (ignorowany gdy asset_id != None)
+            asset_id: Opcjonalne ID konkretnego assetu do synchronizacji (gdy podane, ignoruje limit/offset)
         """
         try:
             # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
@@ -278,8 +283,18 @@ class TechnicalAnalysis:
             processed_count = 0
             error_count = 0
             
-            # KROK 1: Pobierz wszystkie assety z bazy danych
-            assets = await assets_table.get_all(limit=limit, offset=offset)
+            # KROK 1: Pobierz assety z bazy danych
+            if asset_id is not None:
+                # Tryb pojedynczego assetu - ignoruj limit/offset
+                asset = await assets_table.get_by_id(asset_id)
+                if not asset:
+                    logger.error(f"Asset o ID {asset_id} nie został znaleziony")
+                    return
+                assets = [asset]
+                logger.info(f"Tryb pojedynczego assetu: {asset['asset']}/{asset['quote']} (ID: {asset_id})")
+            else:
+                # Tryb wielu assetów - użyj limit/offset
+                assets = await assets_table.get_all(limit=limit, offset=offset)
             
             if not assets:
                 logger.info("Brak assetów do przetworzenia")
