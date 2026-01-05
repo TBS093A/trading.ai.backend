@@ -13,6 +13,36 @@ from abc import ABC, abstractmethod
 # Import pyharmonics
 from pyharmonics.technicals import Technicals
 from pyharmonics.search import HarmonicSearch
+from pyharmonics.constants import (
+    # Pattern types
+    XABCD, ABCD, ABC, BCD, XAB, XAD,
+    MIN, MAX,
+    # Retracement levels
+    R_382, R_5, R_618, R_707, R_786, R_886,
+    # Extension levels
+    E_113, E_1272, E_1414, E_1618, E_2, E_2227, E_224, E_2618, E_3, E_3618,
+    # Pattern collections
+    HARMONIC_PATTERNS, HARMONICS, XABCDS
+)
+
+# Definicja wzorca Leonardo XABCD
+# Leonardo pattern proporcje Fibonacci:
+# - XAB: 0.500 (50% retracement z XA)
+# - ABC: 0.618 - 0.886 (retracement z AB)
+# - BCD: 1.272 - 2.618 (extension z BC)
+# - XAD: 0.786 (78.6% retracement z XA)
+LEONARDO = 'leonardo'
+
+# Dodaj Leonardo do słownika wzorców harmonicznych pyharmonics
+# Struktura: HARMONIC_PATTERNS[leg_type][pattern_name] = {MIN: value, MAX: value}
+HARMONIC_PATTERNS[XAB][LEONARDO] = {MIN: R_5, MAX: R_5}  # XAB: 0.500
+HARMONIC_PATTERNS[ABC][LEONARDO] = {MIN: R_618, MAX: R_886}  # ABC: 0.618 - 0.886
+HARMONIC_PATTERNS[BCD][LEONARDO] = {MIN: E_1272, MAX: E_2618}  # BCD: 1.272 - 2.618
+HARMONIC_PATTERNS[XAD][LEONARDO] = {MIN: R_786, MAX: R_786}  # XAD: 0.786
+
+# Dodaj Leonardo do zbioru wzorców XABCD
+HARMONICS.add(LEONARDO)
+XABCDS.add(LEONARDO)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
