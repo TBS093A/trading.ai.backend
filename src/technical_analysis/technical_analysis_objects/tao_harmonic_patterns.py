@@ -35,10 +35,11 @@ LEONARDO = 'leonardo'
 
 # Dodaj Leonardo do słownika wzorców harmonicznych pyharmonics
 # Struktura: HARMONIC_PATTERNS[leg_type][pattern_name] = {MIN: value, MAX: value}
-HARMONIC_PATTERNS[XAB][LEONARDO] = {MIN: R_5, MAX: R_5}  # XAB: 0.500
-HARMONIC_PATTERNS[ABC][LEONARDO] = {MIN: R_618, MAX: R_886}  # ABC: 0.618 - 0.886
-HARMONIC_PATTERNS[BCD][LEONARDO] = {MIN: E_1272, MAX: E_2618}  # BCD: 1.272 - 2.618
-HARMONIC_PATTERNS[XAD][LEONARDO] = {MIN: R_786, MAX: R_786}  # XAD: 0.786
+# Używamy setdefault żeby utworzyć klucz jeśli nie istnieje
+HARMONIC_PATTERNS.setdefault(XAB, {})[LEONARDO] = {MIN: R_5, MAX: R_5}  # XAB: 0.500
+HARMONIC_PATTERNS.setdefault(ABC, {})[LEONARDO] = {MIN: R_618, MAX: R_886}  # ABC: 0.618 - 0.886
+HARMONIC_PATTERNS.setdefault(BCD, {})[LEONARDO] = {MIN: E_1272, MAX: E_2618}  # BCD: 1.272 - 2.618
+HARMONIC_PATTERNS.setdefault(XAD, {})[LEONARDO] = {MIN: R_786, MAX: R_786}  # XAD: 0.786
 
 # Dodaj Leonardo do zbioru wzorców XABCD
 HARMONICS.add(LEONARDO)
@@ -154,9 +155,9 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                   **kwargs) -> None:
         """Oblicza wzorce harmoniczne XABCD"""
         logger.info(f"=== Przygotowania do Obliczania Harmonic Patterns dla {symbol} na interwale {interval} ===")
-        logger.info(f"Szukanie XABCD - {"Włączone" if find_xabcd else 'Wyłączone'}")
-        logger.info(f"Szukanie ABCD - {"Włączone" if find_abcd else 'Wyłączone'}")
-        logger.info(f"Szukanie ABC - {"Włączone" if find_abc else 'Wyłączone'}")
+        logger.info(f"Szukanie XABCD - {'Włączone' if find_xabcd else 'Wyłączone'}")
+        logger.info(f"Szukanie ABCD - {'Włączone' if find_abcd else 'Wyłączone'}")
+        logger.info(f"Szukanie ABC - {'Włączone' if find_abc else 'Wyłączone'}")
         # Wyczyść listę obliczonych wzorców przed nowym obliczeniem
         if len(self.__calculated_harmonic_patterns) > 0:
             logger.info("Czyszczenie poprzednio obliczonych harmonic patterns")
@@ -694,7 +695,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             logger.error(f"Błąd podczas obliczania Fibonacci Extensions: {e}")
         
         return fe_levels
-
+    
     def _generate_pattern_hash(self, x_points, y_points, pattern_name):
         """
         Generuje unikalny hash dla wzorca na podstawie jego punktów i nazwy.

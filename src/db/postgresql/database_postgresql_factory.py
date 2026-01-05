@@ -45,65 +45,9 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę AssetExchanges."""
         return self.get_table('asset_exchanges')
     
-    
-
-    
-    def get_fundamental_analysis_table(self) -> FundamentalAnalysisTable:
-        """Zwraca tabelę FundamentalAnalysis."""
-        return self.get_table('fundamental_analysis')
-    
-    def get_fundamental_analysis_interpretation_table(self) -> FundamentalAnalysisInterpretationTable:
-        """Zwraca tabelę FundamentalAnalysisInterpretation."""
-        return self.get_table('fundamental_analysis_interpretation')
-    
     def get_technical_analysis_harmonic_patterns_table(self) -> TechnicalAnalysisHarmonicPatternsTable:
         """Zwraca tabelę TechnicalAnalysisHarmonicPatterns."""
         return self.get_table('technical_analysis_harmonic_patterns')
-    
-    def get_technical_analysis_interpretation_table(self) -> TechnicalAnalysisInterpretationTable:
-        """Zwraca tabelę TechnicalAnalysisInterpretation."""
-        return self.get_table('technical_analysis_interpretation')
-    
-    def get_technical_analysis_interpretation_harmonic_patterns_table(self) -> TechnicalAnalysisInterpretationHarmonicPatternsTable:
-        """Zwraca tabelę TechnicalAnalysisInterpretationHarmonicPatterns."""
-        return self.get_table('technical_analysis_interpretation_harmonic_patterns')
-    
-    def get_technical_analysis_interpretation_chart_images_table(self) -> TechnicalAnalysisInterpretationChartImagesTable:
-        """Zwraca tabelę TechnicalAnalysisInterpretationChartImages."""
-        return self.get_table('technical_analysis_interpretation_chart_images')
-    
-    def get_general_interpretation_table(self) -> GeneralInterpretationTable:
-        """Zwraca tabelę GeneralInterpretation."""
-        return self.get_table('general_interpretation')
-    
-    def get_investment_strategies_table(self) -> InvestmentStrategiesTable:
-        """Zwraca tabelę InvestmentStrategies."""
-        return self.get_table('investment_strategies')
-    
-
-    def get_chart_images_table(self) -> ChartImagesTable:
-        """Zwraca tabelę ChartImages."""
-        return self.get_table('chart_images')
-    
-    def get_chart_images_harmonic_patterns_table(self) -> ChartImagesHarmonicPatternsTable:
-        """Zwraca tabelę ChartImagesHarmonicPatterns."""
-        return self.get_table('chart_images_harmonic_patterns')
-    
-    def get_exchange_transactions_table(self) -> ExchangeTransactionsTable:
-        """Zwraca tabelę ExchangeTransactions."""
-        return self.get_table('exchange_transactions')
-    
-    def get_exchange_account_state_table(self) -> ExchangeAccountStateTable:
-        """Zwraca tabelę ExchangeAccountState."""
-        return self.get_table('exchange_account_state')
-    
-    def get_exchange_account_state_buy_strategies_table(self) -> ExchangeAccountStateBuyStrategiesTable:
-        """Zwraca tabelę ExchangeAccountStateBuyStrategies."""
-        return self.get_table('exchange_account_state_buy_strategies')
-    
-    def get_exchange_account_state_sell_strategies_table(self) -> ExchangeAccountStateSellStrategiesTable:
-        """Zwraca tabelę ExchangeAccountStateSellStrategies."""
-        return self.get_table('exchange_account_state_sell_strategies')
     
     def get_system_sync_job_table(self) -> SystemSyncJobTable:
         """Zwraca tabelę SystemSyncJob."""
