@@ -134,15 +134,7 @@ class SystemSyncJobTable(AbstractTable):
         try:
             default_processes = [
                 "_run_exchanges_sync",
-                "_run_fundamental_analysis_sync",
                 "_run_technical_analysis_sync",
-                "_run_parallel_analysis",
-                "_run_llm_fundamental_interpretation_sync",
-                "_run_llm_technical_interpretation_sync",
-                "_run_parallel_llm_interpretations",
-                "_run_llm_general_decision_sync",
-                "_run_transactions_wallets_sync",
-                "_run_transactions_sync",
                 "run_full_sync_workflow"
             ]
             

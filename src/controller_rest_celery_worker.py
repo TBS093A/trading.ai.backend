@@ -35,9 +35,7 @@ def create_celery_app() -> Celery:
         backend=result_backend,
         include=[
             'src.celery_tasks.sync_tasks',
-            'src.celery_tasks.analysis_tasks', 
-            'src.celery_tasks.llm_tasks',
-            'src.celery_tasks.transaction_tasks'
+            'src.celery_tasks.analysis_tasks',
         ]
     )
     
@@ -54,8 +52,6 @@ def create_celery_app() -> Celery:
         task_routes={
             'src.celery_tasks.sync_tasks.*': {'queue': 'sync_queue'},
             'src.celery_tasks.analysis_tasks.*': {'queue': 'analysis_queue'},
-            'src.celery_tasks.llm_tasks.*': {'queue': 'llm_queue'},
-            'src.celery_tasks.transaction_tasks.*': {'queue': 'transaction_queue'},
         },
         
         # Worker configuration

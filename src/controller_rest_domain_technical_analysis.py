@@ -221,8 +221,8 @@ async def technical_analysis_info():
             "sync": {
                 "trigger": "POST /analysis/technical/sync - Uruchom synchronizację analiz technicznych",
                 "bulk_assets": "POST /analysis/technical/sync/assets - Uruchom synchronizację dla wielu assetów (bulk)"
-            }
         }
+    }
     }
 
 

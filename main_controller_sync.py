@@ -280,13 +280,7 @@ class SyncController:
     
     Workflow synchronizacji:
     1. Exchanges (sync_exchanges.py) -> uruchamiany zaraz po starcie i w soboty
-    2. FundamentalAnalysis + TechnicalAnalysis (równolegle, po Exchanges)
-    3. LlmFundamentalAnalysisInterpretation (po FundamentalAnalysis)
-    4. LlmTechnicalAnalysisInterpretation (po TechnicalAnalysis)
-    5. LlmGeneralAnalysisTransactionDecision (po obu interpretacjach LLM)
-    6. TransactionsWallets (przed transakcjami, po LlmGeneralAnalysisTransactionDecision)
-    7. Transactions (po TransactionsWallets)
-    8. TransactionsWallets (po transakcjach, aktualizacja portfeli)
+    2. TechnicalAnalysis (po Exchanges)
     """
     
     def __init__(self, test_mode: bool = False):
@@ -588,12 +582,7 @@ class SyncController:
         
         Workflow (zależności zarządzane w taskach):
         1. Exchanges (brak zależności)
-        2. Fundamental + Technical Analysis (czeka na Exchanges)
-        3. LLM Fundamental + Technical (czeka na odpowiednie analizy)
-        4. LLM General Decision (czeka na obie interpretacje LLM)
-        5. TransactionsWallets pre (czeka na LLM General)
-        6. Transactions (czeka na TransactionsWallets pre)
-        7. TransactionsWallets post (czeka na Transactions)
+        2. Technical Analysis (czeka na Exchanges)
         
         Returns:
             Dict[str, List[str]]: Słownik z task_id dla każdego etapu workflow
@@ -614,85 +603,14 @@ class SyncController:
             exchanges_tasks = await self._run_exchanges_sync()
             all_tasks['exchanges'] = [t.id for t in exchanges_tasks] if exchanges_tasks else []
             
-            # KROK 2: Analizy (Fundamental + Technical) - czekają na Exchanges w taskach
-            logger.info("📈 KROK 2: Wysyłanie analiz (Fundamental + Technical)")
-            analysis_tasks = await self._run_parallel_analysis(
+            # KROK 2: Technical Analysis - czeka na Exchanges w taskach
+            logger.info("📈 KROK 2: Wysyłanie analizy technicznej")
+            analysis_tasks = await self._run_technical_analysis_sync(
                 custom_dependencies=[
                     'sync_tasks.sync_exchanges'
                 ]
             )
             all_tasks['analysis'] = [t.id for t in analysis_tasks] if analysis_tasks else []
-            
-            # KROK 3: Interpretacje LLM - czekają na analizy w taskach
-            logger.info("🤖 KROK 3: Wysyłanie interpretacji LLM")
-            llm_interpretation_tasks = await self._run_parallel_llm_interpretations(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis'
-                ]
-            )
-            all_tasks['llm_interpretations'] = [t.id for t in llm_interpretation_tasks] if llm_interpretation_tasks else []
-            
-            # KROK 4: Decyzja generalna LLM - czeka na interpretacje w taskach
-            logger.info("🎯 KROK 4: Wysyłanie decyzji generalnej LLM")
-            llm_general_tasks = await self._run_llm_general_decision_sync(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation'
-                ]
-            )
-            all_tasks['llm_general'] = [t.id for t in llm_general_tasks] if llm_general_tasks else []
-            
-            # KROK 5: Portfele przed transakcjami - czeka na LLM General w taskach
-            logger.info("💼 KROK 5: Wysyłanie portfeli (pre-transactions)")
-            wallets_pre_tasks = await self._run_transactions_wallets_sync(
-                phase="pre", 
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision'
-                ]
-            )
-            all_tasks['wallets_pre'] = [t.id for t in wallets_pre_tasks] if wallets_pre_tasks else []
-            
-            # KROK 6: Transakcje - czeka na portfele pre w taskach
-            logger.info("💰 KROK 6: Wysyłanie transakcji")
-            transactions_tasks = await self._run_transactions_sync(
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision',
-                    'transaction_tasks.sync_transactions_wallets'
-                ]
-            )
-            all_tasks['transactions'] = [t.id for t in transactions_tasks] if transactions_tasks else []
-            
-            # KROK 7: Portfele po transakcjach - czeka na transakcje w taskach
-            logger.info("💼 KROK 7: Wysyłanie portfeli (post-transactions)")
-            wallets_post_tasks = await self._run_transactions_wallets_sync(
-                phase="post",
-                custom_dependencies=[
-                    'sync_tasks.sync_exchanges',
-                    'analysis_tasks.sync_fundamental_analysis',
-                    'analysis_tasks.sync_technical_analysis',
-                    'llm_tasks.sync_llm_fundamental_interpretation',
-                    'llm_tasks.sync_llm_technical_interpretation',
-                    'llm_tasks.sync_llm_general_decision',
-                    'transaction_tasks.sync_transactions_wallets',
-                    'transaction_tasks.sync_transactions'
-                ]
-            )
-            all_tasks['wallets_post'] = [t.id for t in wallets_post_tasks] if wallets_post_tasks else []
             
             end_time = datetime.now()
             duration = end_time - start_time
