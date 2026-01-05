@@ -251,14 +251,14 @@ class TechnicalAnalysis:
             logger.error(f"Błąd podczas zapisywania wzorców harmonicznych do bazy danych: {e}")
             return saved_count
     
-    async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_id: Optional[int] = None) -> None:
+    async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_ids: Optional[List[int]] = None) -> None:
         """
         Synchronizuje analizę techniczną dla assetów i interwałów.
         
         Args:
-            limit: Limit assetów do przetworzenia (ignorowany gdy asset_id != None)
-            offset: Offset assetów (ignorowany gdy asset_id != None)
-            asset_id: Opcjonalne ID konkretnego assetu do synchronizacji (gdy podane, ignoruje limit/offset)
+            limit: Limit assetów do przetworzenia (ignorowany gdy asset_ids != None)
+            offset: Offset assetów (ignorowany gdy asset_ids != None)
+            asset_ids: Opcjonalna lista ID assetów do synchronizacji (gdy podana, ignoruje limit/offset)
         """
         try:
             # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
@@ -284,14 +284,23 @@ class TechnicalAnalysis:
             error_count = 0
             
             # KROK 1: Pobierz assety z bazy danych
-            if asset_id is not None:
-                # Tryb pojedynczego assetu - ignoruj limit/offset
-                asset = await assets_table.get_by_id(asset_id)
-                if not asset:
-                    logger.error(f"Asset o ID {asset_id} nie został znaleziony")
-                    return
-                assets = [asset]
-                logger.info(f"Tryb pojedynczego assetu: {asset['asset']}/{asset['quote']} (ID: {asset_id})")
+            if asset_ids is not None and len(asset_ids) > 0:
+                # Tryb bulk - pobierz assety po ID z listy, ignoruj limit/offset
+                assets = []
+                not_found_ids = []
+                for asset_id in asset_ids:
+                    asset = await assets_table.get_by_id(asset_id)
+                    if asset:
+                        assets.append(asset)
+                    else:
+                        not_found_ids.append(asset_id)
+                
+                if not_found_ids:
+                    logger.warning(f"Nie znaleziono assetów o ID: {not_found_ids}")
+                
+                if assets:
+                    asset_names = [f"{a['asset']}/{a['quote']} (ID: {a['id']})" for a in assets]
+                    logger.info(f"Tryb bulk - {len(assets)} assetów: {', '.join(asset_names)}")
             else:
                 # Tryb wielu assetów - użyj limit/offset
                 assets = await assets_table.get_all(limit=limit, offset=offset)
