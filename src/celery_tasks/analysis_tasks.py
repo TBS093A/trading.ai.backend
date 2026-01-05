@@ -106,18 +106,18 @@ def sync_technical_analysis_task(
         }
 
 
-@celery.task(bind=True, name='analysis_tasks.sync_single_asset_technical_analysis')
-def sync_single_asset_technical_analysis_task(
+@celery.task(bind=True, name='analysis_tasks.sync_bulk_assets_technical_analysis')
+def sync_bulk_assets_technical_analysis_task(
     self, 
-    asset_id: int,
+    asset_ids: List[int],
     test_mode: bool = False,
     custom_dependencies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
-    Zadanie Celery dla synchronizacji analizy technicznej pojedynczego assetu.
+    Zadanie Celery dla synchronizacji analizy technicznej wielu assetów (bulk).
     
     Args:
-        asset_id: ID assetu do synchronizacji
+        asset_ids: Lista ID assetów do synchronizacji
         test_mode: Czy uruchamiać w trybie testowym
         custom_dependencies: Opcjonalne custom zależności dla zadania
         
@@ -125,32 +125,33 @@ def sync_single_asset_technical_analysis_task(
         Dict[str, Any]: Wynik synchronizacji
     """
     try:
-        logger.info(f"📈 Starting sync_single_asset_technical_analysis task for asset_id={asset_id} (ID: {self.request.id})")
+        assets_count = len(asset_ids) if asset_ids else 0
+        logger.info(f"📈 Starting sync_bulk_assets_technical_analysis task for {assets_count} assets (IDs: {asset_ids}) (Task ID: {self.request.id})")
         start_time = datetime.now()
         
         # Czekaj na zakończenie sync_exchanges (lub custom dependencies)
         wait_for_dependencies(
             default_dependencies=['sync_tasks.sync_exchanges'],
             custom_dependencies=custom_dependencies,
-            task_label='sync_single_asset_technical_analysis'
+            task_label='sync_bulk_assets_technical_analysis'
         )
         
         self.update_state(
             state='PROGRESS',
-            meta={'stage': 'initializing', 'progress': 0, 'asset_id': asset_id}
+            meta={'stage': 'initializing', 'progress': 0, 'asset_ids': asset_ids, 'assets_count': assets_count}
         )
         
         technical_analysis = TechnicalAnalysis(test_mode=test_mode)
         
         self.update_state(
             state='PROGRESS',
-            meta={'stage': 'running_technical_analysis', 'progress': 50, 'asset_id': asset_id}
+            meta={'stage': 'running_technical_analysis', 'progress': 50, 'asset_ids': asset_ids, 'assets_count': assets_count}
         )
         
-        # Uruchom synchronizację analizy technicznej dla pojedynczego assetu
+        # Uruchom synchronizację analizy technicznej dla listy assetów
         result = run_async_task_safely(
             technical_analysis.sync_technical_analysis,
-            asset_id=asset_id
+            asset_ids=asset_ids
         )
         
         end_time = datetime.now()
@@ -158,33 +159,34 @@ def sync_single_asset_technical_analysis_task(
         
         self.update_state(
             state='SUCCESS',
-            meta={'stage': 'completed', 'progress': 100, 'asset_id': asset_id}
+            meta={'stage': 'completed', 'progress': 100, 'asset_ids': asset_ids, 'assets_count': assets_count}
         )
         
-        logger.info(f"✅ sync_single_asset_technical_analysis task completed for asset_id={asset_id} (ID: {self.request.id})")
+        logger.info(f"✅ sync_bulk_assets_technical_analysis task completed for {assets_count} assets (Task ID: {self.request.id})")
         
         return {
             'success': result,
             'task_id': self.request.id,
             'duration': duration,
-            'asset_id': asset_id,
+            'asset_ids': asset_ids,
+            'assets_count': assets_count,
             'start_time': start_time.isoformat(),
             'end_time': end_time.isoformat(),
-            'message': f'Technical analysis sync completed for asset_id={asset_id}'
+            'message': f'Technical analysis sync completed for {assets_count} assets (IDs: {asset_ids})'
         }
         
     except Exception as exc:
-        logger.error(f"❌ sync_single_asset_technical_analysis task failed for asset_id={asset_id} (ID: {self.request.id}): {exc}")
+        logger.error(f"❌ sync_bulk_assets_technical_analysis task failed for assets {asset_ids} (Task ID: {self.request.id}): {exc}")
         
         self.update_state(
             state='FAILURE',
-            meta={'stage': 'error', 'error': str(exc), 'asset_id': asset_id}
+            meta={'stage': 'error', 'error': str(exc), 'asset_ids': asset_ids}
         )
         
         return {
             'success': False,
             'task_id': self.request.id,
-            'asset_id': asset_id,
+            'asset_ids': asset_ids,
             'error': str(exc),
-            'message': f'Technical analysis sync failed for asset_id={asset_id}: {exc}'
+            'message': f'Technical analysis sync failed for assets {asset_ids}: {exc}'
         }
