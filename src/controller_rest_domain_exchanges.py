@@ -432,6 +432,59 @@ async def search_exchanges(
 
 
 # ===================
+# KLINES DATA
+# ===================
+
+@router.get("/klines/{asset_id}/{interval}")
+async def get_klines(
+    asset_id: int = Path(..., ge=1),
+    interval: str = Path(...),
+    start_time: Optional[int] = Query(default=None),
+    end_time: Optional[int] = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=1000)
+):
+    """Pobiera klines dla assetu."""
+    db = await get_db()
+    assets_table = db.get_factory().get_assets_table()
+    asset_exchanges_table = db.get_factory().get_asset_exchanges_table()
+    
+    asset = await assets_table.get_by_id(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
+    
+    asset_name = asset['asset']
+    quote_name = asset['quote']
+    
+    # Sprawdź czy na Binance (BinanceAPI w bazie)
+    asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
+    binance_found = any("BINANCE" in ex.get('exchange_name', '').upper() for ex in asset_exchanges)
+    
+    if not binance_found:
+        raise HTTPException(status_code=404, detail="Asset not available on Binance")
+    
+    # Pobierz klines
+    api_facade = get_api_facade()
+    binance_api = api_facade.get_fabric().get_binance_api()
+    
+    klines_data = binance_api._get_klines(
+        base_currency=asset_name,
+        quote_currency=quote_name,
+        interval=interval,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit
+    )
+    
+    return {
+        "asset": asset_name,
+        "quote": quote_name,
+        "interval": interval,
+        "exchange": "BINANCE",
+        "klines": klines_data
+    }
+
+
+# ===================
 # STATUS MANAGEMENT
 # ===================
 
@@ -531,112 +584,6 @@ async def disable_exchange(
     except Exception as e:
         logger.error(f"Error disabling exchange {exchange_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to disable exchange: {str(e)}")
-
-
-# ===================
-# KLINES DATA
-# ===================
-
-@router.get("/klines/{asset_id}/{interval}", response_model=KlinesResponse)
-async def get_klines(
-    asset_id: int = Path(..., ge=1, description="ID assetu"),
-    interval: str = Path(..., description="Interwał czasowy (np. 1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)"),
-    start_time: Optional[int] = Query(default=None, description="Czas początkowy w milisekundach"),
-    end_time: Optional[int] = Query(default=None, description="Czas końcowy w milisekundach"),
-    limit: int = Query(default=500, ge=1, le=1000, description="Liczba rekordów do zwrócenia (max 1000)")
-):
-    """
-    Pobiera dane klines/candlestick dla assetu z giełdy Binance.
-    
-    Args:
-        asset_id: ID assetu z bazy danych
-        interval: Interwał czasowy (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
-        start_time: Opcjonalny czas początkowy w milisekundach
-        end_time: Opcjonalny czas końcowy w milisekundach
-        limit: Liczba rekordów (domyślnie 500, max 1000)
-        
-    Returns:
-        KlinesResponse: Dane klines z informacjami o assecie
-    """
-    try:
-        db = await get_db()
-        assets_table = db.get_factory().get_assets_table()
-        asset_exchanges_table = db.get_factory().get_asset_exchanges_table()
-        
-        # 1. Pobierz asset po ID
-        asset = await assets_table.get_by_id(asset_id)
-        
-        if not asset:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Asset with ID {asset_id} not found"
-            )
-        
-        asset_name = asset['asset']
-        quote_name = asset['quote']
-        
-        # 2. Sprawdź czy asset jest dostępny na Binance
-        asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
-        
-        binance_exchange = None
-        for exchange in asset_exchanges:
-            if exchange['exchange_name'].upper() == "BINANCE":
-                binance_exchange = exchange
-                break
-        
-        if not binance_exchange:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Asset {asset_name}/{quote_name} is not available on Binance exchange"
-            )
-        
-        # 3. Pobierz klines z Binance API
-        api_facade = get_api_facade()
-        binance_api = api_facade.get_fabric().get_binance_api()
-        
-        klines_data = binance_api._get_klines(
-            base_currency=asset_name,
-            quote_currency=quote_name,
-            interval=interval,
-            start_time=start_time,
-            end_time=end_time,
-            limit=limit
-        )
-        
-        # 4. Konwertuj na response model
-        klines_response = [
-            KlineData(
-                open_time=k['open_time'],
-                open=k['open'],
-                high=k['high'],
-                low=k['low'],
-                close=k['close'],
-                volume=k['volume'],
-                close_time=k['close_time'],
-                quote_volume=k['quote_volume'],
-                trades=k['trades'],
-                taker_buy_base_volume=k['taker_buy_base_volume'],
-                taker_buy_quote_volume=k['taker_buy_quote_volume']
-            )
-            for k in klines_data
-        ]
-        
-        return KlinesResponse(
-            asset=asset_name,
-            quote=quote_name,
-            interval=interval,
-            exchange="BINANCE",
-            klines=klines_response
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting klines for asset {asset_id} with interval {interval}: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to get klines: {str(e)}"
-        )
 
 
 # ===================
