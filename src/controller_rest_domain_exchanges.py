@@ -388,42 +388,6 @@ async def count_active_exchanges():
         raise HTTPException(status_code=500, detail=f"Failed to count active exchanges: {str(e)}")
 
 
-@router.get("/{exchange_id}", response_model=ExchangeResponse)
-async def get_exchange(
-    exchange_id: int = Path(..., ge=1, description="ID giełdy")
-):
-    """
-    Pobiera szczegóły konkretnej giełdy.
-    
-    Args:
-        exchange_id: ID giełdy
-        
-    Returns:
-        ExchangeResponse: Szczegóły giełdy
-    """
-    try:
-        db = await get_db()
-        exchanges_table = db.get_factory().get_exchanges_table()
-        
-        exchange = await exchanges_table.get_by_id(exchange_id)
-        
-        if not exchange:
-            raise HTTPException(status_code=404, detail=f"Exchange with ID {exchange_id} not found")
-        
-        return ExchangeResponse(
-            id=exchange['id'],
-            name=exchange['name'],
-            display_name=exchange.get('display_name'),
-            is_active=exchange.get('is_active', True),
-            created_at=exchange.get('created_at')
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting exchange {exchange_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get exchange: {str(e)}")
-
 # ===================
 # SEARCH OPERATIONS
 # ===================
@@ -723,4 +687,45 @@ async def get_exchange_stats():
     except Exception as e:
         logger.error(f"Error getting exchange stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+# ===================
+# PARAMETRYZOWANA ŚCIEŻKA - MUSI BYĆ NA KOŃCU
+# ===================
+
+@router.get("/{exchange_id}", response_model=ExchangeResponse)
+async def get_exchange(
+    exchange_id: int = Path(..., ge=1, description="ID giełdy")
+):
+    """
+    Pobiera szczegóły konkretnej giełdy.
+    
+    Args:
+        exchange_id: ID giełdy
+        
+    Returns:
+        ExchangeResponse: Szczegóły giełdy
+    """
+    try:
+        db = await get_db()
+        exchanges_table = db.get_factory().get_exchanges_table()
+        
+        exchange = await exchanges_table.get_by_id(exchange_id)
+        
+        if not exchange:
+            raise HTTPException(status_code=404, detail=f"Exchange with ID {exchange_id} not found")
+        
+        return ExchangeResponse(
+            id=exchange['id'],
+            name=exchange['name'],
+            display_name=exchange.get('display_name'),
+            is_active=exchange.get('is_active', True),
+            created_at=exchange.get('created_at')
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting exchange {exchange_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get exchange: {str(e)}")
 
