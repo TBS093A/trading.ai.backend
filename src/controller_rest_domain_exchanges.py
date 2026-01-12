@@ -7,6 +7,7 @@ Ten kontroler implementuje endpointy REST dla:
 - Wyszukiwania giełd po nazwie
 - Zarządzania statusem giełd (włączanie/wyłączanie)
 - Statystyk giełd i ich relacji z assetami
+- Pobierania danych klines z giełd
 
 Bazuje na funkcjonalności z controller_telegram_domain_exchanges.py
 
@@ -14,7 +15,7 @@ Autor: AI Assistant
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from fastapi import APIRouter, HTTPException, Query, Path, Body
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -22,6 +23,9 @@ from datetime import datetime
 # Import Database
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
+
+# Import API Facade dla exchange APIs
+from .api.api_facade import ApiFacade
 
 # Import Celery Task
 from .celery_tasks.sync_tasks import sync_exchanges_task
@@ -120,8 +124,50 @@ class SyncTaskResponse(BaseModel):
     details: Dict[str, Any]
 
 
+class KlineData(BaseModel):
+    """Pojedynczy rekord kline/candlestick."""
+    open_time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    close_time: int
+    quote_volume: float
+    trades: int
+    taker_buy_base_volume: float
+    taker_buy_quote_volume: float
+
+
+class KlinesResponse(BaseModel):
+    """Odpowiedź z danymi klines dla assetu."""
+    asset: str
+    quote: str
+    interval: str
+    exchange: str
+    klines: List[KlineData]
+
+
 # Singleton dla DatabasePostgreSQL
 db_instance: Optional[DatabasePostgreSQL] = None
+
+# Singleton dla ApiFacade
+api_facade_instance: Optional[ApiFacade] = None
+
+
+def get_api_facade() -> ApiFacade:
+    """
+    Pobiera singleton instancji ApiFacade.
+    
+    Returns:
+        ApiFacade: Instancja ApiFacade
+    """
+    global api_facade_instance
+    
+    if api_facade_instance is None:
+        api_facade_instance = ApiFacade()
+    
+    return api_facade_instance
 
 
 async def get_db() -> DatabasePostgreSQL:
@@ -161,7 +207,8 @@ async def exchanges_info():
             "enable": "POST /exchanges/{id}/enable - Włączenie giełdy",
             "disable": "POST /exchanges/{id}/disable - Wyłączenie giełdy",
             "stats": "GET /exchanges/stats - Statystyki giełd",
-            "sync": "POST /exchanges/sync - Uruchom synchronizację giełd"
+            "sync": "POST /exchanges/sync - Uruchom synchronizację giełd",
+            "klines": "GET /exchanges/klines/{asset_id}/{interval} - Pobierz dane klines z Binance"
         }
     }
 
@@ -520,6 +567,112 @@ async def disable_exchange(
     except Exception as e:
         logger.error(f"Error disabling exchange {exchange_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to disable exchange: {str(e)}")
+
+
+# ===================
+# KLINES DATA
+# ===================
+
+@router.get("/klines/{asset_id}/{interval}", response_model=KlinesResponse)
+async def get_klines(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+    interval: str = Path(..., description="Interwał czasowy (np. 1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)"),
+    start_time: Optional[int] = Query(default=None, description="Czas początkowy w milisekundach"),
+    end_time: Optional[int] = Query(default=None, description="Czas końcowy w milisekundach"),
+    limit: int = Query(default=500, ge=1, le=1000, description="Liczba rekordów do zwrócenia (max 1000)")
+):
+    """
+    Pobiera dane klines/candlestick dla assetu z giełdy Binance.
+    
+    Args:
+        asset_id: ID assetu z bazy danych
+        interval: Interwał czasowy (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
+        start_time: Opcjonalny czas początkowy w milisekundach
+        end_time: Opcjonalny czas końcowy w milisekundach
+        limit: Liczba rekordów (domyślnie 500, max 1000)
+        
+    Returns:
+        KlinesResponse: Dane klines z informacjami o assecie
+    """
+    try:
+        db = await get_db()
+        assets_table = db.get_factory().get_assets_table()
+        asset_exchanges_table = db.get_factory().get_asset_exchanges_table()
+        
+        # 1. Pobierz asset po ID
+        asset = await assets_table.get_by_id(asset_id)
+        
+        if not asset:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Asset with ID {asset_id} not found"
+            )
+        
+        asset_name = asset['asset']
+        quote_name = asset['quote']
+        
+        # 2. Sprawdź czy asset jest dostępny na Binance
+        asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
+        
+        binance_exchange = None
+        for exchange in asset_exchanges:
+            if exchange['exchange_name'].upper() == "BINANCE":
+                binance_exchange = exchange
+                break
+        
+        if not binance_exchange:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Asset {asset_name}/{quote_name} is not available on Binance exchange"
+            )
+        
+        # 3. Pobierz klines z Binance API
+        api_facade = get_api_facade()
+        binance_api = api_facade.get_fabric().get_binance_api()
+        
+        klines_data = binance_api._get_klines(
+            base_currency=asset_name,
+            quote_currency=quote_name,
+            interval=interval,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit
+        )
+        
+        # 4. Konwertuj na response model
+        klines_response = [
+            KlineData(
+                open_time=k['open_time'],
+                open=k['open'],
+                high=k['high'],
+                low=k['low'],
+                close=k['close'],
+                volume=k['volume'],
+                close_time=k['close_time'],
+                quote_volume=k['quote_volume'],
+                trades=k['trades'],
+                taker_buy_base_volume=k['taker_buy_base_volume'],
+                taker_buy_quote_volume=k['taker_buy_quote_volume']
+            )
+            for k in klines_data
+        ]
+        
+        return KlinesResponse(
+            asset=asset_name,
+            quote=quote_name,
+            interval=interval,
+            exchange="BINANCE",
+            klines=klines_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting klines for asset {asset_id} with interval {interval}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get klines: {str(e)}"
+        )
 
 
 # ===================
