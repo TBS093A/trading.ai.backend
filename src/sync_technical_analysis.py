@@ -303,7 +303,7 @@ class TechnicalAnalysis:
                     logger.info(f"Tryb bulk - {len(assets)} assetów: {', '.join(asset_names)}")
             else:
                 # Tryb wielu assetów - użyj limit/offset
-            assets = await assets_table.get_all(limit=limit, offset=offset)
+                assets = await assets_table.get_all(limit=limit, offset=offset)
             
             if not assets:
                 logger.info("Brak assetów do przetworzenia")
