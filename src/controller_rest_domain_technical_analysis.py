@@ -18,6 +18,7 @@ Autor: AI Assistant
 """
 
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Query, Path, Body
 from pydantic import BaseModel, Field
@@ -153,23 +154,31 @@ class SyncTaskResponse(BaseModel):
     details: Dict[str, Any]
 
 
-# Singleton dla DatabasePostgreSQL
+# Singleton dla DatabasePostgreSQL z blokadą dla bezpieczeństwa wątkowego
 db_instance: Optional[DatabasePostgreSQL] = None
+db_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def get_db() -> DatabasePostgreSQL:
     """
     Dependency do pobierania instancji DatabasePostgreSQL.
+    Używa blokady aby uniknąć race condition podczas inicjalizacji.
     
     Returns:
         DatabasePostgreSQL: Instancja bazy danych PostgreSQL
     """
     global db_instance
     
-    if db_instance is None:
-        db_facade = DatabaseFacade()
-        db_instance = db_facade.get_database_postgresql()
-        await db_instance.init_db()
+    if db_instance is not None:
+        return db_instance
+    
+    async with db_lock:
+        # Double-check po uzyskaniu blokady
+        if db_instance is None:
+            db_facade = DatabaseFacade()
+            new_instance = db_facade.get_database_postgresql()
+            await new_instance.init_db()
+            db_instance = new_instance
     
     return db_instance
 
