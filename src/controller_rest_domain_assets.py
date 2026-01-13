@@ -86,6 +86,22 @@ class AssetListResponse(BaseModel):
     pagination: PaginationInfo
 
 
+class AssetWithPatternResponse(BaseModel):
+    """Asset z informacją o ostatnim patternie."""
+    id: int
+    asset: str
+    quote: str
+    latest_pattern_timestamp: Optional[int] = None
+    latest_pattern_date: Optional[str] = None
+    patterns_count: int = 0
+
+
+class AssetWithPatternsListResponse(BaseModel):
+    """Lista assetów z patternami z informacją o paginacji."""
+    assets: List[AssetWithPatternResponse]
+    pagination: PaginationInfo
+
+
 class StatsResponse(BaseModel):
     """Statystyki assetów."""
     total_assets: int
@@ -143,6 +159,7 @@ async def assets_info():
             "link": "POST /assets/{asset_id}/exchanges/{exchange_id} - Przypisz asset do giełdy",
             "unlink": "DELETE /assets/{asset_id}/exchanges/{exchange_id} - Usuń relację",
             "without_patterns": "GET /assets/without-harmonic-patterns - Assety bez analiz",
+            "with_patterns": "GET /assets/with-harmonic-patterns - Assety z analizami (z datą ostatniego patternu)",
             "old_patterns": "GET /assets/with-old-harmonic-patterns - Assety ze starymi analizami",
             "recent_patterns": "GET /assets/with-recent-harmonic-patterns - Assety z nowymi analizami",
             "unprocessed_charts": "GET /assets/with-unprocessed-chart-images - Assety z nieprzetworzonymi obrazami",
@@ -570,6 +587,76 @@ async def get_assets_without_harmonic_patterns(
         
     except Exception as e:
         logger.error(f"Error getting assets without harmonic patterns: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get assets: {str(e)}")
+
+
+@router.get("/with-harmonic-patterns", response_model=AssetWithPatternsListResponse)
+async def get_assets_with_harmonic_patterns(
+    exchange_id: Optional[int] = Query(default=None, ge=1, description="Filtruj po ID giełdy"),
+    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
+    offset: int = Query(default=0, ge=0, description="Offset wyników")
+):
+    """
+    Pobiera assety, które mają analizy techniczne harmonic patterns.
+    Zwraca również informacje o ostatnim patternie (timestamp z punktu D).
+    
+    Args:
+        exchange_id: Opcjonalne filtrowanie po ID giełdy
+        limit: Maksymalna liczba wyników
+        offset: Przesunięcie wyników
+        
+    Returns:
+        AssetWithPatternsListResponse: Lista assetów z patternami
+    """
+    try:
+        from datetime import datetime
+        
+        db = await get_db()
+        assets_table = db.get_factory().get_assets_table()
+        
+        # Pobierz z dodatkowym rekordem dla sprawdzenia następnej strony
+        assets = await assets_table.get_assets_with_harmonic_patterns(
+            exchange_id=exchange_id,
+            limit=limit + 1,
+            offset=offset
+        )
+        
+        has_more = len(assets) > limit
+        page_assets = assets[:limit]
+        
+        asset_responses = []
+        for asset in page_assets:
+            latest_ts = asset.get('latest_pattern_timestamp')
+            latest_date = None
+            if latest_ts:
+                try:
+                    # Timestamp jest w milisekundach
+                    latest_date = datetime.fromtimestamp(latest_ts / 1000).strftime('%Y-%m-%d %H:%M')
+                except:
+                    pass
+            
+            asset_responses.append(AssetWithPatternResponse(
+                id=asset['id'],
+                asset=asset['asset'],
+                quote=asset['quote'],
+                latest_pattern_timestamp=latest_ts,
+                latest_pattern_date=latest_date,
+                patterns_count=asset.get('patterns_count', 0)
+            ))
+        
+        pagination_info = PaginationInfo(
+            limit=limit,
+            offset=offset,
+            has_more=has_more
+        )
+        
+        return AssetWithPatternsListResponse(
+            assets=asset_responses,
+            pagination=pagination_info
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting assets with harmonic patterns: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get assets: {str(e)}")
 
 
