@@ -555,23 +555,26 @@ class HarmonicPatterns(TechnicalAnalysisObject):
             timestamp_points = {}
 
             if len(x_points) > 4:
-                timestamp_points['x_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
-                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
-                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
-                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
-                timestamp_points['d_timestamp'] = convert_timestamp_to_ms(x_points[4]) if len(x_points) > 4 else None
-            if len(x_points) == 4:
-                timestamp_points['x_timestamp'] = None
-                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
-                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
-                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
-                timestamp_points['d_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
+                # XABCD pattern (5 points)
+                timestamp_points['x_point_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['a_point_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['b_point_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['c_point_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
+                timestamp_points['d_point_timestamp'] = convert_timestamp_to_ms(x_points[4]) if len(x_points) > 4 else None
+            elif len(x_points) == 4:
+                # ABCD pattern (4 points)
+                timestamp_points['x_point_timestamp'] = None
+                timestamp_points['a_point_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['b_point_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['c_point_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['d_point_timestamp'] = convert_timestamp_to_ms(x_points[3]) if len(x_points) > 3 else None
             elif len(x_points) == 3:
-                timestamp_points['x_timestamp'] = None
-                timestamp_points['a_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
-                timestamp_points['b_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
-                timestamp_points['c_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
-                timestamp_points['d_timestamp'] = None
+                # ABC pattern (3 points)
+                timestamp_points['x_point_timestamp'] = None
+                timestamp_points['a_point_timestamp'] = convert_timestamp_to_ms(x_points[0]) if len(x_points) > 0 else None
+                timestamp_points['b_point_timestamp'] = convert_timestamp_to_ms(x_points[1]) if len(x_points) > 1 else None
+                timestamp_points['c_point_timestamp'] = convert_timestamp_to_ms(x_points[2]) if len(x_points) > 2 else None
+                timestamp_points['d_point_timestamp'] = None
             
             pattern_data = {
                 'asset_id': self.asset_id,
