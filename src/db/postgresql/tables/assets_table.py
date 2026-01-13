@@ -331,4 +331,67 @@ class AssetsTable(AbstractTable):
     async def count_all(self) -> int:
         """Zlicza wszystkie assety."""
         result = await self.fetch_val("SELECT COUNT(*) FROM assets")
-        return result or 0 
+        return result or 0
+    
+    async def get_assets_with_harmonic_patterns(
+        self, 
+        exchange_id: Optional[int] = None, 
+        limit: int = 100, 
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Pobiera assety które mają analizy techniczne harmonic patterns.
+        Zwraca również informacje o ostatnim patternie (timestamp z punktu D) i liczbę patternów.
+        
+        Args:
+            exchange_id: Opcjonalne filtrowanie po ID giełdy
+            limit: Maksymalna liczba wyników
+            offset: Przesunięcie dla paginacji
+            
+        Returns:
+            List[Dict[str, Any]]: Lista assetów z patternami, zawierająca:
+                - id, asset, quote
+                - latest_pattern_timestamp (z punktu D)
+                - patterns_count
+        """
+        try:
+            if exchange_id is not None:
+                # Z filtrem po giełdzie
+                results = await self.fetch_all("""
+                    SELECT 
+                        a.id,
+                        a.asset,
+                        a.quote,
+                        MAX(hp.d_point_timestamp) as latest_pattern_timestamp,
+                        COUNT(hp.id) as patterns_count
+                    FROM assets a
+                    INNER JOIN technical_analysis_harmonic_patterns hp ON a.id = hp.asset_id
+                    INNER JOIN asset_exchanges ae ON a.id = ae.asset_id
+                    WHERE ae.exchange_id = $1
+                    GROUP BY a.id, a.asset, a.quote
+                    ORDER BY MAX(hp.d_point_timestamp) DESC
+                    LIMIT $2 OFFSET $3
+                """, exchange_id, limit, offset)
+            else:
+                # Bez filtra po giełdzie
+                results = await self.fetch_all("""
+                    SELECT 
+                        a.id,
+                        a.asset,
+                        a.quote,
+                        MAX(hp.d_point_timestamp) as latest_pattern_timestamp,
+                        COUNT(hp.id) as patterns_count
+                    FROM assets a
+                    INNER JOIN technical_analysis_harmonic_patterns hp ON a.id = hp.asset_id
+                    GROUP BY a.id, a.asset, a.quote
+                    ORDER BY MAX(hp.d_point_timestamp) DESC
+                    LIMIT $1 OFFSET $2
+                """, limit, offset)
+            
+            logger.info(f"Znaleziono {len(results)} assetów z harmonic patterns" + 
+                       (f" dla exchange_id={exchange_id}" if exchange_id else ""))
+            return results
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas pobierania assetów z harmonic patterns: {e}", exc_info=True)
+            return []
