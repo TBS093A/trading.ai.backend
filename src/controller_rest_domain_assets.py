@@ -14,6 +14,7 @@ Autor: AI Assistant
 """
 
 import logging
+import asyncio
 from datetime import timedelta
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Query, Path, Body
@@ -117,23 +118,31 @@ class StandardResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
 
-# Singleton dla DatabasePostgreSQL
+# Singleton dla DatabasePostgreSQL z blokadą dla bezpieczeństwa wątkowego
 db_instance: Optional[DatabasePostgreSQL] = None
+db_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def get_db() -> DatabasePostgreSQL:
     """
     Dependency do pobierania instancji DatabasePostgreSQL.
+    Używa blokady aby uniknąć race condition podczas inicjalizacji.
     
     Returns:
         DatabasePostgreSQL: Instancja bazy danych PostgreSQL
     """
     global db_instance
     
-    if db_instance is None:
-        db_facade = DatabaseFacade()
-        db_instance = db_facade.get_database_postgresql()
-        await db_instance.init_db()
+    if db_instance is not None:
+        return db_instance
+    
+    async with db_lock:
+        # Double-check po uzyskaniu blokady
+        if db_instance is None:
+            db_facade = DatabaseFacade()
+            new_instance = db_facade.get_database_postgresql()
+            await new_instance.init_db()
+            db_instance = new_instance
     
     return db_instance
 
@@ -240,40 +249,6 @@ async def count_assets():
         logger.error(f"Error counting assets: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to count assets: {str(e)}")
 
-
-@router.get("/{asset_id}", response_model=AssetResponse)
-async def get_asset(
-    asset_id: int = Path(..., ge=1, description="ID assetu")
-):
-    """
-    Pobiera szczegóły konkretnego assetu.
-    
-    Args:
-        asset_id: ID assetu
-        
-    Returns:
-        AssetResponse: Szczegóły assetu
-    """
-    try:
-        db = await get_db()
-        assets_table = db.get_factory().get_assets_table()
-        
-        asset = await assets_table.get_by_id(asset_id)
-        
-        if not asset:
-            raise HTTPException(status_code=404, detail=f"Asset with ID {asset_id} not found")
-        
-        return AssetResponse(
-            id=asset['id'],
-            asset=asset['asset'],
-            quote=asset['quote']
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting asset {asset_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get asset: {str(e)}")
 
 # ===================
 # SEARCH OPERATIONS
@@ -872,4 +847,43 @@ async def get_assets_stats():
     except Exception as e:
         logger.error(f"Error getting assets stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+# ===================
+# CATCH-ALL ROUTES (must be at the end)
+# ===================
+
+@router.get("/{asset_id}", response_model=AssetResponse)
+async def get_asset(
+    asset_id: int = Path(..., ge=1, description="ID assetu")
+):
+    """
+    Pobiera szczegóły konkretnego assetu.
+    
+    Args:
+        asset_id: ID assetu
+        
+    Returns:
+        AssetResponse: Szczegóły assetu
+    """
+    try:
+        db = await get_db()
+        assets_table = db.get_factory().get_assets_table()
+        
+        asset = await assets_table.get_by_id(asset_id)
+        
+        if not asset:
+            raise HTTPException(status_code=404, detail=f"Asset with ID {asset_id} not found")
+        
+        return AssetResponse(
+            id=asset['id'],
+            asset=asset['asset'],
+            quote=asset['quote']
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting asset {asset_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get asset: {str(e)}")
 
