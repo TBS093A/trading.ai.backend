@@ -23,6 +23,9 @@ from pydantic import BaseModel, Field
 # Import SyncController
 from main_controller_sync import SyncController
 
+# Import Auth
+from .auth import require_auth, require_admin, AuthUser
+
 # Import Celery tasks
 from .celery_tasks.sync_tasks import sync_exchanges_task, sync_all_task
 from .celery_tasks.analysis_tasks import sync_technical_analysis_task
@@ -41,7 +44,8 @@ from .api.api_facade import ApiFacade
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
-router = APIRouter()
+# Wszystkie endpointy w tym routerze wymagają autentykacji
+router = APIRouter(dependencies=[Depends(require_auth)])
 PREFIX = "/sync"
 TAGS = ["Synchronization"]
 
@@ -147,7 +151,7 @@ async def sync_info():
 
 
 @router.get("/status", response_model=List[Dict[str, Any]])
-async def get_sync_status():
+async def get_sync_status(current_user: AuthUser = Depends(require_auth)):
     """Pobiera status wszystkich zadań Celery."""
     try:
         celery_app = get_celery_app()
@@ -190,7 +194,10 @@ async def get_sync_status():
 
 
 @router.get("/status/{task_id}", response_model=Dict[str, Any])
-async def get_operation_status(task_id: str = Path(..., description="ID zadania Celery")):
+async def get_operation_status(
+    task_id: str = Path(..., description="ID zadania Celery"),
+    current_user: AuthUser = Depends(require_auth)
+):
     """Pobiera status konkretnego zadania Celery."""
     try:
         status = get_task_status(task_id)
@@ -202,12 +209,17 @@ async def get_operation_status(task_id: str = Path(..., description="ID zadania 
 
 
 @router.delete("/status/{task_id}", response_model=SyncResponse)
-async def cancel_operation(task_id: str = Path(..., description="ID zadania Celery do anulowania")):
+async def cancel_operation(
+    task_id: str = Path(..., description="ID zadania Celery do anulowania"),
+    current_user: AuthUser = Depends(require_admin)
+):
     """
     Anuluje wykonanie zadania Celery.
     
     Endpoint umożliwia anulowanie długotrwałych operacji synchronizacji
     na podstawie ID zadania pobranego z get_sync_status.
+    
+    Wymaga uprawnień administratora.
     """
     try:
         celery_app = get_celery_app()
@@ -268,7 +280,7 @@ async def cancel_operation(task_id: str = Path(..., description="ID zadania Cele
 
 
 @router.get("/workflow", response_model=Dict[str, Any])
-async def get_workflow_status():
+async def get_workflow_status(current_user: AuthUser = Depends(require_auth)):
     """
     Pobiera status workflow synchronizacji z Celery.
     
@@ -346,8 +358,15 @@ async def get_workflow_status():
 # ===================
 
 @router.post("/all", response_model=SyncResponse)
-async def sync_all(test_mode: bool = Query(default=False, description="Tryb testowy")):
-    """Uruchamia pełny workflow synchronizacji systemu."""
+async def sync_all(
+    test_mode: bool = Query(default=False, description="Tryb testowy"),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Uruchamia pełny workflow synchronizacji systemu.
+    
+    Wymaga uprawnień administratora.
+    """
     try:
         # Uruchom zadanie Celery
         task = sync_all_task.delay(test_mode=test_mode)
@@ -371,8 +390,15 @@ async def sync_all(test_mode: bool = Query(default=False, description="Tryb test
 # ===================
 
 @router.post("/exchanges", response_model=SyncResponse)
-async def sync_exchanges(test_mode: bool = Query(default=False, description="Tryb testowy")):
-    """Synchronizacja assetów z giełd."""
+async def sync_exchanges(
+    test_mode: bool = Query(default=False, description="Tryb testowy"),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Synchronizacja assetów z giełd.
+    
+    Wymaga uprawnień administratora.
+    """
     try:
         # Uruchom zadanie Celery
         task = sync_exchanges_task.delay(test_mode=test_mode)
@@ -394,9 +420,14 @@ async def sync_exchanges(test_mode: bool = Query(default=False, description="Try
 @router.post("/analysis/technical", response_model=SyncResponse)
 async def sync_technical_analysis(
     params: SyncParameters,
-    test_mode: bool = Query(default=False, description="Tryb testowy")
+    test_mode: bool = Query(default=False, description="Tryb testowy"),
+    current_user: AuthUser = Depends(require_admin)
 ):
-    """Synchronizacja analiz technicznych."""
+    """
+    Synchronizacja analiz technicznych.
+    
+    Wymaga uprawnień administratora.
+    """
     try:
         # Uruchom zadanie Celery
         task = sync_technical_analysis_task.delay(
@@ -426,8 +457,15 @@ async def sync_technical_analysis(
 # ===================
 
 @router.get("/health", response_model=SystemHealth)
-async def health_check(sync_controller: SyncController = Depends(get_sync_controller)):
-    """Health check systemu synchronizacji."""
+async def health_check(
+    sync_controller: SyncController = Depends(get_sync_controller),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Health check systemu synchronizacji.
+    
+    Wymaga uprawnień administratora.
+    """
     try:
         components = {}
         overall_healthy = True

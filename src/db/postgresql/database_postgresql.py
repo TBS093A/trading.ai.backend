@@ -47,6 +47,8 @@ class DatabasePostgreSQL:
             table_order = [
                 'system_sync_job',  # Musi być przed cron_system_sync_job
                 'cron_system_sync_job',  # Zależy od system_sync_job
+                'users',  # Musi być przed user_sessions
+                'user_sessions',  # Zależy od users
                 'assets',
                 'exchanges',
                 'asset_exchanges',
@@ -325,6 +327,7 @@ class DatabasePostgreSQL:
         async with self.pool.acquire() as connection:
             # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
             table_order = [
+                'user_sessions',  # Usuń przed users z powodu foreign key
                 'cron_system_sync_job',  # Usuń przed system_sync_job z powodu foreign key
                 'system_sync_job',
                 'chart_images_harmonic_patterns',
@@ -342,7 +345,8 @@ class DatabasePostgreSQL:
                 'fundamental_analysis',
                 'asset_exchanges',
                 'exchanges',
-                'assets'
+                'assets',
+                'users'
             ]
             
             for table_name in table_order:
