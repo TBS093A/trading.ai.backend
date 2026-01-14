@@ -16,7 +16,8 @@ class DatabasePostgreSQLFactory:
         'system_sync_job': SystemSyncJobTable,
         'cron_system_sync_job': CronSystemSyncJobTable,
         'users': UsersTable,
-        'user_sessions': UserSessionsTable
+        'user_sessions': UserSessionsTable,
+        'saved_analyses': SavedAnalysesTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -66,6 +67,10 @@ class DatabasePostgreSQLFactory:
     def get_user_sessions_table(self) -> UserSessionsTable:
         """Zwraca tabelę UserSessions."""
         return self.get_table('user_sessions')
+    
+    def get_saved_analyses_table(self) -> SavedAnalysesTable:
+        """Zwraca tabelę SavedAnalyses."""
+        return self.get_table('saved_analyses')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

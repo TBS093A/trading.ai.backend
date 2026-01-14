@@ -7,6 +7,7 @@ from .system_sync_job_table import SystemSyncJobTable
 from .cron_system_sync_job_table import CronSystemSyncJobTable
 from .users_table import UsersTable
 from .user_sessions_table import UserSessionsTable
+from .saved_analyses_table import SavedAnalysesTable
 
 __all__ = [
     'AbstractTable',
@@ -17,5 +18,6 @@ __all__ = [
     'SystemSyncJobTable',
     'CronSystemSyncJobTable',
     'UsersTable',
-    'UserSessionsTable'
+    'UserSessionsTable',
+    'SavedAnalysesTable'
 ] 
