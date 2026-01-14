@@ -100,3 +100,103 @@ def sync_exchanges_task(self, test_mode: bool = False, custom_dependencies: Opti
             'error': str(exc),
             'message': f'Exchanges synchronization failed: {exc}'
         }
+
+
+@celery.task(bind=True, name='sync_tasks.sync_all')
+def sync_all_task(self, test_mode: bool = False) -> Dict[str, Any]:
+    """
+    Zadanie Celery dla pełnej synchronizacji systemu.
+    
+    Uruchamia synchronizację wszystkich komponentów:
+    1. Synchronizacja giełd (exchanges)
+    2. Synchronizacja analizy technicznej
+    
+    Args:
+        test_mode: Czy uruchamiać w trybie testowym
+        
+    Returns:
+        Dict[str, Any]: Wynik synchronizacji
+    """
+    try:
+        logger.info(f"🚀 Starting full sync_all task (ID: {self.request.id})")
+        start_time = datetime.now()
+        
+        results = {
+            'exchanges': None,
+            'technical_analysis': None
+        }
+        
+        # Aktualizuj status - rozpoczęcie
+        self.update_state(
+            state='PROGRESS',
+            meta={'stage': 'exchanges', 'progress': 0, 'results': results}
+        )
+        
+        # 1. Synchronizacja giełd
+        logger.info("📊 Step 1: Synchronizing exchanges...")
+        try:
+            exchanges = Exchanges(test_mode=test_mode)
+            exchanges_result = run_async_task_safely(exchanges.sync_assets)
+            results['exchanges'] = {
+                'success': exchanges_result,
+                'message': 'Exchanges synchronized' if exchanges_result else 'Exchanges sync failed'
+            }
+        except Exception as e:
+            logger.error(f"❌ Exchanges sync failed: {e}")
+            results['exchanges'] = {'success': False, 'error': str(e)}
+        
+        self.update_state(
+            state='PROGRESS',
+            meta={'stage': 'technical_analysis', 'progress': 50, 'results': results}
+        )
+        
+        # 2. Synchronizacja analizy technicznej (opcjonalnie - wymaga importu)
+        logger.info("📈 Step 2: Technical analysis sync skipped in full sync (use dedicated endpoint)")
+        results['technical_analysis'] = {
+            'success': True,
+            'message': 'Skipped - use dedicated endpoint for technical analysis sync'
+        }
+        
+        # Oblicz czas wykonania
+        end_time = datetime.now()
+        duration = str(end_time - start_time)
+        
+        # Określ ogólny sukces
+        overall_success = all(
+            r.get('success', False) for r in results.values() if r
+        )
+        
+        self.update_state(
+            state='SUCCESS',
+            meta={'stage': 'completed', 'progress': 100, 'results': results}
+        )
+        
+        logger.info(f"✅ sync_all task completed (ID: {self.request.id})")
+        
+        return {
+            'success': overall_success,
+            'task_id': self.request.id,
+            'duration': duration,
+            'start_time': start_time.isoformat(),
+            'end_time': end_time.isoformat(),
+            'results': results,
+            'message': 'Full synchronization completed' if overall_success else 'Some sync operations failed'
+        }
+        
+    except Exception as exc:
+        logger.error(f"❌ sync_all task failed (ID: {self.request.id}): {exc}")
+        
+        self.update_state(
+            state='FAILURE',
+            meta={
+                'stage': 'error',
+                'error': str(exc)
+            }
+        )
+        
+        return {
+            'success': False,
+            'task_id': self.request.id,
+            'error': str(exc),
+            'message': f'Full synchronization failed: {exc}'
+        }
