@@ -1131,13 +1131,20 @@ async def get_my_saved_analyses(
         db = await get_db()
         saved_analyses_table = db.get_factory().get_saved_analyses_table()
         
+        # Upewnij się że user_id jest int
+        user_id = int(current_user.id) if current_user.id is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Nieprawidłowe dane użytkownika")
+        
+        logger.debug(f"Fetching saved analyses for user_id={user_id} (type={type(user_id)})")
+        
         analyses = await saved_analyses_table.get_by_user(
-            user_id=current_user.id,
+            user_id=user_id,
             limit=limit,
             offset=offset
         )
         
-        total_count = await saved_analyses_table.count_by_user(current_user.id)
+        total_count = await saved_analyses_table.count_by_user(user_id)
         
         # Konwertuj datetime na ISO string dla serializacji JSON
         serialized_analyses = []
