@@ -14,7 +14,9 @@ class DatabasePostgreSQLFactory:
         'asset_exchanges': AssetExchangesTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
         'system_sync_job': SystemSyncJobTable,
-        'cron_system_sync_job': CronSystemSyncJobTable
+        'cron_system_sync_job': CronSystemSyncJobTable,
+        'users': UsersTable,
+        'user_sessions': UserSessionsTable
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -56,6 +58,14 @@ class DatabasePostgreSQLFactory:
     def get_cron_system_sync_job_table(self) -> CronSystemSyncJobTable:
         """Zwraca tabelę CronSystemSyncJob."""
         return self.get_table('cron_system_sync_job')
+    
+    def get_users_table(self) -> UsersTable:
+        """Zwraca tabelę Users."""
+        return self.get_table('users')
+    
+    def get_user_sessions_table(self) -> UserSessionsTable:
+        """Zwraca tabelę UserSessions."""
+        return self.get_table('user_sessions')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

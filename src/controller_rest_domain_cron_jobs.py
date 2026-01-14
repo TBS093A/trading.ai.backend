@@ -19,7 +19,7 @@ Autor: AI Assistant
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Query, Path, Body
+from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -27,10 +27,14 @@ from datetime import datetime
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
 
+# Import Auth
+from .auth import require_auth, require_admin, AuthUser
+
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
-router = APIRouter()
+# Wszystkie endpointy w tym routerze wymagają autentykacji
+router = APIRouter(dependencies=[Depends(require_auth)])
 PREFIX = "/system/cron"
 TAGS = ["Cron Jobs"]
 
