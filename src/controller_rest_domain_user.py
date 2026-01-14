@@ -710,6 +710,343 @@ async def create_user(
         raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
 
 
+# ===================
+# SAVED ANALYSES
+# (musi być PRZED /{user_id} routes żeby FastAPI nie próbował parsować "saved-analyses" jako user_id)
+# ===================
+
+class SavedAnalysisCreate(BaseModel):
+    """Model do tworzenia zapisanej analizy."""
+    name: str = Field(..., min_length=1, max_length=255, description="Nazwa zapisanej analizy")
+    description: Optional[str] = Field(None, max_length=1000, description="Opcjonalny opis")
+    asset_id: int = Field(..., description="ID assetu")
+    asset_name: Optional[str] = Field(None, description="Nazwa assetu")
+    quote_name: Optional[str] = Field(None, description="Waluta kwotowana")
+    exchange_id: Optional[int] = Field(None, description="ID giełdy")
+    exchange_name: Optional[str] = Field(None, description="Nazwa giełdy")
+    interval: str = Field(..., description="Interwał wykresu (np. '1h', '4h', '1d')")
+    chart_visible_range: Optional[Dict[str, Any]] = Field(None, description="Widoczny zakres wykresu")
+    selected_pattern_id: Optional[int] = Field(None, description="ID wybranego patternu")
+    expanded_pattern_id: Optional[int] = Field(None, description="ID rozwiniętego patternu")
+    pattern_display_options: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Opcje wyświetlania patternów")
+    shared_pattern_data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dane patternów dla cross-interval sharing")
+    global_pattern_display: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Globalne ustawienia wyświetlania patternów")
+    indicators: Optional[Dict[str, bool]] = Field(default_factory=dict, description="Widoczność indykatorów")
+    unselected_alpha: Optional[float] = Field(default=0.15, ge=0, le=1, description="Alpha dla niewybranych patternów")
+    auto_center_on_select: Optional[bool] = Field(default=True, description="Auto-center przy wyborze patternu")
+    harmonic_pattern_ids: Optional[List[int]] = Field(default_factory=list, description="Lista ID patternów harmonicznych")
+    thumbnail: Optional[str] = Field(None, description="Miniaturka jako base64")
+
+
+class SavedAnalysisUpdate(BaseModel):
+    """Model do aktualizacji zapisanej analizy."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=1000)
+    chart_visible_range: Optional[Dict[str, Any]] = None
+    selected_pattern_id: Optional[int] = None
+    expanded_pattern_id: Optional[int] = None
+    pattern_display_options: Optional[Dict[str, Any]] = None
+    shared_pattern_data: Optional[Dict[str, Any]] = None
+    global_pattern_display: Optional[Dict[str, Any]] = None
+    indicators: Optional[Dict[str, bool]] = None
+    unselected_alpha: Optional[float] = Field(None, ge=0, le=1)
+    auto_center_on_select: Optional[bool] = None
+    harmonic_pattern_ids: Optional[List[int]] = None
+    thumbnail: Optional[str] = None
+
+
+@router.post("/saved-analyses", response_model=StandardResponse)
+async def create_saved_analysis(
+    analysis_data: SavedAnalysisCreate,
+    current_user: AuthUser = Depends(require_auth)
+):
+    """
+    Tworzy nową zapisaną analizę dla zalogowanego użytkownika.
+    
+    Dostępne dla wszystkich zalogowanych użytkowników (user i administrator).
+    
+    Args:
+        analysis_data: Dane analizy do zapisania
+        
+    Returns:
+        StandardResponse: ID utworzonej analizy
+    """
+    try:
+        db = await get_db()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        analysis_id = await saved_analyses_table.create(
+            user_id=int(current_user.id),
+            name=analysis_data.name,
+            description=analysis_data.description,
+            asset_id=analysis_data.asset_id,
+            asset_name=analysis_data.asset_name,
+            quote_name=analysis_data.quote_name,
+            exchange_id=analysis_data.exchange_id,
+            exchange_name=analysis_data.exchange_name,
+            interval=analysis_data.interval,
+            chart_visible_range=analysis_data.chart_visible_range,
+            selected_pattern_id=analysis_data.selected_pattern_id,
+            expanded_pattern_id=analysis_data.expanded_pattern_id,
+            pattern_display_options=analysis_data.pattern_display_options,
+            shared_pattern_data=analysis_data.shared_pattern_data,
+            global_pattern_display=analysis_data.global_pattern_display,
+            indicators=analysis_data.indicators,
+            unselected_alpha=analysis_data.unselected_alpha,
+            auto_center_on_select=analysis_data.auto_center_on_select,
+            harmonic_pattern_ids=analysis_data.harmonic_pattern_ids,
+            thumbnail=analysis_data.thumbnail
+        )
+        
+        if analysis_id is None:
+            raise HTTPException(status_code=500, detail="Nie udało się utworzyć zapisanej analizy")
+        
+        logger.info(f"Użytkownik {current_user.username} utworzył zapisaną analizę: {analysis_data.name} (ID: {analysis_id})")
+        
+        return StandardResponse(
+            success=True,
+            message=f"Utworzono zapisaną analizę '{analysis_data.name}'",
+            data={
+                "analysis_id": analysis_id,
+                "name": analysis_data.name,
+                "asset_id": analysis_data.asset_id,
+                "interval": analysis_data.interval
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Błąd podczas tworzenia zapisanej analizy: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
+
+
+@router.get("/saved-analyses")
+async def get_my_saved_analyses(
+    limit: int = Query(default=50, ge=1, le=1000, description="Limit wyników"),
+    offset: int = Query(default=0, ge=0, description="Offset dla paginacji"),
+    current_user: AuthUser = Depends(require_auth)
+):
+    """
+    Pobiera listę zapisanych analiz zalogowanego użytkownika.
+    
+    Zwraca skróconą wersję danych (bez szczegółów wykresu) dla szybkiego wyświetlenia listy.
+    
+    Returns:
+        Lista zapisanych analiz z podstawowymi informacjami
+    """
+    try:
+        db = await get_db()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        user_id = int(current_user.id)
+        
+        analyses = await saved_analyses_table.get_by_user(
+            user_id=user_id,
+            limit=limit,
+            offset=offset
+        )
+        
+        total_count = await saved_analyses_table.count_by_user(user_id)
+        
+        # Konwertuj wszystkie pola do poprawnych typów JSON
+        serialized_analyses = []
+        for analysis in analyses:
+            serialized = {}
+            for key, value in analysis.items():
+                if key in ('id', 'user_id', 'asset_id', 'exchange_id') and value is not None:
+                    serialized[key] = int(value)
+                elif key in ('created_at', 'updated_at') and value is not None:
+                    serialized[key] = value.isoformat() if hasattr(value, 'isoformat') else str(value)
+                else:
+                    serialized[key] = value
+            serialized_analyses.append(serialized)
+        
+        return {
+            "analyses": serialized_analyses,
+            "total_count": total_count,
+            "pagination": {
+                "limit": limit,
+                "offset": offset
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Błąd podczas pobierania zapisanych analiz: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
+
+
+@router.get("/saved-analyses/{analysis_id}")
+async def get_saved_analysis(
+    analysis_id: int = Path(..., description="ID zapisanej analizy"),
+    current_user: AuthUser = Depends(require_auth)
+):
+    """
+    Pobiera pełne dane zapisanej analizy po ID.
+    
+    Użytkownik może pobierać tylko swoje analizy.
+    
+    Args:
+        analysis_id: ID analizy do pobrania
+        
+    Returns:
+        Pełne dane zapisanej analizy
+    """
+    try:
+        db = await get_db()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        analysis = await saved_analyses_table.get_by_user_full(
+            user_id=int(current_user.id),
+            analysis_id=analysis_id
+        )
+        
+        if analysis is None:
+            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
+        
+        # Konwertuj datetime na ISO string dla serializacji JSON
+        serialized = dict(analysis)
+        if 'created_at' in serialized and serialized['created_at']:
+            serialized['created_at'] = serialized['created_at'].isoformat()
+        if 'updated_at' in serialized and serialized['updated_at']:
+            serialized['updated_at'] = serialized['updated_at'].isoformat()
+        
+        return {
+            "analysis": serialized
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Błąd podczas pobierania zapisanej analizy: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
+
+
+@router.put("/saved-analyses/{analysis_id}", response_model=StandardResponse)
+async def update_saved_analysis(
+    analysis_id: int = Path(..., description="ID zapisanej analizy"),
+    update_data: SavedAnalysisUpdate = Body(...),
+    current_user: AuthUser = Depends(require_auth)
+):
+    """
+    Aktualizuje zapisaną analizę.
+    
+    Użytkownik może aktualizować tylko swoje analizy.
+    
+    Args:
+        analysis_id: ID analizy do aktualizacji
+        update_data: Dane do aktualizacji
+        
+    Returns:
+        StandardResponse: Potwierdzenie aktualizacji
+    """
+    try:
+        db = await get_db()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        # Sprawdź czy analiza należy do użytkownika
+        existing = await saved_analyses_table.get_by_user_full(
+            user_id=int(current_user.id),
+            analysis_id=analysis_id
+        )
+        
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
+        
+        # Przygotuj dane do aktualizacji (tylko niepuste pola)
+        update_dict = {}
+        for field, value in update_data.model_dump().items():
+            if value is not None:
+                update_dict[field] = value
+        
+        if not update_dict:
+            return StandardResponse(
+                success=True,
+                message="Brak danych do aktualizacji",
+                data={"analysis_id": analysis_id}
+            )
+        
+        success = await saved_analyses_table.update(analysis_id, **update_dict)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Nie udało się zaktualizować analizy")
+        
+        logger.info(f"Użytkownik {current_user.username} zaktualizował analizę ID: {analysis_id}")
+        
+        return StandardResponse(
+            success=True,
+            message=f"Zaktualizowano zapisaną analizę",
+            data={
+                "analysis_id": analysis_id,
+                "updated_fields": list(update_dict.keys())
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Błąd podczas aktualizacji zapisanej analizy: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
+
+
+@router.delete("/saved-analyses/{analysis_id}", response_model=StandardResponse)
+async def delete_saved_analysis(
+    analysis_id: int = Path(..., description="ID zapisanej analizy"),
+    current_user: AuthUser = Depends(require_auth)
+):
+    """
+    Usuwa zapisaną analizę.
+    
+    Użytkownik może usuwać tylko swoje analizy.
+    
+    Args:
+        analysis_id: ID analizy do usunięcia
+        
+    Returns:
+        StandardResponse: Potwierdzenie usunięcia
+    """
+    try:
+        db = await get_db()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        # Pobierz analizę przed usunięciem (dla logowania)
+        existing = await saved_analyses_table.get_by_user_full(
+            user_id=int(current_user.id),
+            analysis_id=analysis_id
+        )
+        
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
+        
+        analysis_name = existing.get('name', 'Unknown')
+        
+        success = await saved_analyses_table.delete_by_user(
+            record_id=analysis_id,
+            user_id=int(current_user.id)
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Nie udało się usunąć analizy")
+        
+        logger.info(f"Użytkownik {current_user.username} usunął analizę: {analysis_name} (ID: {analysis_id})")
+        
+        return StandardResponse(
+            success=True,
+            message=f"Usunięto zapisaną analizę '{analysis_name}'",
+            data={"deleted_analysis_id": analysis_id}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Błąd podczas usuwania zapisanej analizy: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
+
+
+# ===================
+# USER BY ID (catch-all routes - muszą być NA KOŃCU)
+# ===================
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int = Path(..., ge=0, description="ID użytkownika"),
@@ -957,382 +1294,5 @@ async def cleanup_expired_sessions(current_user: AuthUser = Depends(require_admi
         
     except Exception as e:
         logger.error(f"Błąd podczas czyszczenia sesji: {e}")
-        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
-
-
-# ===================
-# SAVED ANALYSES
-# ===================
-
-class SavedAnalysisCreate(BaseModel):
-    """Model do tworzenia zapisanej analizy."""
-    name: str = Field(..., min_length=1, max_length=255, description="Nazwa zapisanej analizy")
-    description: Optional[str] = Field(None, max_length=1000, description="Opcjonalny opis")
-    asset_id: int = Field(..., description="ID assetu")
-    asset_name: Optional[str] = Field(None, description="Nazwa assetu")
-    quote_name: Optional[str] = Field(None, description="Waluta kwotowana")
-    exchange_id: Optional[int] = Field(None, description="ID giełdy")
-    exchange_name: Optional[str] = Field(None, description="Nazwa giełdy")
-    interval: str = Field(..., description="Interwał wykresu (np. '1h', '4h', '1d')")
-    chart_visible_range: Optional[Dict[str, Any]] = Field(None, description="Widoczny zakres wykresu")
-    selected_pattern_id: Optional[int] = Field(None, description="ID wybranego patternu")
-    expanded_pattern_id: Optional[int] = Field(None, description="ID rozwiniętego patternu")
-    pattern_display_options: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Opcje wyświetlania patternów")
-    shared_pattern_data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dane patternów dla cross-interval sharing")
-    global_pattern_display: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Globalne ustawienia wyświetlania patternów")
-    indicators: Optional[Dict[str, bool]] = Field(default_factory=dict, description="Widoczność indykatorów")
-    unselected_alpha: Optional[float] = Field(default=0.15, ge=0, le=1, description="Alpha dla niewybranych patternów")
-    auto_center_on_select: Optional[bool] = Field(default=True, description="Auto-center przy wyborze patternu")
-    harmonic_pattern_ids: Optional[List[int]] = Field(default_factory=list, description="Lista ID patternów harmonicznych")
-    thumbnail: Optional[str] = Field(None, description="Miniaturka jako base64")
-
-
-class SavedAnalysisUpdate(BaseModel):
-    """Model do aktualizacji zapisanej analizy."""
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = Field(None, max_length=1000)
-    chart_visible_range: Optional[Dict[str, Any]] = None
-    selected_pattern_id: Optional[int] = None
-    expanded_pattern_id: Optional[int] = None
-    pattern_display_options: Optional[Dict[str, Any]] = None
-    shared_pattern_data: Optional[Dict[str, Any]] = None
-    global_pattern_display: Optional[Dict[str, Any]] = None
-    indicators: Optional[Dict[str, bool]] = None
-    unselected_alpha: Optional[float] = Field(None, ge=0, le=1)
-    auto_center_on_select: Optional[bool] = None
-    harmonic_pattern_ids: Optional[List[int]] = None
-    thumbnail: Optional[str] = None
-
-
-class SavedAnalysisListItem(BaseModel):
-    """Model dla elementu listy zapisanych analiz."""
-    id: int
-    user_id: int
-    name: str
-    description: Optional[str]
-    asset_id: int
-    asset_name: Optional[str]
-    quote_name: Optional[str]
-    exchange_id: Optional[int]
-    exchange_name: Optional[str]
-    interval: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class SavedAnalysisFull(BaseModel):
-    """Model dla pełnych danych zapisanej analizy."""
-    id: int
-    user_id: int
-    name: str
-    description: Optional[str]
-    asset_id: int
-    asset_name: Optional[str]
-    quote_name: Optional[str]
-    exchange_id: Optional[int]
-    exchange_name: Optional[str]
-    interval: str
-    chart_visible_range: Optional[Dict[str, Any]]
-    selected_pattern_id: Optional[int]
-    expanded_pattern_id: Optional[int]
-    pattern_display_options: Dict[str, Any]
-    shared_pattern_data: Dict[str, Any]
-    global_pattern_display: Dict[str, Any]
-    indicators: Dict[str, bool]
-    unselected_alpha: float
-    auto_center_on_select: bool
-    harmonic_pattern_ids: List[int]
-    thumbnail: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-
-
-@router.post("/saved-analyses", response_model=StandardResponse)
-async def create_saved_analysis(
-    analysis_data: SavedAnalysisCreate,
-    current_user: AuthUser = Depends(require_auth)
-):
-    """
-    Tworzy nową zapisaną analizę dla zalogowanego użytkownika.
-    
-    Dostępne dla wszystkich zalogowanych użytkowników (user i administrator).
-    
-    Args:
-        analysis_data: Dane analizy do zapisania
-        
-    Returns:
-        StandardResponse: ID utworzonej analizy
-    """
-    try:
-        db = await get_db()
-        saved_analyses_table = db.get_factory().get_saved_analyses_table()
-        
-        analysis_id = await saved_analyses_table.create(
-            user_id=current_user.id,
-            name=analysis_data.name,
-            description=analysis_data.description,
-            asset_id=analysis_data.asset_id,
-            asset_name=analysis_data.asset_name,
-            quote_name=analysis_data.quote_name,
-            exchange_id=analysis_data.exchange_id,
-            exchange_name=analysis_data.exchange_name,
-            interval=analysis_data.interval,
-            chart_visible_range=analysis_data.chart_visible_range,
-            selected_pattern_id=analysis_data.selected_pattern_id,
-            expanded_pattern_id=analysis_data.expanded_pattern_id,
-            pattern_display_options=analysis_data.pattern_display_options,
-            shared_pattern_data=analysis_data.shared_pattern_data,
-            global_pattern_display=analysis_data.global_pattern_display,
-            indicators=analysis_data.indicators,
-            unselected_alpha=analysis_data.unselected_alpha,
-            auto_center_on_select=analysis_data.auto_center_on_select,
-            harmonic_pattern_ids=analysis_data.harmonic_pattern_ids,
-            thumbnail=analysis_data.thumbnail
-        )
-        
-        if analysis_id is None:
-            raise HTTPException(status_code=500, detail="Nie udało się utworzyć zapisanej analizy")
-        
-        logger.info(f"Użytkownik {current_user.username} utworzył zapisaną analizę: {analysis_data.name} (ID: {analysis_id})")
-        
-        return StandardResponse(
-            success=True,
-            message=f"Utworzono zapisaną analizę '{analysis_data.name}'",
-            data={
-                "analysis_id": analysis_id,
-                "name": analysis_data.name,
-                "asset_id": analysis_data.asset_id,
-                "interval": analysis_data.interval
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Błąd podczas tworzenia zapisanej analizy: {e}")
-        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
-
-
-@router.get("/saved-analyses")
-async def get_my_saved_analyses(
-    limit: int = Query(default=50, ge=1, le=1000, description="Limit wyników"),
-    offset: int = Query(default=0, ge=0, description="Offset dla paginacji"),
-    current_user: AuthUser = Depends(require_auth)
-):
-    """
-    Pobiera listę zapisanych analiz zalogowanego użytkownika.
-    
-    Zwraca skróconą wersję danych (bez szczegółów wykresu) dla szybkiego wyświetlenia listy.
-    
-    Returns:
-        Lista zapisanych analiz z podstawowymi informacjami
-    """
-    try:
-        db = await get_db()
-        saved_analyses_table = db.get_factory().get_saved_analyses_table()
-        
-        # Upewnij się że user_id jest int
-        user_id = int(current_user.id) if current_user.id is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Nieprawidłowe dane użytkownika")
-        
-        logger.debug(f"Fetching saved analyses for user_id={user_id} (type={type(user_id)})")
-        
-        analyses = await saved_analyses_table.get_by_user(
-            user_id=user_id,
-            limit=limit,
-            offset=offset
-        )
-        
-        total_count = await saved_analyses_table.count_by_user(user_id)
-        
-        # Konwertuj datetime na ISO string dla serializacji JSON
-        serialized_analyses = []
-        for analysis in analyses:
-            serialized = dict(analysis)
-            if 'created_at' in serialized and serialized['created_at']:
-                serialized['created_at'] = serialized['created_at'].isoformat()
-            if 'updated_at' in serialized and serialized['updated_at']:
-                serialized['updated_at'] = serialized['updated_at'].isoformat()
-            serialized_analyses.append(serialized)
-        
-        return {
-            "analyses": serialized_analyses,
-            "total_count": total_count,
-            "pagination": {
-                "limit": limit,
-                "offset": offset
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Błąd podczas pobierania zapisanych analiz: {e}")
-        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
-
-
-@router.get("/saved-analyses/{analysis_id}")
-async def get_saved_analysis(
-    analysis_id: int = Path(..., description="ID zapisanej analizy"),
-    current_user: AuthUser = Depends(require_auth)
-):
-    """
-    Pobiera pełne dane zapisanej analizy po ID.
-    
-    Użytkownik może pobierać tylko swoje analizy.
-    
-    Args:
-        analysis_id: ID analizy do pobrania
-        
-    Returns:
-        Pełne dane zapisanej analizy
-    """
-    try:
-        db = await get_db()
-        saved_analyses_table = db.get_factory().get_saved_analyses_table()
-        
-        analysis = await saved_analyses_table.get_by_user_full(
-            user_id=current_user.id,
-            analysis_id=analysis_id
-        )
-        
-        if analysis is None:
-            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
-        
-        # Konwertuj datetime na ISO string dla serializacji JSON
-        serialized = dict(analysis)
-        if 'created_at' in serialized and serialized['created_at']:
-            serialized['created_at'] = serialized['created_at'].isoformat()
-        if 'updated_at' in serialized and serialized['updated_at']:
-            serialized['updated_at'] = serialized['updated_at'].isoformat()
-        
-        return {
-            "analysis": serialized
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Błąd podczas pobierania zapisanej analizy: {e}")
-        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
-
-
-@router.put("/saved-analyses/{analysis_id}", response_model=StandardResponse)
-async def update_saved_analysis(
-    analysis_id: int = Path(..., description="ID zapisanej analizy"),
-    update_data: SavedAnalysisUpdate = Body(...),
-    current_user: AuthUser = Depends(require_auth)
-):
-    """
-    Aktualizuje zapisaną analizę.
-    
-    Użytkownik może aktualizować tylko swoje analizy.
-    
-    Args:
-        analysis_id: ID analizy do aktualizacji
-        update_data: Dane do aktualizacji
-        
-    Returns:
-        StandardResponse: Potwierdzenie aktualizacji
-    """
-    try:
-        db = await get_db()
-        saved_analyses_table = db.get_factory().get_saved_analyses_table()
-        
-        # Sprawdź czy analiza należy do użytkownika
-        existing = await saved_analyses_table.get_by_user_full(
-            user_id=current_user.id,
-            analysis_id=analysis_id
-        )
-        
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
-        
-        # Przygotuj dane do aktualizacji (tylko niepuste pola)
-        update_dict = {}
-        for field, value in update_data.model_dump().items():
-            if value is not None:
-                update_dict[field] = value
-        
-        if not update_dict:
-            return StandardResponse(
-                success=True,
-                message="Brak danych do aktualizacji",
-                data={"analysis_id": analysis_id}
-            )
-        
-        success = await saved_analyses_table.update(analysis_id, **update_dict)
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Nie udało się zaktualizować analizy")
-        
-        logger.info(f"Użytkownik {current_user.username} zaktualizował analizę ID: {analysis_id}")
-        
-        return StandardResponse(
-            success=True,
-            message=f"Zaktualizowano zapisaną analizę",
-            data={
-                "analysis_id": analysis_id,
-                "updated_fields": list(update_dict.keys())
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Błąd podczas aktualizacji zapisanej analizy: {e}")
-        raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
-
-
-@router.delete("/saved-analyses/{analysis_id}", response_model=StandardResponse)
-async def delete_saved_analysis(
-    analysis_id: int = Path(..., description="ID zapisanej analizy"),
-    current_user: AuthUser = Depends(require_auth)
-):
-    """
-    Usuwa zapisaną analizę.
-    
-    Użytkownik może usuwać tylko swoje analizy.
-    
-    Args:
-        analysis_id: ID analizy do usunięcia
-        
-    Returns:
-        StandardResponse: Potwierdzenie usunięcia
-    """
-    try:
-        db = await get_db()
-        saved_analyses_table = db.get_factory().get_saved_analyses_table()
-        
-        # Pobierz analizę przed usunięciem (dla logowania)
-        existing = await saved_analyses_table.get_by_user_full(
-            user_id=current_user.id,
-            analysis_id=analysis_id
-        )
-        
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
-        
-        analysis_name = existing.get('name', 'Unknown')
-        
-        success = await saved_analyses_table.delete_by_user(
-            record_id=analysis_id,
-            user_id=current_user.id
-        )
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Nie udało się usunąć analizy")
-        
-        logger.info(f"Użytkownik {current_user.username} usunął analizę: {analysis_name} (ID: {analysis_id})")
-        
-        return StandardResponse(
-            success=True,
-            message=f"Usunięto zapisaną analizę '{analysis_name}'",
-            data={"deleted_analysis_id": analysis_id}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Błąd podczas usuwania zapisanej analizy: {e}")
         raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
 
