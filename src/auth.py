@@ -50,6 +50,11 @@ class AuthUser:
         self._raw_data = session_data
     
     @property
+    def id(self) -> int:
+        """Alias dla user_id - dla wygody."""
+        return self.user_id
+    
+    @property
     def is_admin(self) -> bool:
         """Sprawdza czy użytkownik jest administratorem."""
         return self.role == 'administrator'
