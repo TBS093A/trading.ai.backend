@@ -13,8 +13,11 @@ import logging
 import importlib
 from typing import List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+
+# Import auth
+from src.auth import require_auth, require_admin, AuthUser
 
 # Konfiguracja logowania
 logging.basicConfig(
@@ -147,11 +150,16 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint."""
+async def health_check(current_user: AuthUser = Depends(require_admin)):
+    """
+    Health check endpoint.
+    
+    Wymaga uprawnień administratora.
+    """
     return {
         "status": "healthy",
-        "service": "telegram-pump-bot-api"
+        "service": "telegram-pump-bot-api",
+        "user": current_user.username
     }
 
 

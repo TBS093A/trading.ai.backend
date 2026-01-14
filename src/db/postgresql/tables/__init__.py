@@ -5,6 +5,8 @@ from .asset_exchanges_table import AssetExchangesTable
 from .technical_analysis_harmonic_patterns_table import TechnicalAnalysisHarmonicPatternsTable
 from .system_sync_job_table import SystemSyncJobTable
 from .cron_system_sync_job_table import CronSystemSyncJobTable
+from .users_table import UsersTable
+from .user_sessions_table import UserSessionsTable
 
 __all__ = [
     'AbstractTable',
@@ -13,5 +15,7 @@ __all__ = [
     'AssetExchangesTable',
     'TechnicalAnalysisHarmonicPatternsTable',
     'SystemSyncJobTable',
-    'CronSystemSyncJobTable'
+    'CronSystemSyncJobTable',
+    'UsersTable',
+    'UserSessionsTable'
 ] 

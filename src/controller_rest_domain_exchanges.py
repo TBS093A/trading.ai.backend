@@ -17,7 +17,7 @@ Autor: AI Assistant
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List, Union
-from fastapi import APIRouter, HTTPException, Query, Path, Body
+from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -31,10 +31,14 @@ from .api.api_facade import ApiFacade
 # Import Celery Task
 from .celery_tasks.sync_tasks import sync_exchanges_task
 
+# Import Auth
+from .auth import require_auth, require_admin, AuthUser
+
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
-router = APIRouter()
+# Wszystkie endpointy w tym routerze wymagają autentykacji
+router = APIRouter(dependencies=[Depends(require_auth)])
 PREFIX = "/exchanges"
 TAGS = ["Exchanges"]
 
@@ -231,10 +235,13 @@ async def trigger_sync_exchanges(
     request: SyncExchangesRequest = Body(
         default=SyncExchangesRequest(),
         description="Parametry synchronizacji giełd"
-    )
+    ),
+    current_user: AuthUser = Depends(require_admin)
 ):
     """
     Uruchamia zadanie Celery do synchronizacji assetów z giełd.
+    
+    Wymaga uprawnień administratora.
     
     Parametry:
         - **test_mode**: Tryb testowy bez zapisu do bazy (domyślnie False)

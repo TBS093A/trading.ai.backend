@@ -96,6 +96,22 @@ class Config:
         self.celery_broker_url = os.getenv("CELERY_BROKER_URL")
         self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND")
 
+        # Konfiguracja autentykacji
+        # ADMIN_USERNAME: Nazwa użytkownika administratora systemowego
+        self.admin_username = os.getenv("ADMIN_USERNAME", "admin")
+        
+        # ADMIN_PASSWORD: Hasło administratora systemowego
+        self.admin_password = os.getenv("ADMIN_PASSWORD")
+        
+        # ADMIN_CREATE_FORCE: Czy wymusić tworzenie administratora nawet jeśli istnieje
+        # Wartości: "true"/"false" (domyślnie: "false")
+        self.admin_create_force = os.getenv("ADMIN_CREATE_FORCE", "false").lower() == "true"
+        
+        # SESSION_EXPIRY_PERIOD: Okres wygaśnięcia tokenu sesji
+        # Format: <number><unit> np. "15h" (15 godzin), "7d" (7 dni), "30m" (30 minut)
+        # Domyślnie: "24h" (24 godziny)
+        self.session_expiry_period = os.getenv("SESSION_EXPIRY_PERIOD", "24h")
+
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
     
@@ -278,6 +294,16 @@ class Config:
         return {
             'broker_url': self.celery_broker_url,
             'result_backend': self.celery_result_backend
+        }
+    
+    @property
+    def auth_config(self) -> dict:
+        """Konfiguracja autentykacji jako słownik"""
+        return {
+            'admin_username': self.admin_username,
+            'admin_password': self.admin_password,
+            'admin_create_force': self.admin_create_force,
+            'session_expiry_period': self.session_expiry_period
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
