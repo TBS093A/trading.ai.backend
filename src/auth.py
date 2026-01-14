@@ -4,6 +4,7 @@ Moduł autentykacji dla FastAPI.
 Zawiera dependency do weryfikacji tokenów sesji oraz sprawdzania uprawnień.
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, Depends, Request
@@ -13,6 +14,27 @@ logger = logging.getLogger(__name__)
 
 # Security scheme dla Bearer token
 security = HTTPBearer(auto_error=False)
+
+# Singleton dla bazy danych w auth module
+_db_instance = None
+_db_lock = asyncio.Lock()
+
+
+async def _get_db():
+    """Pobiera singleton instancji bazy danych."""
+    global _db_instance
+    
+    if _db_instance is not None:
+        return _db_instance
+    
+    async with _db_lock:
+        if _db_instance is None:
+            from .db.database_facade import DatabaseFacade
+            db_facade = DatabaseFacade()
+            _db_instance = db_facade.get_database_postgresql()
+            await _db_instance.init_db()
+    
+    return _db_instance
 
 
 class AuthUser:
@@ -57,14 +79,8 @@ async def get_current_user(
     
     token = credentials.credentials
     
-    # Importujemy tutaj aby uniknąć circular imports
-    from .db.database_facade import DatabaseFacade
-    
     try:
-        db_facade = DatabaseFacade()
-        db = db_facade.get_database_postgresql()
-        await db.init_db()
-        
+        db = await _get_db()
         sessions_table = db.get_factory().get_user_sessions_table()
         session_data = await sessions_table.validate_token(token)
         
