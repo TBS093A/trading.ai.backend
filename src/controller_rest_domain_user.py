@@ -1113,7 +1113,7 @@ async def create_saved_analysis(
         raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
 
 
-@router.get("/saved-analyses", response_model=Dict[str, Any])
+@router.get("/saved-analyses")
 async def get_my_saved_analyses(
     limit: int = Query(default=50, ge=1, le=1000, description="Limit wyników"),
     offset: int = Query(default=0, ge=0, description="Offset dla paginacji"),
@@ -1139,8 +1139,18 @@ async def get_my_saved_analyses(
         
         total_count = await saved_analyses_table.count_by_user(current_user.id)
         
+        # Konwertuj datetime na ISO string dla serializacji JSON
+        serialized_analyses = []
+        for analysis in analyses:
+            serialized = dict(analysis)
+            if 'created_at' in serialized and serialized['created_at']:
+                serialized['created_at'] = serialized['created_at'].isoformat()
+            if 'updated_at' in serialized and serialized['updated_at']:
+                serialized['updated_at'] = serialized['updated_at'].isoformat()
+            serialized_analyses.append(serialized)
+        
         return {
-            "analyses": analyses,
+            "analyses": serialized_analyses,
             "total_count": total_count,
             "pagination": {
                 "limit": limit,
@@ -1153,7 +1163,7 @@ async def get_my_saved_analyses(
         raise HTTPException(status_code=500, detail=f"Błąd serwera: {str(e)}")
 
 
-@router.get("/saved-analyses/{analysis_id}", response_model=Dict[str, Any])
+@router.get("/saved-analyses/{analysis_id}")
 async def get_saved_analysis(
     analysis_id: int = Path(..., description="ID zapisanej analizy"),
     current_user: AuthUser = Depends(require_auth)
@@ -1181,8 +1191,15 @@ async def get_saved_analysis(
         if analysis is None:
             raise HTTPException(status_code=404, detail=f"Zapisana analiza o ID {analysis_id} nie istnieje")
         
+        # Konwertuj datetime na ISO string dla serializacji JSON
+        serialized = dict(analysis)
+        if 'created_at' in serialized and serialized['created_at']:
+            serialized['created_at'] = serialized['created_at'].isoformat()
+        if 'updated_at' in serialized and serialized['updated_at']:
+            serialized['updated_at'] = serialized['updated_at'].isoformat()
+        
         return {
-            "analysis": analysis
+            "analysis": serialized
         }
         
     except HTTPException:
