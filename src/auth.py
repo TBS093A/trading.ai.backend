@@ -41,8 +41,12 @@ class AuthUser:
     """Klasa reprezentująca zalogowanego użytkownika."""
     
     def __init__(self, session_data: Dict[str, Any]):
-        self.session_id: int = session_data.get('session_id')
-        self.user_id: int = session_data.get('user_id')
+        # Upewnij się że ID są intami
+        session_id = session_data.get('session_id')
+        user_id = session_data.get('user_id')
+        
+        self.session_id: int = int(session_id) if session_id is not None else None
+        self.user_id: int = int(user_id) if user_id is not None else None
         self.username: str = session_data.get('username')
         self.role: str = session_data.get('role')
         self.token: str = session_data.get('token')
