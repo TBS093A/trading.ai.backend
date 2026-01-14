@@ -150,12 +150,19 @@ class UsersTable(AbstractTable):
         try:
             password_hash = self.hash_password(password)
             
-            # Najpierw sprawdź czy sekwencja potrzebuje aktualizacji
-            await self.execute_query(
+            # Użyj INSERT ... ON CONFLICT DO UPDATE aby nadpisać istniejące dane
+            result = await self.fetch_one(
                 """
                 INSERT INTO users (id, username, password_hash, avatar, role, is_active) 
                 VALUES ($1, $2, $3, $4, $5, $6)
-                ON CONFLICT (id) DO NOTHING
+                ON CONFLICT (id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    password_hash = EXCLUDED.password_hash,
+                    avatar = COALESCE(EXCLUDED.avatar, users.avatar),
+                    role = EXCLUDED.role,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = CURRENT_TIMESTAMP
+                RETURNING id
                 """,
                 user_id, username, password_hash, avatar, role, is_active
             )
@@ -165,8 +172,12 @@ class UsersTable(AbstractTable):
                 "SELECT setval('users_id_seq', GREATEST((SELECT MAX(id) FROM users), 1))"
             )
             
-            logger.info(f"Utworzono użytkownika: {username} z ID: {user_id}, rola: {role}")
-            return user_id
+            if result:
+                logger.info(f"Utworzono użytkownika: {username} z ID: {user_id}, rola: {role}")
+                return user_id
+            else:
+                logger.error(f"Nie udało się utworzyć użytkownika: {username}")
+                return None
         except Exception as e:
             logger.error(f"Błąd podczas tworzenia użytkownika z ID: {e}", exc_info=True)
             return None
