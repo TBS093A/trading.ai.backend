@@ -236,6 +236,9 @@ class UserSessionsTable(AbstractTable):
             # Aktualizuj last_activity
             await self.update_activity(result['session_id'])
             
+            # Debug logging
+            logger.info(f"validate_token returning: user_id={result.get('user_id')} (type={type(result.get('user_id'))})")
+            
             return result
             
         except Exception as e:
