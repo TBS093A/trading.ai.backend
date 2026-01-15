@@ -11,13 +11,22 @@ Autor: AI Assistant
 import os
 import logging
 import importlib
-from typing import List
+from typing import List, Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import auth
-from src.auth import require_auth, require_admin, AuthUser
+from src.auth import require_auth, require_admin, AuthUser, get_current_user
+
+# Import security
+from src.security import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    CSRFMiddleware,
+    CSRFTokenManager,
+    InputSanitizer,
+)
 
 # Konfiguracja logowania
 logging.basicConfig(
@@ -66,8 +75,21 @@ app.add_middleware(
     allow_origins=["*"],  # W produkcji należy ograniczyć do konkretnych domen
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-CSRF-Token"],  # Dodaj nagłówek CSRF
+    expose_headers=["X-RateLimit-Remaining", "X-RateLimit-Limit", "Retry-After"],
 )
+
+# Security Middlewares (kolejność ma znaczenie - wykonują się od dołu do góry)
+# 1. Security Headers - dodaje nagłówki bezpieczeństwa
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 2. Rate Limiting - ogranicza liczbę requestów
+app.add_middleware(RateLimitMiddleware)
+
+# 3. CSRF Protection - waliduje tokeny CSRF dla modyfikujących requestów
+# UWAGA: Tymczasowo wyłączone dla łatwiejszego developmentu
+# W produkcji należy odkomentować:
+# app.add_middleware(CSRFMiddleware)
 
 
 def load_rest_controllers() -> List[str]:
@@ -179,6 +201,41 @@ async def api_info():
         "total_routes": len(routes_info),
         "routes": routes_info,
         "loaded_controllers": getattr(app.state, 'loaded_controllers', [])
+    }
+
+
+# =============================================================================
+# Security Endpoints
+# =============================================================================
+
+@app.get("/csrf-token")
+async def get_csrf_token(
+    request: Request,
+    current_user: Optional[AuthUser] = Depends(get_current_user)
+):
+    """
+    Pobiera token CSRF dla aktualnej sesji.
+    
+    Token powinien być wysyłany w nagłówku X-CSRF-Token przy każdym
+    requeście modyfikującym (POST, PUT, DELETE, PATCH).
+    
+    Returns:
+        dict: Token CSRF
+    """
+    session_token = None
+    
+    # Pobierz token sesji jeśli użytkownik jest zalogowany
+    if current_user:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:]
+    
+    csrf_token = CSRFTokenManager.generate_token(session_token)
+    
+    return {
+        "csrf_token": csrf_token,
+        "expires_in": CSRFTokenManager.TOKEN_LIFETIME,
+        "header_name": "X-CSRF-Token"
     }
 
 
