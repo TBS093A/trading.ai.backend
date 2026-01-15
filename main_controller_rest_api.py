@@ -28,6 +28,9 @@ from src.security import (
     InputSanitizer,
 )
 
+# Import config
+from src.config import config
+
 # Konfiguracja logowania
 logging.basicConfig(
     level=logging.INFO,
@@ -69,14 +72,40 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# =============================================================================
 # Konfiguracja CORS
+# =============================================================================
+# Pobierz dozwolone originy z konfiguracji
+cors_allowed_origins = config.get_cors_allowed_origins()
+logger.info(f"🔒 CORS - Środowisko: {config.environment}")
+logger.info(f"🔒 CORS - Dozwolone originy: {cors_allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # W produkcji należy ograniczyć do konkretnych domen
+    # Lista dozwolonych originów (development: localhost:3000, production: 00x097.com)
+    allow_origins=cors_allowed_origins,
+    # Pozwól na credentials (cookies, Authorization header)
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*", "X-CSRF-Token"],  # Dodaj nagłówek CSRF
-    expose_headers=["X-RateLimit-Remaining", "X-RateLimit-Limit", "Retry-After"],
+    # Dozwolone metody HTTP
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    # Dozwolone nagłówki w requestach
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-CSRF-Token",
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+    ],
+    # Nagłówki odpowiedzi widoczne dla klienta
+    expose_headers=[
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Limit",
+        "Retry-After",
+        "X-Request-ID",
+    ],
+    # Cache preflight response na 1 godzinę (3600 sekund)
+    max_age=3600,
 )
 
 # Security Middlewares (kolejność ma znaczenie - wykonują się od dołu do góry)
