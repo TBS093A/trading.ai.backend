@@ -111,6 +111,18 @@ class Config:
         # Format: <number><unit> np. "15h" (15 godzin), "7d" (7 dni), "30m" (30 minut)
         # Domyślnie: "24h" (24 godziny)
         self.session_expiry_period = os.getenv("SESSION_EXPIRY_PERIOD", "24h")
+        
+        # CSRF_SECRET_KEY: Klucz tajny do generowania tokenów CSRF
+        # Jeśli nie ustawiony, zostanie wygenerowany automatycznie (niezalecane w produkcji)
+        self.csrf_secret_key = os.getenv("CSRF_SECRET_KEY")
+        
+        # RATE_LIMIT_REQUESTS_PER_MINUTE: Limit requestów na minutę
+        # Domyślnie: 120 (2 requesty na sekundę)
+        self.rate_limit_requests_per_minute = int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "120"))
+        
+        # RATE_LIMIT_BURST_SIZE: Dozwolony burst powyżej limitu
+        # Domyślnie: 30
+        self.rate_limit_burst_size = int(os.getenv("RATE_LIMIT_BURST_SIZE", "30"))
 
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
@@ -304,6 +316,15 @@ class Config:
             'admin_password': self.admin_password,
             'admin_create_force': self.admin_create_force,
             'session_expiry_period': self.session_expiry_period
+        }
+    
+    @property
+    def security_config(self) -> dict:
+        """Konfiguracja bezpieczeństwa jako słownik"""
+        return {
+            'csrf_secret_key': self.csrf_secret_key,
+            'rate_limit_requests_per_minute': self.rate_limit_requests_per_minute,
+            'rate_limit_burst_size': self.rate_limit_burst_size
         }
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
