@@ -123,6 +123,19 @@ class Config:
         # RATE_LIMIT_BURST_SIZE: Dozwolony burst powyżej limitu
         # Domyślnie: 30
         self.rate_limit_burst_size = int(os.getenv("RATE_LIMIT_BURST_SIZE", "30"))
+        
+        # ENVIRONMENT: Środowisko uruchomieniowe (development, staging, production)
+        # Domyślnie: development
+        self.environment = os.getenv("ENVIRONMENT", "development")
+        
+        # CORS_ALLOWED_ORIGINS: Lista dozwolonych originów dla CORS (oddzielone przecinkami)
+        # Przykład: "https://example.com,https://www.example.com"
+        # Jeśli nie ustawione, użyte zostaną domyślne wartości dla środowiska
+        self.cors_allowed_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+        
+        # FRONTEND_URL: URL frontendu (używane w produkcji)
+        # Przykład: "https://00x097.com"
+        self.frontend_url = os.getenv("FRONTEND_URL", "")
 
         # Walidacja wymaganych zmiennych
         self._validate_required_config()
@@ -326,6 +339,61 @@ class Config:
             'rate_limit_requests_per_minute': self.rate_limit_requests_per_minute,
             'rate_limit_burst_size': self.rate_limit_burst_size
         }
+    
+    @property
+    def cors_config(self) -> dict:
+        """Konfiguracja CORS jako słownik"""
+        return {
+            'environment': self.environment,
+            'allowed_origins': self.get_cors_allowed_origins(),
+            'frontend_url': self.frontend_url
+        }
+    
+    def get_cors_allowed_origins(self) -> list:
+        """
+        Zwraca listę dozwolonych originów dla CORS.
+        
+        W development: localhost:3000
+        W production: 00x097.com i inne skonfigurowane originy
+        
+        Returns:
+            list: Lista dozwolonych originów
+        """
+        origins = []
+        
+        # Dodaj originy z env var jeśli ustawione
+        if self.cors_allowed_origins_str:
+            origins.extend([
+                origin.strip() 
+                for origin in self.cors_allowed_origins_str.split(",") 
+                if origin.strip()
+            ])
+        
+        # Dodaj frontend_url jeśli ustawione
+        if self.frontend_url and self.frontend_url not in origins:
+            origins.append(self.frontend_url)
+        
+        # Domyślne originy w zależności od środowiska
+        if self.environment == "development":
+            dev_origins = [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:9090",  # Dla Swagger UI
+                "http://127.0.0.1:9090",
+            ]
+            for origin in dev_origins:
+                if origin not in origins:
+                    origins.append(origin)
+        elif self.environment in ("staging", "production"):
+            prod_origins = [
+                "https://00x097.com",
+                "https://www.00x097.com",
+            ]
+            for origin in prod_origins:
+                if origin not in origins:
+                    origins.append(origin)
+        
+        return origins
     
     def get_api_config(self, exchange: str) -> Optional[dict]:
         """Pobierz konfigurację API dla określonej giełdy"""
