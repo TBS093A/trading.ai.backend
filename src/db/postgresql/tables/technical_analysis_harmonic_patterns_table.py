@@ -148,6 +148,34 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             logger.error(f"Błąd podczas usuwania analizy technicznej: {e}", exc_info=True)
             return False
     
+    async def delete_by_asset_id(self, asset_id: int) -> int:
+        """Usuwa wszystkie analizy techniczne dla danego assetu.
+        
+        Args:
+            asset_id: ID assetu
+            
+        Returns:
+            Liczba usuniętych rekordów
+        """
+        try:
+            # Najpierw policz ile rekordów będzie usuniętych
+            count = await self.fetch_val(
+                "SELECT COUNT(*) FROM technical_analysis_harmonic_patterns WHERE asset_id = $1",
+                asset_id
+            )
+            
+            # Usuń wszystkie rekordy
+            await self.execute_query(
+                "DELETE FROM technical_analysis_harmonic_patterns WHERE asset_id = $1",
+                asset_id
+            )
+            
+            logger.info(f"Usunięto {count} analiz technicznych dla asset_id: {asset_id}")
+            return count or 0
+        except Exception as e:
+            logger.error(f"Błąd podczas usuwania analiz technicznych dla asset_id {asset_id}: {e}", exc_info=True)
+            return 0
+    
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie analizy techniczne z limitem i offsetem."""
         results = await self.fetch_all("""
