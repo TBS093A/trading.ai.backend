@@ -423,17 +423,22 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def check_pattern_exists(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
                                  b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int,
                                  interval: str = None) -> bool:
-        """Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset i interwału."""
+        """
+        Sprawdza czy wzorzec o podanych timestampach już istnieje dla danego asset i interwału.
+        
+        Obsługuje NULL dla x_point_timestamp (ABCD/ABC) i d_point_timestamp (ABC)
+        używając IS NOT DISTINCT FROM.
+        """
         if interval:
             result = await self.fetch_one("""
             SELECT COUNT(*) as count
             FROM technical_analysis_harmonic_patterns 
             WHERE asset_id = $1 
-            AND x_point_timestamp = $2 
+            AND x_point_timestamp IS NOT DISTINCT FROM $2 
             AND a_point_timestamp = $3 
             AND b_point_timestamp = $4 
             AND c_point_timestamp = $5 
-            AND d_point_timestamp = $6
+            AND d_point_timestamp IS NOT DISTINCT FROM $6
             AND interval = $7
             """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, interval)
         else:
@@ -441,11 +446,11 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             SELECT COUNT(*) as count
             FROM technical_analysis_harmonic_patterns 
             WHERE asset_id = $1 
-            AND x_point_timestamp = $2 
+            AND x_point_timestamp IS NOT DISTINCT FROM $2 
             AND a_point_timestamp = $3 
             AND b_point_timestamp = $4 
             AND c_point_timestamp = $5 
-            AND d_point_timestamp = $6
+            AND d_point_timestamp IS NOT DISTINCT FROM $6
             """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
         
         return result['count'] > 0 if result else False
@@ -453,7 +458,12 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
     async def get_by_point_timestamps(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
                                      b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int,
                                      interval: str = None) -> Optional[Dict[str, Any]]:
-        """Pobiera wzorzec o podanych timestampach dla danego asset i opcjonalnie interwału."""
+        """
+        Pobiera wzorzec o podanych timestampach dla danego asset i opcjonalnie interwału.
+        
+        Obsługuje NULL dla x_point_timestamp (ABCD/ABC) i d_point_timestamp (ABC)
+        używając IS NOT DISTINCT FROM.
+        """
         if interval:
             result = await self.fetch_one("""
             SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
@@ -462,11 +472,11 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             FROM technical_analysis_harmonic_patterns ta
             JOIN assets a ON ta.asset_id = a.id
             WHERE ta.asset_id = $1 
-            AND ta.x_point_timestamp = $2 
+            AND ta.x_point_timestamp IS NOT DISTINCT FROM $2 
             AND ta.a_point_timestamp = $3 
             AND ta.b_point_timestamp = $4 
             AND ta.c_point_timestamp = $5 
-            AND ta.d_point_timestamp = $6
+            AND ta.d_point_timestamp IS NOT DISTINCT FROM $6
             AND ta.interval = $7
             LIMIT 1
             """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, interval)
@@ -478,11 +488,11 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             FROM technical_analysis_harmonic_patterns ta
             JOIN assets a ON ta.asset_id = a.id
             WHERE ta.asset_id = $1 
-            AND ta.x_point_timestamp = $2 
+            AND ta.x_point_timestamp IS NOT DISTINCT FROM $2 
             AND ta.a_point_timestamp = $3 
             AND ta.b_point_timestamp = $4 
             AND ta.c_point_timestamp = $5 
-            AND ta.d_point_timestamp = $6
+            AND ta.d_point_timestamp IS NOT DISTINCT FROM $6
             LIMIT 1
             """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
         
@@ -590,11 +600,13 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         Duplikat jest definiowany jako wzorzec o tych samych wartościach:
         - asset_id
         - interval
-        - x_point_timestamp
+        - x_point_timestamp (może być NULL dla ABCD/ABC)
         - a_point_timestamp
         - b_point_timestamp
         - c_point_timestamp
-        - d_point_timestamp
+        - d_point_timestamp (może być NULL dla ABC)
+        
+        Używa IS NOT DISTINCT FROM aby poprawnie obsługiwać NULL (NULL = NULL -> TRUE)
         
         Args:
             asset_id: Opcjonalnie ID assetu do sprawdzenia (None = wszystkie assety)
@@ -602,22 +614,24 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         Returns:
             Lista duplikatów z ich ID-ami (zachowuje najstarszy rekord, zwraca nowsze do usunięcia)
         """
+        # IS NOT DISTINCT FROM traktuje NULL jako równe sobie (NULL IS NOT DISTINCT FROM NULL = TRUE)
+        # W przeciwieństwie do = gdzie NULL = NULL daje NULL (falsy)
         base_query = """
         WITH duplicates AS (
             SELECT 
                 asset_id,
                 interval,
-                x_point_timestamp,
+                COALESCE(x_point_timestamp, -1) as x_ts,
                 a_point_timestamp,
                 b_point_timestamp,
                 c_point_timestamp,
-                d_point_timestamp,
+                COALESCE(d_point_timestamp, -1) as d_ts,
                 MIN(id) as keep_id,
                 COUNT(*) as duplicate_count
             FROM technical_analysis_harmonic_patterns
             {where_clause}
-            GROUP BY asset_id, interval, x_point_timestamp, a_point_timestamp, 
-                     b_point_timestamp, c_point_timestamp, d_point_timestamp
+            GROUP BY asset_id, interval, COALESCE(x_point_timestamp, -1), a_point_timestamp, 
+                     b_point_timestamp, c_point_timestamp, COALESCE(d_point_timestamp, -1)
             HAVING COUNT(*) > 1
         )
         SELECT ta.id, ta.asset_id, ta.interval, 
@@ -627,12 +641,12 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         FROM technical_analysis_harmonic_patterns ta
         JOIN duplicates d ON 
             ta.asset_id = d.asset_id AND
-            ta.interval = d.interval AND
-            ta.x_point_timestamp = d.x_point_timestamp AND
+            ta.interval IS NOT DISTINCT FROM d.interval AND
+            COALESCE(ta.x_point_timestamp, -1) = d.x_ts AND
             ta.a_point_timestamp = d.a_point_timestamp AND
             ta.b_point_timestamp = d.b_point_timestamp AND
             ta.c_point_timestamp = d.c_point_timestamp AND
-            ta.d_point_timestamp = d.d_point_timestamp
+            COALESCE(ta.d_point_timestamp, -1) = d.d_ts
         WHERE ta.id != d.keep_id
         ORDER BY ta.asset_id, ta.interval, ta.id
         """
