@@ -113,6 +113,11 @@ class TechnicalAnalysis:
                         existing_ta_json = existing_pattern.get('ta_object_json', {})
                         new_ta_json = pattern_data.get('ta_object_json', {})
                         
+                        # DEBUG: Pokaż ilość FE poziomów
+                        existing_fe = existing_ta_json.get('fibonacci_levels', {}).get('fe_extensions', {})
+                        new_fe = new_ta_json.get('fibonacci_levels', {}).get('fe_extensions', {})
+                        logger.info(f"[COMPARE] Pattern ID {existing_pattern['id']}: existing FE keys={list(existing_fe.keys())}, new FE keys={list(new_fe.keys())}")
+                        
                         # Porównaj kluczowe pola (pomijamy niektóre dynamiczne pola)
                         if self._patterns_differ(existing_ta_json, new_ta_json):
                             # Aktualizuj istniejący wzorzec

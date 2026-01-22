@@ -808,7 +808,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 logger.debug(f"Obliczono FE_BCD: 127.2%={fe_bcd_127:.6f}, 161.8%={fe_bcd_161:.6f} (bullish={is_bullish})")
             
             # Log summary of all FE levels
-            logger.debug(f"Obliczono łącznie {len(fe_levels)} poziomów FE: {list(fe_levels.keys())}")
+            logger.debug(f"Obliczono łącznie {len(fe_levels)} poziomów FE dla {pattern_type}: {list(fe_levels.keys())}")
             
         except Exception as e:
             logger.error(f"Błąd podczas obliczania Fibonacci Extensions: {e}")
