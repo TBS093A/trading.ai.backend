@@ -605,15 +605,37 @@ class HarmonicPatterns(TechnicalAnalysisObject):
     
     def _calculate_fibonacci_extensions(self, pattern_points: dict, is_bullish: bool, pattern_type: str) -> dict:
         """
-        Oblicza Fibonacci Extensions (FE) dla boków ABC i BCD wzorca harmonicznego.
+        Oblicza Fibonacci Extensions (FE) dla wszystkich boków wzorca harmonicznego.
         
-        Dla ABC (wszystkie patterny - ABC, ABCD, XABCD):
-        - Trend WZROSTOWY (is_bullish=True): FE = C - abs(B - A) * level
-        - Trend SPADKOWY (is_bullish=False): FE = C + abs(B - A) * level
+        Formuła ogólna: FE(P1P2, L) = P1 + (P2 - P1) * L
+        gdzie L to poziom (1.0, 1.13, 1.272, 1.618, 2.0, etc.)
         
-        Dla BCD (tylko XABCD z 5 punktami):
-        - Wybicie GÓRĄ (is_bullish=True): FE = D + abs(C - B) * level
-        - Wybicie DOŁEM (is_bullish=False): FE = D - abs(C - B) * level
+        Obliczane FE:
+        
+        1. FE(XA) - poziomy 1.272, 1.618:
+           Konfluencja z pkt D w Butterfly, Crab, Deep Crab.
+           Sprawdza poziom D gdy D > X (przestrzeli impuls).
+           
+        2. FE(BC) - poziomy 1.13, 1.272, 1.618, 2.0:
+           Konfluencja z pkt D w Shark, Deep Shark, 5-0.
+           Emocjonalne wykończenie ruchu - stop hunt, panic moves.
+           
+        3. FE(AB) - poziomy 1.0, 1.272, 1.618:
+           Konfluencja z pkt D w Bat, Gartley oraz korektach ABCD.
+           Sprawdza czy korekta jest geometrycznie zdrowa / symetria AB/CD.
+           
+        4. FE(AC) - poziomy 1.272, 1.618:
+           Konfluencja w Bat.
+           Sprawdza drugą falę impulsu (CD) wewnątrz struktury.
+           
+        5. FE(ABC) - poziomy 1.272, 1.618:
+           Sprawdza kontynuację impulsu (czy po korekcie BC rynek ma siłę
+           aby pociągnąć impuls AB dalej). Rola prognostyczna.
+           Dobre pod TP w ABCD / Bat / Gartley.
+           
+        6. FE(BCD) - poziomy 1.272, 1.618:
+           Sprawdza domknięcie korekty (weryfikuje pkt D).
+           Rola weryfikacyjna - sprawdza symetrię korekty.
         
         Args:
             pattern_points: Słownik z punktami wzorca {'A': {'index': x, 'price': y}, ...}
@@ -625,13 +647,117 @@ class HarmonicPatterns(TechnicalAnalysisObject):
         """
         fe_levels = {}
         
+        def calc_fe(p1_price: float, p2_price: float, level: float) -> float:
+            """Oblicza FE: P1 + (P2 - P1) * level"""
+            return p1_price + (p2_price - p1_price) * level
+        
+        def add_fe_level(name: str, price: float, level: float, leg: str, description: str = ''):
+            """Dodaje poziom FE do słownika"""
+            fe_levels[name] = {
+                'price': float(price),
+                'level': level,
+                'type': 'extension',
+                'leg': leg,
+                'is_bullish': is_bullish,
+                'description': description
+            }
+        
         try:
-            # Oblicz FE dla ABC (wymaga punktów A, B, C)
-            if 'A' in pattern_points and 'B' in pattern_points and 'C' in pattern_points:
-                a_price = pattern_points['A']['price']
-                b_price = pattern_points['B']['price']
-                c_price = pattern_points['C']['price']
-                
+            has_x = 'X' in pattern_points
+            has_a = 'A' in pattern_points
+            has_b = 'B' in pattern_points
+            has_c = 'C' in pattern_points
+            has_d = 'D' in pattern_points
+            
+            # Pobierz ceny punktów
+            x_price = pattern_points['X']['price'] if has_x else None
+            a_price = pattern_points['A']['price'] if has_a else None
+            b_price = pattern_points['B']['price'] if has_b else None
+            c_price = pattern_points['C']['price'] if has_c else None
+            d_price = pattern_points['D']['price'] if has_d else None
+            
+            # ========================================
+            # FE(XA) - dla Butterfly, Crab, Deep Crab
+            # Poziomy: 1.272, 1.618
+            # Sprawdza poziom D gdy D > X
+            # ========================================
+            if has_x and has_a:
+                add_fe_level(
+                    'FE_XA_127', calc_fe(x_price, a_price, 1.272), 1.272, 'XA',
+                    'Konfluencja z D w Butterfly/Crab'
+                )
+                add_fe_level(
+                    'FE_XA_161', calc_fe(x_price, a_price, 1.618), 1.618, 'XA',
+                    'Konfluencja z D w Butterfly/Crab'
+                )
+                logger.debug(f"Obliczono FE_XA: 127.2%, 161.8% (bullish={is_bullish})")
+            
+            # ========================================
+            # FE(BC) - dla Shark, Deep Shark, 5-0
+            # Poziomy: 1.13, 1.272, 1.618, 2.0
+            # Emocjonalne wykończenie ruchu
+            # ========================================
+            if has_b and has_c:
+                add_fe_level(
+                    'FE_BC_113', calc_fe(b_price, c_price, 1.13), 1.13, 'BC',
+                    'Stop hunt w Shark'
+                )
+                add_fe_level(
+                    'FE_BC_127', calc_fe(b_price, c_price, 1.272), 1.272, 'BC',
+                    'Konfluencja z D w Shark/5-0'
+                )
+                add_fe_level(
+                    'FE_BC_161', calc_fe(b_price, c_price, 1.618), 1.618, 'BC',
+                    'Konfluencja z D w Shark/Deep Shark'
+                )
+                add_fe_level(
+                    'FE_BC_200', calc_fe(b_price, c_price, 2.0), 2.0, 'BC',
+                    'Ekstremum w Deep Shark (rzadko)'
+                )
+                logger.debug(f"Obliczono FE_BC: 113%, 127.2%, 161.8%, 200% (bullish={is_bullish})")
+            
+            # ========================================
+            # FE(AB) - dla Bat, Gartley, ABCD korekty
+            # Poziomy: 1.0, 1.272, 1.618
+            # Sprawdza symetrię AB/CD
+            # ========================================
+            if has_a and has_b:
+                add_fe_level(
+                    'FE_AB_100', calc_fe(a_price, b_price, 1.0), 1.0, 'AB',
+                    'AB=CD (korekta symetryczna)'
+                )
+                add_fe_level(
+                    'FE_AB_127', calc_fe(a_price, b_price, 1.272), 1.272, 'AB',
+                    'Konfluencja z D w Bat/Gartley'
+                )
+                add_fe_level(
+                    'FE_AB_161', calc_fe(a_price, b_price, 1.618), 1.618, 'AB',
+                    'Konfluencja z D w ABCD rozszerzone'
+                )
+                logger.debug(f"Obliczono FE_AB: 100%, 127.2%, 161.8% (bullish={is_bullish})")
+            
+            # ========================================
+            # FE(AC) - dla Bat
+            # Poziomy: 1.272, 1.618
+            # Sprawdza drugą falę impulsu (CD)
+            # ========================================
+            if has_a and has_c:
+                add_fe_level(
+                    'FE_AC_127', calc_fe(a_price, c_price, 1.272), 1.272, 'AC',
+                    'Sprawdza CD w Bat'
+                )
+                add_fe_level(
+                    'FE_AC_161', calc_fe(a_price, c_price, 1.618), 1.618, 'AC',
+                    'Sprawdza CD w Bat (rozszerzone)'
+                )
+                logger.debug(f"Obliczono FE_AC: 127.2%, 161.8% (bullish={is_bullish})")
+            
+            # ========================================
+            # FE(ABC) - dla wszystkich wzorców
+            # Poziomy: 1.272, 1.618
+            # Kontynuacja impulsu - rola prognostyczna
+            # ========================================
+            if has_a and has_b and has_c:
                 ab_distance = abs(b_price - a_price)
                 
                 if is_bullish:
@@ -643,29 +769,22 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                     fe_abc_127 = c_price + ab_distance * 1.272
                     fe_abc_161 = c_price + ab_distance * 1.618
                 
-                fe_levels['FE_ABC_127'] = {
-                    'price': float(fe_abc_127),
-                    'level': 1.272,
-                    'type': 'extension',
-                    'leg': 'ABC',
-                    'is_bullish': is_bullish
-                }
-                fe_levels['FE_ABC_161'] = {
-                    'price': float(fe_abc_161),
-                    'level': 1.618,
-                    'type': 'extension',
-                    'leg': 'ABC',
-                    'is_bullish': is_bullish
-                }
-                
+                add_fe_level(
+                    'FE_ABC_127', fe_abc_127, 1.272, 'ABC',
+                    'Kontynuacja impulsu - TP w ABCD/Bat/Gartley'
+                )
+                add_fe_level(
+                    'FE_ABC_161', fe_abc_161, 1.618, 'ABC',
+                    'Kontynuacja impulsu - TP rozszerzone'
+                )
                 logger.debug(f"Obliczono FE_ABC: 127.2%={fe_abc_127:.6f}, 161.8%={fe_abc_161:.6f} (bullish={is_bullish})")
             
-            # Oblicz FE dla BCD (wymaga punktów B, C, D - tylko dla wzorców XABCD)
-            if 'B' in pattern_points and 'C' in pattern_points and 'D' in pattern_points and 'X' in pattern_points:
-                b_price = pattern_points['B']['price']
-                c_price = pattern_points['C']['price']
-                d_price = pattern_points['D']['price']
-                
+            # ========================================
+            # FE(BCD) - dla wzorców XABCD
+            # Poziomy: 1.272, 1.618
+            # Weryfikacja domknięcia korekty
+            # ========================================
+            if has_b and has_c and has_d and has_x:
                 cb_distance = abs(c_price - b_price)
                 
                 if is_bullish:
@@ -677,22 +796,18 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                     fe_bcd_127 = d_price - cb_distance * 1.272
                     fe_bcd_161 = d_price - cb_distance * 1.618
                 
-                fe_levels['FE_BCD_127'] = {
-                    'price': float(fe_bcd_127),
-                    'level': 1.272,
-                    'type': 'extension',
-                    'leg': 'BCD',
-                    'is_bullish': is_bullish
-                }
-                fe_levels['FE_BCD_161'] = {
-                    'price': float(fe_bcd_161),
-                    'level': 1.618,
-                    'type': 'extension',
-                    'leg': 'BCD',
-                    'is_bullish': is_bullish
-                }
-                
+                add_fe_level(
+                    'FE_BCD_127', fe_bcd_127, 1.272, 'BCD',
+                    'Weryfikacja D - symetria korekty'
+                )
+                add_fe_level(
+                    'FE_BCD_161', fe_bcd_161, 1.618, 'BCD',
+                    'Weryfikacja D - korekta pędząca'
+                )
                 logger.debug(f"Obliczono FE_BCD: 127.2%={fe_bcd_127:.6f}, 161.8%={fe_bcd_161:.6f} (bullish={is_bullish})")
+            
+            # Log summary of all FE levels
+            logger.debug(f"Obliczono łącznie {len(fe_levels)} poziomów FE: {list(fe_levels.keys())}")
             
         except Exception as e:
             logger.error(f"Błąd podczas obliczania Fibonacci Extensions: {e}")
