@@ -1331,6 +1331,66 @@ async def get_technical_analysis_stats():
 
 
 # ===================
+# DELETE ENDPOINTS
+# ===================
+
+class DeletePatternsResponse(BaseModel):
+    """Odpowiedź po usunięciu wzorców."""
+    success: bool
+    deleted_patterns_count: int
+    deleted_analyses_count: int
+    message: str
+
+
+@router.delete("/asset/{asset_id}/all", response_model=DeletePatternsResponse)
+async def delete_all_patterns_for_asset(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Usuwa wszystkie wzorce harmoniczne dla danego assetu.
+    
+    UWAGA: Ta operacja jest nieodwracalna!
+    Wymaga uprawnień administratora.
+    
+    Usuwa również wszystkie zapisane analizy (saved analyses) 
+    które odnoszą się do tego assetu.
+    
+    Args:
+        asset_id: ID assetu którego wzorce mają być usunięte
+        
+    Returns:
+        DeletePatternsResponse: Informacje o usuniętych rekordach
+    """
+    try:
+        db = await get_db()
+        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
+        saved_analyses_table = db.get_factory().get_saved_analyses_table()
+        
+        # Usuń zapisane analizy dla tego assetu
+        deleted_analyses = await saved_analyses_table.delete_by_asset_id(asset_id)
+        
+        # Usuń wszystkie wzorce harmoniczne dla tego assetu
+        deleted_patterns = await ta_table.delete_by_asset_id(asset_id)
+        
+        logger.info(
+            f"Admin {current_user.username} usunął wszystkie wzorce dla asset_id={asset_id}: "
+            f"{deleted_patterns} wzorców, {deleted_analyses} zapisanych analiz"
+        )
+        
+        return DeletePatternsResponse(
+            success=True,
+            deleted_patterns_count=deleted_patterns,
+            deleted_analyses_count=deleted_analyses,
+            message=f"Usunięto {deleted_patterns} wzorców harmonicznych i {deleted_analyses} zapisanych analiz dla assetu {asset_id}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error deleting patterns for asset {asset_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete patterns: {str(e)}")
+
+
+# ===================
 # PARAMETRYZOWANA ŚCIEŻKA - MUSI BYĆ NA KOŃCU
 # ===================
 
