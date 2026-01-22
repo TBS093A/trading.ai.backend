@@ -780,11 +780,12 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                 logger.debug(f"Obliczono FE_ABC: 127.2%={fe_abc_127:.6f}, 161.8%={fe_abc_161:.6f} (bullish={is_bullish})")
             
             # ========================================
-            # FE(BCD) - dla wzorców XABCD
+            # FE(BCD) - dla wzorców XABCD oraz ABCD
             # Poziomy: 1.272, 1.618
             # Weryfikacja domknięcia korekty
+            # KLUCZOWE dla korekt ABCD!
             # ========================================
-            if has_b and has_c and has_d and has_x:
+            if has_b and has_c and has_d:
                 cb_distance = abs(c_price - b_price)
                 
                 if is_bullish:
