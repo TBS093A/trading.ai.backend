@@ -293,6 +293,35 @@ class SavedAnalysesTable(AbstractTable):
             logger.error(f"Błąd podczas usuwania zapisanej analizy: {e}", exc_info=True)
             return False
     
+    async def delete_by_asset_id(self, asset_id: int) -> int:
+        """
+        Usuwa wszystkie zapisane analizy dla danego assetu.
+        
+        Args:
+            asset_id: ID assetu
+            
+        Returns:
+            int: Liczba usuniętych rekordów
+        """
+        try:
+            # Policz ile rekordów będzie usuniętych
+            count = await self.fetch_val(
+                "SELECT COUNT(*) FROM saved_analyses WHERE asset_id = $1",
+                asset_id
+            )
+            
+            # Usuń wszystkie rekordy
+            await self.execute_query(
+                "DELETE FROM saved_analyses WHERE asset_id = $1",
+                asset_id
+            )
+            
+            logger.info(f"Usunięto {count} zapisanych analiz dla asset_id: {asset_id}")
+            return count or 0
+        except Exception as e:
+            logger.error(f"Błąd podczas usuwania zapisanych analiz dla asset_id {asset_id}: {e}", exc_info=True)
+            return 0
+    
     async def delete_by_user(self, record_id: int, user_id: int) -> bool:
         """
         Usuwa zapisaną analizę tylko jeśli należy do użytkownika.
