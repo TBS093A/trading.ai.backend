@@ -29,6 +29,7 @@ from .db.postgresql.database_postgresql import DatabasePostgreSQL
 
 # Import Celery Tasks
 from .celery_tasks.analysis_tasks import sync_technical_analysis_task, sync_bulk_assets_technical_analysis_task
+from .sync_technical_analysis import TechnicalAnalysis
 
 # Import Auth
 from .auth import require_auth, require_admin, AuthUser
@@ -1485,3 +1486,98 @@ async def get_technical_analysis_with_images(
     except Exception as e:
         logger.error(f"Error getting technical analysis with images {analysis_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get analysis with images: {str(e)}")
+
+
+# =============================================================================
+# CLEANUP ENDPOINTS (admin only)
+# =============================================================================
+
+class CleanupDuplicatesResponse(BaseModel):
+    """Odpowiedź z operacji czyszczenia duplikatów."""
+    success: bool
+    duplicates_removed: int
+    message: str
+
+
+@router.post("/cleanup/duplicates", response_model=CleanupDuplicatesResponse)
+async def cleanup_duplicate_patterns(
+    asset_id: Optional[int] = Query(None, description="Opcjonalne ID assetu do czyszczenia (None = wszystkie)"),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Usuwa duplikaty wzorców harmonicznych z bazy danych.
+    
+    Duplikat to wzorzec o tych samych punktach (X, A, B, C, D), interwale i asset_id.
+    Zachowuje najstarszy rekord (najniższe ID), usuwa nowsze duplikaty.
+    
+    UWAGA: Ta operacja jest nieodwracalna! Wymaga uprawnień administratora.
+    
+    Args:
+        asset_id: Opcjonalne ID assetu (None = czyści wszystkie assety)
+        
+    Returns:
+        CleanupDuplicatesResponse: Wynik operacji czyszczenia
+    """
+    try:
+        db = await get_db()
+        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
+        
+        # Policz duplikaty przed usunięciem
+        duplicates_count = await ta_table.count_duplicates(asset_id)
+        
+        if duplicates_count == 0:
+            return CleanupDuplicatesResponse(
+                success=True,
+                duplicates_removed=0,
+                message="Brak duplikatów do usunięcia - baza jest czysta"
+            )
+        
+        # Usuń duplikaty
+        removed = await ta_table.remove_duplicates(asset_id)
+        
+        logger.info(f"Admin {current_user.username} usunął {removed} duplikatów" + 
+                   (f" dla asset_id={asset_id}" if asset_id else " (wszystkie assety)"))
+        
+        return CleanupDuplicatesResponse(
+            success=True,
+            duplicates_removed=removed,
+            message=f"Usunięto {removed} duplikatów wzorców harmonicznych"
+        )
+        
+    except Exception as e:
+        logger.error(f"Błąd podczas czyszczenia duplikatów: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Błąd podczas czyszczenia duplikatów: {str(e)}")
+
+
+@router.get("/cleanup/duplicates/count")
+async def count_duplicate_patterns(
+    asset_id: Optional[int] = Query(None, description="Opcjonalne ID assetu (None = wszystkie)"),
+    current_user: AuthUser = Depends(require_admin)
+):
+    """
+    Zlicza duplikaty wzorców harmonicznych bez ich usuwania.
+    
+    Wymaga uprawnień administratora.
+    
+    Args:
+        asset_id: Opcjonalne ID assetu (None = wszystkie assety)
+        
+    Returns:
+        Liczba duplikatów
+    """
+    try:
+        db = await get_db()
+        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
+        
+        duplicates_count = await ta_table.count_duplicates(asset_id)
+        
+        return {
+            "duplicates_count": duplicates_count,
+            "asset_id": asset_id,
+            "message": f"Znaleziono {duplicates_count} duplikatów" + 
+                      (f" dla asset_id={asset_id}" if asset_id else " (wszystkie assety)")
+        }
+        
+    except Exception as e:
+        logger.error(f"Błąd podczas zliczania duplikatów: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Błąd podczas zliczania duplikatów: {str(e)}")

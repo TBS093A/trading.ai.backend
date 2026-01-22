@@ -14,6 +14,46 @@ class TechnicalAnalysis:
     Pobiera assety z bazy danych, oblicza harmonic patterns i zapisuje je do bazy.
     """
     
+    async def cleanup_all_duplicates(self) -> Dict[str, int]:
+        """
+        Usuwa wszystkie duplikaty wzorców harmonicznych z bazy danych.
+        
+        Duplikat jest definiowany jako wzorzec o tych samych:
+        - asset_id, interval, x/a/b/c/d_point_timestamp
+        
+        Zachowuje najstarszy rekord (najniższe ID), usuwa nowsze duplikaty.
+        
+        Returns:
+            Dict z liczbą usuniętych duplikatów
+        """
+        try:
+            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+            
+            logger.info("=== Rozpoczęcie czyszczenia duplikatów ===")
+            
+            ta_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
+            
+            # Policz duplikaty przed usunięciem
+            duplicates_count = await ta_table.count_duplicates()
+            logger.info(f"Znaleziono {duplicates_count} duplikatów do usunięcia")
+            
+            if duplicates_count == 0:
+                logger.info("Brak duplikatów - baza jest czysta")
+                return {'duplicates_removed': 0}
+            
+            # Usuń duplikaty
+            removed = await ta_table.remove_duplicates()
+            
+            logger.info(f"=== Czyszczenie duplikatów zakończone: usunięto {removed} rekordów ===")
+            
+            return {'duplicates_removed': removed}
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas czyszczenia duplikatów: {e}", exc_info=True)
+            return {'duplicates_removed': 0, 'error': str(e)}
+    
     CHART_INTERVALS = {
         "1m": timedelta(minutes=1),
         "15m": timedelta(minutes=15),
@@ -112,11 +152,6 @@ class TechnicalAnalysis:
                         # Wzorzec istnieje - sprawdź czy ta_object_json się różni
                         existing_ta_json = existing_pattern.get('ta_object_json', {})
                         new_ta_json = pattern_data.get('ta_object_json', {})
-                        
-                        # DEBUG: Pokaż ilość FE poziomów
-                        existing_fe = existing_ta_json.get('fibonacci_levels', {}).get('fe_extensions', {})
-                        new_fe = new_ta_json.get('fibonacci_levels', {}).get('fe_extensions', {})
-                        logger.info(f"[COMPARE] Pattern ID {existing_pattern['id']}: existing FE keys={list(existing_fe.keys())}, new FE keys={list(new_fe.keys())}")
                         
                         # Porównaj kluczowe pola (pomijamy niektóre dynamiczne pola)
                         if self._patterns_differ(existing_ta_json, new_ta_json):
@@ -302,6 +337,11 @@ class TechnicalAnalysis:
             for asset in assets:
                 try:
                     logger.info(f"=== Przetwarzam asset: {asset['asset']}/{asset['quote']} ===")
+                    
+                    # KROK 2.5: Usuń duplikaty dla tego assetu (cleanup przed sync)
+                    duplicates_removed = await technical_analysis_harmonic_patterns_table.remove_duplicates(asset['id'])
+                    if duplicates_removed > 0:
+                        logger.info(f"Usunięto {duplicates_removed} duplikatów dla {asset['asset']}/{asset['quote']}")
                     
                     # KROK 3: Pętla po interwałach
                     for interval, interval_timedelta in self.CHART_INTERVALS.items():

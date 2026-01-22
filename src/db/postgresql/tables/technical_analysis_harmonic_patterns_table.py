@@ -582,3 +582,117 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """, asset_id)
         
         return result or 0
+    
+    async def find_duplicates(self, asset_id: int = None) -> List[Dict[str, Any]]:
+        """
+        Znajduje duplikaty wzorców harmonicznych.
+        
+        Duplikat jest definiowany jako wzorzec o tych samych wartościach:
+        - asset_id
+        - interval
+        - x_point_timestamp
+        - a_point_timestamp
+        - b_point_timestamp
+        - c_point_timestamp
+        - d_point_timestamp
+        
+        Args:
+            asset_id: Opcjonalnie ID assetu do sprawdzenia (None = wszystkie assety)
+            
+        Returns:
+            Lista duplikatów z ich ID-ami (zachowuje najstarszy rekord, zwraca nowsze do usunięcia)
+        """
+        base_query = """
+        WITH duplicates AS (
+            SELECT 
+                asset_id,
+                interval,
+                x_point_timestamp,
+                a_point_timestamp,
+                b_point_timestamp,
+                c_point_timestamp,
+                d_point_timestamp,
+                MIN(id) as keep_id,
+                COUNT(*) as duplicate_count
+            FROM technical_analysis_harmonic_patterns
+            {where_clause}
+            GROUP BY asset_id, interval, x_point_timestamp, a_point_timestamp, 
+                     b_point_timestamp, c_point_timestamp, d_point_timestamp
+            HAVING COUNT(*) > 1
+        )
+        SELECT ta.id, ta.asset_id, ta.interval, 
+               ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp,
+               ta.c_point_timestamp, ta.d_point_timestamp,
+               d.keep_id, d.duplicate_count
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN duplicates d ON 
+            ta.asset_id = d.asset_id AND
+            ta.interval = d.interval AND
+            ta.x_point_timestamp = d.x_point_timestamp AND
+            ta.a_point_timestamp = d.a_point_timestamp AND
+            ta.b_point_timestamp = d.b_point_timestamp AND
+            ta.c_point_timestamp = d.c_point_timestamp AND
+            ta.d_point_timestamp = d.d_point_timestamp
+        WHERE ta.id != d.keep_id
+        ORDER BY ta.asset_id, ta.interval, ta.id
+        """
+        
+        if asset_id is not None:
+            query = base_query.format(where_clause=f"WHERE asset_id = $1")
+            results = await self.fetch_all(query, asset_id)
+        else:
+            query = base_query.format(where_clause="")
+            results = await self.fetch_all(query)
+        
+        return results
+    
+    async def remove_duplicates(self, asset_id: int = None) -> int:
+        """
+        Usuwa duplikaty wzorców harmonicznych, zachowując najstarsze rekordy.
+        
+        Args:
+            asset_id: Opcjonalnie ID assetu (None = wszystkie assety)
+            
+        Returns:
+            Liczba usuniętych duplikatów
+        """
+        try:
+            # Znajdź duplikaty
+            duplicates = await self.find_duplicates(asset_id)
+            
+            if not duplicates:
+                logger.info(f"Brak duplikatów do usunięcia" + (f" dla asset_id={asset_id}" if asset_id else ""))
+                return 0
+            
+            # Pobierz ID-ki do usunięcia
+            ids_to_delete = [d['id'] for d in duplicates]
+            
+            # Usuń duplikaty
+            if ids_to_delete:
+                placeholders = ', '.join([f'${i+1}' for i in range(len(ids_to_delete))])
+                await self.execute_query(
+                    f"DELETE FROM technical_analysis_harmonic_patterns WHERE id IN ({placeholders})",
+                    *ids_to_delete
+                )
+                
+                logger.info(f"Usunięto {len(ids_to_delete)} duplikatów wzorców harmonicznych" + 
+                           (f" dla asset_id={asset_id}" if asset_id else ""))
+            
+            return len(ids_to_delete)
+            
+        except Exception as e:
+            logger.error(f"Błąd podczas usuwania duplikatów: {e}", exc_info=True)
+            return 0
+    
+    async def count_duplicates(self, asset_id: int = None) -> int:
+        """
+        Zlicza duplikaty wzorców harmonicznych.
+        
+        Args:
+            asset_id: Opcjonalnie ID assetu (None = wszystkie assety)
+            
+        Returns:
+            Liczba duplikatów
+        """
+        duplicates = await self.find_duplicates(asset_id)
+        return len(duplicates)
