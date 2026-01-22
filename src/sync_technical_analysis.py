@@ -75,25 +75,30 @@ class TechnicalAnalysis:
         """
         return int(datetime.now().timestamp() * 1000)
     
-    async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> int:
+    async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> Dict[str, int]:
         """
-        Zapisuje wzorce harmoniczne do bazy danych z obiektów HarmonicPatterns.
+        Zapisuje lub aktualizuje wzorce harmoniczne w bazie danych.
+        
+        Jeśli wzorzec o tych samych punktach (X, A, B, C, D) i interwale już istnieje,
+        porównuje ta_object_json i aktualizuje jeśli obliczenia się różnią.
         
         Args:
             calculated_patterns: Lista słowników z obliczonymi wzorcami
             
         Returns:
-            int: Liczba zapisanych wzorców
+            Dict[str, int]: Słownik z liczbą zapisanych i zaktualizowanych wzorców
         """
         saved_count = 0
+        updated_count = 0
+        skipped_count = 0
         
         try:
             technical_analysis_harmonic_patterns_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
               
             for pattern_data in calculated_patterns:
                 try:
-                    # Sprawdź czy wzorzec już istnieje w bazie danych
-                    pattern_exists = await technical_analysis_harmonic_patterns_table.check_pattern_exists(
+                    # Pobierz istniejący wzorzec (jeśli istnieje)
+                    existing_pattern = await technical_analysis_harmonic_patterns_table.get_by_point_timestamps(
                         pattern_data['asset_id'],
                         pattern_data['x_point_timestamp'],
                         pattern_data['a_point_timestamp'],
@@ -103,29 +108,131 @@ class TechnicalAnalysis:
                         interval=pattern_data['interval']
                     )
                     
-                    if pattern_exists:
-                        logger.debug(f"Wzorzec już istnieje w bazie danych - pomijam")
-                        continue
-                    
-                    # Zapisz do bazy danych
-                    new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
-                    
-                    if new_pattern_id:
-                        saved_count += 1
-                        logger.debug(f"Zapisano wzorzec do bazy danych z ID: {new_pattern_id}")
+                    if existing_pattern:
+                        # Wzorzec istnieje - sprawdź czy ta_object_json się różni
+                        existing_ta_json = existing_pattern.get('ta_object_json', {})
+                        new_ta_json = pattern_data.get('ta_object_json', {})
+                        
+                        # Porównaj kluczowe pola (pomijamy niektóre dynamiczne pola)
+                        if self._patterns_differ(existing_ta_json, new_ta_json):
+                            # Aktualizuj istniejący wzorzec
+                            update_success = await technical_analysis_harmonic_patterns_table.update(
+                                existing_pattern['id'],
+                                ta_object_json=new_ta_json
+                            )
+                            if update_success:
+                                updated_count += 1
+                                logger.debug(f"Zaktualizowano wzorzec ID {existing_pattern['id']} - obliczenia się zmieniły")
+                            else:
+                                logger.error(f"Nie udało się zaktualizować wzorca ID {existing_pattern['id']}")
+                        else:
+                            skipped_count += 1
+                            logger.debug(f"Wzorzec ID {existing_pattern['id']} - bez zmian, pomijam")
                     else:
-                        logger.error(f"Nie udało się zapisać wzorca do bazy danych")
+                        # Nowy wzorzec - zapisz do bazy danych
+                        new_pattern_id = await technical_analysis_harmonic_patterns_table.create(**pattern_data)
+                        
+                        if new_pattern_id:
+                            saved_count += 1
+                            logger.debug(f"Zapisano nowy wzorzec do bazy danych z ID: {new_pattern_id}")
+                        else:
+                            logger.error(f"Nie udało się zapisać wzorca do bazy danych")
                         
                 except Exception as e:
-                    logger.error(f"Błąd podczas zapisywania pojedynczego wzorca do bazy danych: {e}")
+                    logger.error(f"Błąd podczas zapisywania/aktualizacji pojedynczego wzorca: {e}")
                     continue
             
-            logger.info(f"Zapisano {saved_count} wzorców harmonicznych do bazy danych")
-            return saved_count
+            logger.info(f"Sync wynik: {saved_count} nowych, {updated_count} zaktualizowanych, {skipped_count} bez zmian")
+            return {
+                'saved': saved_count,
+                'updated': updated_count,
+                'skipped': skipped_count
+            }
             
         except Exception as e:
             logger.error(f"Błąd podczas zapisywania wzorców harmonicznych do bazy danych: {e}")
-            return saved_count
+            return {
+                'saved': saved_count,
+                'updated': updated_count,
+                'skipped': skipped_count
+            }
+    
+    def _patterns_differ(self, existing_json: Dict, new_json: Dict) -> bool:
+        """
+        Porównuje dwa ta_object_json i sprawdza czy się różnią w kluczowych polach.
+        
+        Porównywane pola:
+        - fibonacci_levels (retracement, extension, fe_extensions, all_targets)
+        - points (X, A, B, C, D ceny i indeksy)
+        - pattern_type, is_bullish, is_formed
+        - retraces
+        - completion_min_price, completion_max_price
+        
+        Args:
+            existing_json: Istniejący ta_object_json z bazy danych
+            new_json: Nowo obliczony ta_object_json
+            
+        Returns:
+            bool: True jeśli się różnią, False jeśli są identyczne
+        """
+        # Kluczowe pola do porównania
+        key_fields = [
+            'pattern_type',
+            'is_bullish',
+            'is_formed',
+            'completion_min_price',
+            'completion_max_price',
+        ]
+        
+        # Sprawdź proste pola
+        for field in key_fields:
+            if existing_json.get(field) != new_json.get(field):
+                logger.debug(f"Różnica w polu '{field}': {existing_json.get(field)} vs {new_json.get(field)}")
+                return True
+        
+        # Porównaj fibonacci_levels
+        existing_fib = existing_json.get('fibonacci_levels', {})
+        new_fib = new_json.get('fibonacci_levels', {})
+        
+        fib_sections = ['retracement', 'extension', 'fe_extensions', 'all_targets']
+        for section in fib_sections:
+            existing_section = existing_fib.get(section, {})
+            new_section = new_fib.get(section, {})
+            
+            # Sprawdź czy mają te same klucze
+            if set(existing_section.keys()) != set(new_section.keys()):
+                logger.debug(f"Różnica w kluczach fibonacci_levels.{section}")
+                return True
+            
+            # Sprawdź wartości (z tolerancją dla float)
+            for key in new_section.keys():
+                existing_val = existing_section.get(key)
+                new_val = new_section.get(key)
+                
+                # Dla słowników (jak fe_extensions) porównaj zagnieżdżone wartości
+                if isinstance(new_val, dict) and isinstance(existing_val, dict):
+                    if existing_val.get('price') != new_val.get('price'):
+                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.price")
+                        return True
+                    if existing_val.get('level') != new_val.get('level'):
+                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.level")
+                        return True
+                    # Nowe pole - leg
+                    if existing_val.get('leg') != new_val.get('leg'):
+                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.leg")
+                        return True
+                elif existing_val != new_val:
+                    logger.debug(f"Różnica w fibonacci_levels.{section}.{key}")
+                    return True
+        
+        # Porównaj retraces
+        existing_retraces = existing_json.get('retraces', {})
+        new_retraces = new_json.get('retraces', {})
+        if existing_retraces != new_retraces:
+            logger.debug(f"Różnica w retraces")
+            return True
+        
+        return False
     
     async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_ids: Optional[List[int]] = None) -> None:
         """
@@ -200,7 +307,7 @@ class TechnicalAnalysis:
                             start_time = self._calculate_start_time(interval)
                             end_time = self._calculate_end_time()
                             
-                            # KROK 4: Sprawdź czy są jakiekolwiek harmonic patterns
+                            # KROK 4: Sprawdź czy są jakiekolwiek harmonic patterns (info only)
                             existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
                                 start_timestamp=start_time,
                                 end_timestamp=end_time,
@@ -208,13 +315,13 @@ class TechnicalAnalysis:
                                 interval=interval
                             )
                             
-                            if existing_patterns and len(existing_patterns) > 0:
-                                # Są już patterns - pomijamy
-                                logger.info(f"Harmonic patterns już istnieją dla tego zakresu - pomijam interwał {interval}")
-                                continue
-                            
-                            # Brak patterns - generujemy nowe
-                            logger.info(f"Brak harmonic patterns - generuję nowe dla interwału {interval}")
+                            existing_count = len(existing_patterns) if existing_patterns else 0
+                            if existing_count > 0:
+                                # Są już patterns - obliczamy i aktualizujemy jeśli się zmieniły
+                                logger.info(f"Znaleziono {existing_count} istniejących patternów - sprawdzam aktualizacje dla interwału {interval}")
+                            else:
+                                # Brak patterns - generujemy nowe
+                                logger.info(f"Brak harmonic patterns - generuję nowe dla interwału {interval}")
                             
                             # KROK 5: Pobierz klines z giełd
                             klines = None
@@ -268,13 +375,17 @@ class TechnicalAnalysis:
                                 
                                 # KROK 8: Zapisz obliczone wzorce harmoniczne do bazy danych
                                 calculated_harmonic_patterns = harmonic_patterns.get_calculated_objects()
-                                patterns_saved = await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
+                                sync_result = await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
                                 
-                                if patterns_saved > 0:
-                                    processed_count += patterns_saved
-                                    logger.info(f"Zapisano {patterns_saved} wzorców dla {asset['asset']}/{asset['quote']} i interwału {interval}")
+                                saved = sync_result.get('saved', 0)
+                                updated = sync_result.get('updated', 0)
+                                skipped = sync_result.get('skipped', 0)
+                                
+                                if saved > 0 or updated > 0:
+                                    processed_count += saved + updated
+                                    logger.info(f"{asset['asset']}/{asset['quote']} [{interval}]: {saved} nowych, {updated} zaktualizowanych, {skipped} bez zmian")
                                 else:
-                                    logger.info(f"Brak nowych wzorców do zapisania dla {asset['asset']}/{asset['quote']} i interwału {interval}")
+                                    logger.info(f"{asset['asset']}/{asset['quote']} [{interval}]: brak zmian ({skipped} wzorców bez zmian)")
                                  
                             except Exception as e:
                                 error_count += 1

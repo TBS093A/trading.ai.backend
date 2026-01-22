@@ -451,22 +451,40 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         return result['count'] > 0 if result else False
     
     async def get_by_point_timestamps(self, asset_id: int, x_point_timestamp: int, a_point_timestamp: int, 
-                                     b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int) -> Optional[Dict[str, Any]]:
-        """Pobiera wzorzec o podanych timestampach dla danego asset."""
-        result = await self.fetch_one("""
-        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
-               a.asset, a.quote
-        FROM technical_analysis_harmonic_patterns ta
-        JOIN assets a ON ta.asset_id = a.id
-        WHERE ta.asset_id = $1 
-        AND ta.x_point_timestamp = $2 
-        AND ta.a_point_timestamp = $3 
-        AND ta.b_point_timestamp = $4 
-        AND ta.c_point_timestamp = $5 
-        AND ta.d_point_timestamp = $6
-        LIMIT 1
-        """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
+                                     b_point_timestamp: int, c_point_timestamp: int, d_point_timestamp: int,
+                                     interval: str = None) -> Optional[Dict[str, Any]]:
+        """Pobiera wzorzec o podanych timestampach dla danego asset i opcjonalnie interwału."""
+        if interval:
+            result = await self.fetch_one("""
+            SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                   a.asset, a.quote
+            FROM technical_analysis_harmonic_patterns ta
+            JOIN assets a ON ta.asset_id = a.id
+            WHERE ta.asset_id = $1 
+            AND ta.x_point_timestamp = $2 
+            AND ta.a_point_timestamp = $3 
+            AND ta.b_point_timestamp = $4 
+            AND ta.c_point_timestamp = $5 
+            AND ta.d_point_timestamp = $6
+            AND ta.interval = $7
+            LIMIT 1
+            """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, interval)
+        else:
+            result = await self.fetch_one("""
+            SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
+                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                   a.asset, a.quote
+            FROM technical_analysis_harmonic_patterns ta
+            JOIN assets a ON ta.asset_id = a.id
+            WHERE ta.asset_id = $1 
+            AND ta.x_point_timestamp = $2 
+            AND ta.a_point_timestamp = $3 
+            AND ta.b_point_timestamp = $4 
+            AND ta.c_point_timestamp = $5 
+            AND ta.d_point_timestamp = $6
+            LIMIT 1
+            """, asset_id, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp)
         
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
