@@ -530,7 +530,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     
     # Endpointy wyłączone z rate limitingu
-    EXCLUDED_PATHS = ["/docs", "/redoc", "/openapi.json", "/"]
+    EXCLUDED_PATHS = [
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/",
+        "/live",
+        "/ready",
+    ]
     
     # Endpointy z bardziej restrykcyjnym limitem
     STRICT_PATHS = ["/user/auth/login", "/user/auth/register"]
@@ -592,7 +599,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         "/openapi.json",
         "/",
         "/info",
-        "/health"
+        "/health",
+        "/live",
+        "/ready",
     ]
     
     # Nagłówek z tokenem CSRF
