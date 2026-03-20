@@ -221,7 +221,7 @@ Serwisy (tylko Redis - reszta jest w odpowiednich plikach deploymentów):
 
 Pipeline: `checkout scm` → usuwa `k8s.manifests/config-env.yml` → `./set.envs.sh ... --dir ./k8s.manifests` (wartości z **parametrów** builda + **withCredentials**) → `k8s.manifests/deploy.sh deploy` (gdy zaznaczono **DEPLOY**).
 
-**Secret text** (IDs muszą istnieć w Jenkins — nagłówek komentarza w `Jenkinsfile`): OpenAI, CryptoPanic, GNews, CoinDesk, MinIO access/secret, hasło DB, RabbitMQ, Redis. Pozostałe sekrety: istniejące `usernamePassword` (Git, Telegram, KuCoin, MEXC).
+**Secret text** (IDs — nagłówek `Jenkinsfile`): OpenAI, CryptoPanic, GNews, CoinDesk, MinIO access/secret, Redis. **Username with password:** `trading-ai-database-credentials`, `trading-ai-rabbitmq-credentials` (user/hasło do `database.*` i `rabbitmq.*` w `config-env`). Pozostałe: `usernamePassword` (Git, Telegram, KuCoin, MEXC).
 
 Parametry domyślne odpowiadają typowej konfiguracji klastra / MinIO; ścieżki Git w parametrach **bez** `https://` — token składa Jenkins z credentialu `git-gitea-tbs093a`.
 
