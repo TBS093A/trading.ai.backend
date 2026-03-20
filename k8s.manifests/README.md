@@ -217,6 +217,14 @@ Serwisy (tylko Redis - reszta jest w odpowiednich plikach deploymentów):
 
 **Uwaga**: PostgreSQL service nie jest potrzebny - używamy istniejącego `postgresql.default.svc.cluster.local`
 
+## Jenkins (`Jenkinsfile` w katalogu głównym repo)
+
+Pipeline: `checkout scm` → usuwa `k8s.manifests/config-env.yml` → `./set.envs.sh ... --dir ./k8s.manifests` (wartości z **parametrów** builda + **withCredentials**) → `k8s.manifests/deploy.sh deploy` (gdy zaznaczono **DEPLOY**).
+
+**Secret text** (IDs muszą istnieć w Jenkins — nagłówek komentarza w `Jenkinsfile`): OpenAI, CryptoPanic, GNews, CoinDesk, MinIO access/secret, hasło DB, RabbitMQ, Redis. Pozostałe sekrety: istniejące `usernamePassword` (Git, Telegram, KuCoin, MEXC).
+
+Parametry domyślne odpowiadają typowej konfiguracji klastra / MinIO; ścieżki Git w parametrach **bez** `https://` — token składa Jenkins z credentialu `git-gitea-tbs093a`.
+
 ## 🔧 Konfiguracja
 
 ### Zmienne środowiskowe

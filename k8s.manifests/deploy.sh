@@ -7,7 +7,13 @@
 
 set -e  # Exit on error
 
-source ../.env;
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "${REPO_ROOT}/.env" ]; then
+  # shellcheck disable=SC1090
+  set -a
+  source "${REPO_ROOT}/.env"
+  set +a
+fi
 
 # Kolory dla lepszej czytelności
 RED='\033[0;31m'
