@@ -197,7 +197,6 @@ show_status() {
 show_logs() {
     log_info "Dostępne opcje do podglądu logów:"
     echo ""
-    echo "  kubectl logs -l app=trading-ai-backend-sync-controller -f"
     echo "  kubectl logs -l app=trading-ai-backend-rest-api-controller -f"
     echo "  kubectl logs -l app=trading-ai-frontend-web -f -c nginx"
     echo "  kubectl logs -l app=trading-ai-backend-celery-workers -f"
