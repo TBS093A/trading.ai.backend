@@ -1,257 +1,146 @@
-def execute_commands(commands, os_name, recommended_os) {
-    if("${os_name}" == "linux") {
-        if("${recommended_os}" == "only_linux" || "${recommended_os}" == "all_distros") {
-            sh "${commands}"
-        }
+/*
+ * W Jenkins dodaj Secret text (lub odpowiednie credential), ID dokładnie jak poniżej:
+ *   trading-ai-openai-api-key
+ *   trading-ai-crypto-panic-api-key
+ *   trading-ai-gnews-api-key
+ *   trading-ai-coindesk-api-key
+ *   trading-ai-minio-access-key
+ *   trading-ai-minio-secret-key
+ *   trading-ai-database-password
+ *   trading-ai-rabbitmq-password
+ *   trading-ai-redis-password
+ * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
+ */
+
+def escSql(String s) {
+    if (s == null) {
+        return ''
     }
-    if("${os_name}" == "windows") {
-        if("${recommended_os}" == "only_windows" || "${recommended_os}" == "all_distros") {
-            powershell "${commands}"
-        }
-    }
+    return s.replace("'", "'\\''")
 }
 
-def delete_directory(directory, os_name) {
-    execute_commands(
-        """
-            if [ -d "./${directory}" ]
-            then
-                rm -r ./${directory};
-            fi
-        """,
-        "${os_name}",
-        "only_linux"
-    )
-    execute_commands(
-        """
-            if(Test-Path -Path .\\${directory}\\) {
-                Remove-Item -Force -Recurse -Path .\\${directory}\\
-            }
-        """,
-        "${os_name}",
-        "only_windows"
-    )
-}
-
-def fetch_git_repository(APPLICATION_NAME, JENKINS_REPO_DIR, DATA_SOURCE_BRANCH, DATA_SOURCE_URL) {
-
-    echo """
-        Fetch ${APPLICATION_NAME}
-    """
-
-    try {
+def generateK8sConfigFromTemplate() {
+    withCredentials(
+        [
+            usernamePassword(
+                credentialsId: 'git-gitea-tbs093a',
+                passwordVariable: 'GIT_TOKEN',
+                usernameVariable: 'GIT_USERNAME'
+            ),
+            usernamePassword(
+                credentialsId: 'telegram-pump-bot-credentials',
+                passwordVariable: 'TELETHON_BOT_TOKEN',
+                usernameVariable: 'TELETHON_BOT_NAME'
+            ),
+            usernamePassword(
+                credentialsId: 'telegram-00x097-user-credentials',
+                passwordVariable: 'TELETHON_API_HASH',
+                usernameVariable: 'TELETHON_API_ID'
+            ),
+            usernamePassword(
+                credentialsId: 'telegram-00x097-user-info',
+                passwordVariable: 'TELETHON_API_PHONE',
+                usernameVariable: 'TELETHON_USER_ID'
+            ),
+            usernamePassword(
+                credentialsId: 'kucoin-zukkamil-api-secrets',
+                passwordVariable: 'KUCOIN_API_SECRET',
+                usernameVariable: 'KUCOIN_API_KEY'
+            ),
+            usernamePassword(
+                credentialsId: 'kucoin-zukkamil-api-credentials',
+                passwordVariable: 'KUCOIN_API_KEY_PASSPHRASE',
+                usernameVariable: 'KUCOIN_USERNAME_UNUSED'
+            ),
+            usernamePassword(
+                credentialsId: 'mexc-zukkamil-api-secrets',
+                passwordVariable: 'MEXC_API_SECRET',
+                usernameVariable: 'MEXC_API_KEY'
+            ),
+            string(credentialsId: 'trading-ai-openai-api-key', variable: 'OPENAI_API_KEY'),
+            string(credentialsId: 'trading-ai-crypto-panic-api-key', variable: 'CRYPTO_PANIC_API_KEY'),
+            string(credentialsId: 'trading-ai-gnews-api-key', variable: 'GNEWS_API_KEY'),
+            string(credentialsId: 'trading-ai-coindesk-api-key', variable: 'COINDESK_API_KEY'),
+            string(credentialsId: 'trading-ai-minio-access-key', variable: 'MINIO_ACCESS_KEY'),
+            string(credentialsId: 'trading-ai-minio-secret-key', variable: 'MINIO_SECRET_KEY'),
+            string(credentialsId: 'trading-ai-database-password', variable: 'DATABASE_PASSWORD'),
+            string(credentialsId: 'trading-ai-rabbitmq-password', variable: 'RABBITMQ_PASSWORD_PLAIN'),
+            string(credentialsId: 'trading-ai-redis-password', variable: 'REDIS_PASSWORD_PLAIN'),
+        ]
+    ) {
+        def backendRepoUrl = escSql("https://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_BACKEND}")
+        def frontendRepoUrl = escSql("https://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_FRONTEND}")
 
         sh """
-            git config --global --add safe.directory '*';
+            chmod +x ./set.envs.sh
+            ./set.envs.sh \\
+                --set trading.ai.backend.repo.url='${backendRepoUrl}' \\
+                --set trading.ai.backend.repo.branch='${escSql(params.DATA_SOURCE_BRANCH)}' \\
+                --set trading.ai.frontend.repo.url='${frontendRepoUrl}' \\
+                --set trading.ai.frontend.repo.branch='${escSql(params.FRONTEND_REPO_BRANCH)}' \\
+                --set react.app.api.url='${escSql(params.REACT_APP_API_URL)}' \\
+                --set telethon.bot.name='${escSql(env.TELETHON_BOT_NAME)}' \\
+                --set telethon.bot.token='${escSql(env.TELETHON_BOT_TOKEN)}' \\
+                --set telethon.api.phone='${escSql(env.TELETHON_API_PHONE)}' \\
+                --set telethon.api.id='${escSql(env.TELETHON_API_ID)}' \\
+                --set telethon.api.hash='${escSql(env.TELETHON_API_HASH)}' \\
+                --set telethon.user.id='${escSql(env.TELETHON_USER_ID)}' \\
+                --set telethon.bot.id='${escSql(params.TELETHON_BOT_ID)}' \\
+                --set kucoin.api.secret='${escSql(env.KUCOIN_API_SECRET)}' \\
+                --set kucoin.api.key='${escSql(env.KUCOIN_API_KEY)}' \\
+                --set kucoin.api.key.passphrase='${escSql(env.KUCOIN_API_KEY_PASSPHRASE)}' \\
+                --set mexc.api.key='${escSql(env.MEXC_API_KEY)}' \\
+                --set mexc.api.secret='${escSql(env.MEXC_API_SECRET)}' \\
+                --set openai.api.key='${escSql(env.OPENAI_API_KEY)}' \\
+                --set crypto.panic.api.key='${escSql(env.CRYPTO_PANIC_API_KEY)}' \\
+                --set gnews.api.key='${escSql(env.GNEWS_API_KEY)}' \\
+                --set coindesk.api.key='${escSql(env.COINDESK_API_KEY)}' \\
+                --set minio.access.key='${escSql(env.MINIO_ACCESS_KEY)}' \\
+                --set minio.secret.key='${escSql(env.MINIO_SECRET_KEY)}' \\
+                --set minio.endpoint='${escSql(params.MINIO_ENDPOINT)}' \\
+                --set minio.secure='${escSql(params.MINIO_SECURE)}' \\
+                --set minio.bucket.name='${escSql(params.MINIO_BUCKET_NAME)}' \\
+                --set local.storage.is.enabled='${escSql(params.LOCAL_STORAGE_IS_ENABLED)}' \\
+                --set local.storage.path='${escSql(params.LOCAL_STORAGE_PATH)}' \\
+                --set database.username='${escSql(params.DATABASE_USERNAME)}' \\
+                --set database.password='${escSql(env.DATABASE_PASSWORD)}' \\
+                --set database.host='${escSql(params.DATABASE_HOST)}' \\
+                --set database.port='${escSql(params.DATABASE_PORT)}' \\
+                --set database.schema='${escSql(params.DATABASE_SCHEMA)}' \\
+                --set rabbitmq.username='${escSql(params.CELERY_BROKER_USERNAME)}' \\
+                --set rabbitmq.password='${escSql(env.RABBITMQ_PASSWORD_PLAIN)}' \\
+                --set rabbitmq.port='${escSql(params.CELERY_BROKER_PORT)}' \\
+                --set rabbitmq.management.port='${escSql(params.CELERY_BROKER_MANAGEMENT_PORT)}' \\
+                --set redis.password='${escSql(env.REDIS_PASSWORD_PLAIN)}' \\
+                --set redis.port='${escSql(params.CELERY_RESULT_BACKEND_PORT)}' \\
+                --dir ./k8s.manifests
         """
-
-        dir("${JENKINS_REPO_DIR}") {
-
-            git credentialsId: 'git-gitea-tbs093a',
-                branch: "${DATA_SOURCE_BRANCH}",
-                url: "${DATA_SOURCE_URL}"
-
-            sh """
-                ls -la
-            """
-        }
-
-    } catch(error) {
-
-        throw(error)
     }
 }
 
-def set_env_vars(JENKINS_REPO_DIR, GIT_REPO_URL, VARS) {
-
-    echo """
-        Set Env Vars
+def deployTradingAiK8s() {
+    sh """
+        export KUBECONFIG="/home/jenkins/.kube/config"
+        chmod +x ./k8s.manifests/deploy.sh
+        cd ./k8s.manifests
+        ./deploy.sh deploy
     """
-
-    try {
-
-        dir("${JENKINS_REPO_DIR}") {
-
-            withCredentials(
-                [
-                    usernamePassword(
-                        credentialsId: 'git-gitea-tbs093a',
-                        passwordVariable: 'GIT_TOKEN',
-                        usernameVariable: 'GIT_USERNAME'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'telegram-pump-bot-credentials',
-                        passwordVariable: 'TELETHON_BOT_TOKEN',
-                        usernameVariable: 'TELETHON_BOT_NAME'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'telegram-00x097-user-credentials',
-                        passwordVariable: 'TELETHON_API_HASH',
-                        usernameVariable: 'TELETHON_API_ID'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'telegram-00x097-user-info',
-                        passwordVariable: 'TELETHON_API_PHONE',
-                        usernameVariable: 'TELETHON_USER_ID'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'kucoin-zukkamil-api-secrets',
-                        passwordVariable: 'KUCOIN_API_SECRET',
-                        usernameVariable: 'KUCOIN_API_KEY'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'kucoin-zukkamil-api-credentials',
-                        passwordVariable: 'KUCOIN_API_KEY_PASSPHRASE',
-                        usernameVariable: 'KUCOIN_USERNAME'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'mexc-zukkamil-api-secrets',
-                        passwordVariable: 'MEXC_API_SECRET',
-                        usernameVariable: 'MEXC_API_KEY'
-                    ),
-                ]
-            ) {
-
-                GIT_REPO_URL = GIT_REPO_URL.replace('https://', '')
-
-                sh "./set.envs.sh ${VARS} --set pump.bot.repo.url='https://${GIT_USERNAME}:${GIT_TOKEN}@${GIT_REPO_URL}' --set telethon.bot.name='${TELETHON_BOT_NAME}' --set telethon.bot.token='${TELETHON_BOT_TOKEN}' --set telethon.api.phone='${TELETHON_API_PHONE}' --set telethon.api.id='${TELETHON_API_ID}' --set telethon.api.hash='${TELETHON_API_HASH}' --set telethon.user.id='${TELETHON_USER_ID}' --set telethon.bot.id=0 --set kucoin.api.secret='${KUCOIN_API_SECRET}' --set kucoin.api.key='${KUCOIN_API_KEY}' --set kucoin.api.key.passphrase='${KUCOIN_API_KEY_PASSPHRASE}' --set mexc.api.key='${MEXC_API_KEY}' --set mexc.api.secret='${MEXC_API_SECRET}' --dir ./ --exclude 'Jenkinsfile' --exclude '*.md' --exclude '*.sh' --exclude '*.py' --exclude '*.ini' --exclude '*.example' --exclude '*.session'"
-
-                // if you have $ inside password - just use \$ (dolar escape) inside this var at editing credentials in jenkins!
-
-            }
-        }
-    } catch(error) {
-
-        throw(error)
-
-    }
 }
-
-def test(JENKINS_REPO_DIR) {
-
-    echo """
-        Test Pump Bot On K8S
-    """
-
-    try {
-
-        dir("${JENKINS_REPO_DIR}") {
-
-            sh """
-                export KUBECONFIG="/home/jenkins/.kube/config";
-
-                kubectl apply -f ./k8s.manifests/storage.yml;
-                kubectl apply -f ./k8s.manifests/config.yml;
-                kubectl apply -f ./k8s.manifests/job.test.yml;
-            """
-
-            // Wait until the pod in the deployment is running the tests
-            waitUntil {
-                def podName = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl get pods -l app=pump-bot-api-tests -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-                def status = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl get pod ${podName} -o jsonpath='{.status.phase}'", returnStdout: true).trim()
-                return status == 'Running' || status == 'Succeeded' || status == 'Failed'
-            }
-
-            // Capture the pod name after it’s up and running
-            def podName = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl get pods -l app=pump-bot-api-tests -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-
-            // Wait until the tests are finished by checking container logs
-            waitUntil {
-                // Sleep for 1 minute before the next check
-                sleep time: 1, unit: 'MINUTES'
-
-                def testLogs = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl logs ${podName} -c pump-bot-api-tests", returnStdout: true).trim()
-                echo "Test Logs:\n${testLogs}"
-                return testLogs.contains("summary") || testLogs.contains("tox")  // assuming `tox` will indicate completion
-            }
-
-            // After tests, check if logs contain failure keywords
-            def finalLogs = sh(script: "export KUBECONFIG=\"/home/jenkins/.kube/config\"; kubectl logs ${podName} -c pump-bot-api-tests", returnStdout: true).trim()
-
-            if (finalLogs.contains("FAILED")) {
-                error("TESTS FAILED.")
-            }
-
-            sh """
-                export KUBECONFIG="/home/jenkins/.kube/config";
-
-                kubectl delete -f ./k8s.manifests/job.test.yml;
-            """
-
-        }
-    } catch(error) {
-
-        throw(error)
-    }
-}
-
-def deploy(JENKINS_REPO_DIR) {
-
-    echo """
-        Deploy Pump Bot On K8S
-    """
-
-    try {
-
-        dir("${JENKINS_REPO_DIR}") {
-
-            sh """
-                export KUBECONFIG="/home/jenkins/.kube/config";
-
-                kubectl apply -f ./k8s.manifests/storage.yml;
-                kubectl apply -f ./k8s.manifests/config.yml;
-                kubectl apply -f ./k8s.manifests/deployment.yml;
-            """
-        }
-
-    } catch(error) {
-
-        throw(error)
-    }
-}
-
 
 pipeline {
 
     agent {
-
         node {
-
-            label "docker-builder && linux"
-
+            label 'docker-builder && linux'
         }
     }
 
-    environment {
-
-        OS_NAME=""
-
-        JENKINS_REPO_PUMP_SCRIPT_DIR = "${JENKINS_AGENT_WORKDIR}/pump.script"
-
-        GIT_REPO_PUMP_SCRIPT_URL="https://git.00x097.com/tbs093a/pump.bot.git"
-
-        JENKINS_USER_ID = 1000
-        JENKINS_GROUP_ID = 1000
-
-    }
-
     triggers {
-
         GenericTrigger(
-
             genericVariables: [
-                [
-                    key: 'DATA_SOURCE_BRANCH',
-                    value: '$.DATA_SOURCE_BRANCH'
-                ],
-                [
-                    key: 'TESTS',
-                    value: '$.TESTS'
-                ],
-                [
-                    key: 'DEPLOY',
-                    value: '$.DEPLOY'
-                ],
+                [key: 'DATA_SOURCE_BRANCH', value: '$.DATA_SOURCE_BRANCH'],
+                [key: 'TESTS', value: '$.TESTS'],
+                [key: 'DEPLOY', value: '$.DEPLOY'],
             ],
             token: '077ff7e0-8460-4a63-9a33-71503bbad374'
         )
@@ -259,161 +148,141 @@ pipeline {
 
     stages {
 
-        stage('Setup Parameters') {
-
+        stage('Setup parameters') {
             steps {
-
                 script {
-
-                    if ("${NODE_NAME}".contains("windows")) {
-                        OS_NAME = "windows"
-                    } else {
-                        OS_NAME = "linux"
-                    }
-
                     properties([
                         parameters([
                             string(
                                 defaultValue: 'master',
-                                description: 'Select <b>Pump Bot</b> data source branch for the build & deploy',
+                                description: 'Branch repozytorium <b>trading.ai.backend</b> (klon w init k8s)',
                                 name: 'DATA_SOURCE_BRANCH'
                             ),
-                            booleanParam(
-                                defaultValue: false,
-                                description: 'Enable if you want <b>run Pump Bot tests only</b>.',
-                                name: 'TESTS'
+                            string(
+                                defaultValue: 'master',
+                                description: 'Branch repozytorium <b>trading.ai.frontend</b>',
+                                name: 'FRONTEND_REPO_BRANCH'
+                            ),
+                            string(
+                                defaultValue: 'git.00x097.com/tbs093a/trading.ai.backend.git',
+                                description: 'Ścieżka Git backendu <b>bez</b> https:// (token dokleja Jenkins z git-gitea-tbs093a)',
+                                name: 'GIT_REPO_PATH_BACKEND'
+                            ),
+                            string(
+                                defaultValue: 'git.00x097.com/tbs093a/trading.ai.frontend.git',
+                                description: 'Ścieżka Git frontendu <b>bez</b> https://',
+                                name: 'GIT_REPO_PATH_FRONTEND'
+                            ),
+                            string(
+                                defaultValue: 'http://localhost:9090',
+                                description: 'REACT_APP_API_URL (z perspektywy przeglądarki — produkcja: publiczny URL API)',
+                                name: 'REACT_APP_API_URL'
+                            ),
+                            string(
+                                defaultValue: 'trading_ai_backend_user',
+                                name: 'DATABASE_USERNAME'
+                            ),
+                            string(
+                                defaultValue: 'postgresql.default.svc.cluster.local',
+                                name: 'DATABASE_HOST'
+                            ),
+                            string(
+                                defaultValue: '5432',
+                                name: 'DATABASE_PORT'
+                            ),
+                            string(
+                                defaultValue: 'trading_ai_backend_database',
+                                name: 'DATABASE_SCHEMA'
+                            ),
+                            string(
+                                defaultValue: 'trading_bot_ai_rabbit',
+                                description: 'RabbitMQ user (ConfigMap RABBITMQ_USER)',
+                                name: 'CELERY_BROKER_USERNAME'
+                            ),
+                            string(
+                                defaultValue: '5672',
+                                name: 'CELERY_BROKER_PORT'
+                            ),
+                            string(
+                                defaultValue: '15672',
+                                name: 'CELERY_BROKER_MANAGEMENT_PORT'
+                            ),
+                            string(
+                                defaultValue: '6379',
+                                name: 'CELERY_RESULT_BACKEND_PORT'
+                            ),
+                            string(
+                                defaultValue: 'api.storage.xgpu.site',
+                                name: 'MINIO_ENDPOINT'
+                            ),
+                            string(
+                                defaultValue: 'true',
+                                name: 'MINIO_SECURE'
+                            ),
+                            string(
+                                defaultValue: 'trading.ai.charts',
+                                name: 'MINIO_BUCKET_NAME'
+                            ),
+                            string(
+                                defaultValue: 'false',
+                                name: 'LOCAL_STORAGE_IS_ENABLED'
+                            ),
+                            string(
+                                defaultValue: './local_storage',
+                                name: 'LOCAL_STORAGE_PATH'
+                            ),
+                            string(
+                                defaultValue: '7411839891',
+                                description: 'TELETHON_BOT_ID (numeryczny ID bota)',
+                                name: 'TELETHON_BOT_ID'
                             ),
                             booleanParam(
                                 defaultValue: true,
-                                description: 'Enable if you want <b>run Pump Bot</b> for capture pump singnals from telegram and invest automatically',
+                                description: 'Uruchom <b>k8s.manifests/deploy.sh deploy</b> po wygenerowaniu config-env.yml',
                                 name: 'DEPLOY'
-                            )
+                            ),
                         ])
                     ])
                 }
             }
         }
 
-        stage('Clean Workspace') {
-
+        stage('Checkout') {
             steps {
+                checkout scm
+            }
+        }
 
+        stage('Clean generated k8s config') {
+            steps {
+                sh 'rm -f k8s.manifests/config-env.yml || true'
+            }
+        }
+
+        stage('Generate k8s config-env.yml') {
+            steps {
                 script {
-
-                    catchError(
-                        buildresult: 'SUCCESS',
-                        stageresult: 'UNSTABLE'
-                    ) {
-
-                        delete_directory(
-                            "${JENKINS_REPO_PUMP_SCRIPT_DIR}",
-                            OS_NAME
-                        )
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        generateK8sConfigFromTemplate()
                     }
                 }
             }
         }
 
-        stage('Fetch Script Repositories') {
-
-            steps {
-
-                script {
-
-                    parallel(
-
-                        pump_bot_script: {
-
-                            fetch_git_repository(
-                                "Pump Bot (on VM - ${NODE_NAME})",
-                                "${JENKINS_REPO_PUMP_SCRIPT_DIR}",
-                                "${DATA_SOURCE_BRANCH}",
-                                "${GIT_REPO_PUMP_SCRIPT_URL}"
-                            )
-                        }
-                    )
+        stage('Deploy Trading AI on K8s') {
+            when {
+                expression {
+                    params.DEPLOY == true || params.DEPLOY?.toString() == 'true'
                 }
             }
-        }
-
-        stage('Set Env Vars') {
-
             steps {
-
+                echo 'Deploy: k8s.manifests/deploy.sh deploy'
                 script {
-
-                    catchError(
-                        buildresult: 'FAILURE',
-                        stageresult: 'FAILURE'
-                    ) {
-
-                        set_env_vars(
-                            "${JENKINS_REPO_PUMP_SCRIPT_DIR}",
-                            "${GIT_REPO_PUMP_SCRIPT_URL}",
-                            ""
-                        )
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        deployTradingAiK8s()
                     }
                 }
             }
         }
-
-        stage('Test Pump Bot On K8S') {
-
-            when {
-
-                expression {
-
-                    "${TESTS}" == "true"
-                }
-            }
-
-            steps {
-
-                echo """
-                    Test Pump Bot On K8S
-                """
-
-                catchError(
-                    buildResult: 'SUCCESS',
-                    stageResult: 'UNSTABLE'
-                ) {
-
-                    test(
-                        "${JENKINS_REPO_PUMP_SCRIPT_DIR}"
-                    )
-                }
-            }
-        }
-
-        stage('Deploy Pump Bot On K8S') {
-
-            when {
-
-                expression {
-
-                    "${DEPLOY}" == "true"
-                }
-            }
-
-            steps {
-
-                echo """
-                    Deploy Pump Bot On K8S
-                """
-
-                catchError(
-                    buildResult: 'FAILURE',
-                    stageResult: 'FAILURE'
-                ) {
-
-                    deploy(
-                        "${JENKINS_REPO_PUMP_SCRIPT_DIR}"
-                    )
-
-                }
-            }
-        }
-
     }
 }
-
