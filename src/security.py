@@ -640,6 +640,29 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class KubernetesProbeMiddleware(BaseHTTPMiddleware):
+    """
+    GET /live i GET /ready przed resztą stosu — kubelet nie wysyła JWT;
+    unika też sytuacji, w której inna trasa lub zależność zwraca 401.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        if request.method != "GET":
+            return await call_next(request)
+
+        path = request.url.path.rstrip("/") or "/"
+        if path == "/live":
+            from src.k8s_probes import live_body
+
+            return JSONResponse(await live_body())
+        if path == "/ready":
+            from src.k8s_probes import ready_body
+
+            status, body = await ready_body()
+            return JSONResponse(body, status_code=status)
+        return await call_next(request)
+
+
 # =============================================================================
 # Security Utilities
 # =============================================================================
