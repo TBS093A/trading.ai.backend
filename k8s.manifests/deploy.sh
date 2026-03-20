@@ -223,7 +223,7 @@ show_access_info() {
 
     log_info "Frontend (nginx, ClusterIP + Ingress):"
     echo "  W klastrze: http://trading-ai-frontend-service.default.svc.cluster.local"
-    echo "  Publicznie (po DNS + Ingress): http://00x097.com"
+    echo "  Publicznie (po DNS + Ingress TLS staging): https://00x097.com"
     echo ""
     
     log_info "RabbitMQ Management UI (tylko ClusterIP - dostęp przez port-forward):"
