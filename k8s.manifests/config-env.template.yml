@@ -10,6 +10,12 @@ data:
   TRADING_AI_BACKEND_REPO_URL: "<<trading.ai.backend.repo.url>>"
   TRADING_AI_BACKEND_REPO_BRANCH: "<<trading.ai.backend.repo.branch>>"
 
+  # Trading AI Frontend (CRA build w initContainer, serwowane przez nginx)
+  TRADING_AI_FRONTEND_REPO_URL: "<<trading.ai.frontend.repo.url>>"
+  TRADING_AI_FRONTEND_REPO_BRANCH: "<<trading.ai.frontend.repo.branch>>"
+  # URL API widoczny w przeglądarce (build-time); w klastrze zwykle Ingress lub NodePort backendu
+  REACT_APP_API_URL: "<<react.app.api.url>>"
+
   # Database configuration (używamy istniejącego PostgreSQL na klastrze)
   DATABASE_HOST: "<<database.host>>"
   DATABASE_PORT: "<<database.port>>"

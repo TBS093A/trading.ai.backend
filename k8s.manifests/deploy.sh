@@ -98,6 +98,9 @@ deploy_applications() {
     
     kubectl apply -f deployment-rest-api.yml
     log_success "REST API Controller został wdrożony"
+
+    kubectl apply -f deployment-frontend.yml
+    log_success "Frontend (nginx + CRA z init) został wdrożony"
     
     kubectl apply -f daemonset-celery-workers.yml
     log_success "Celery Workers zostały wdrożone"
@@ -130,6 +133,7 @@ show_logs() {
     echo ""
     echo "  kubectl logs -l app=trading-ai-backend-sync-controller -f"
     echo "  kubectl logs -l app=trading-ai-backend-rest-api-controller -f"
+    echo "  kubectl logs -l app=trading-ai-frontend-web -f -c nginx"
     echo "  kubectl logs -l app=trading-ai-backend-celery-workers -f"
     echo "  kubectl logs -l component=backend -f --all-containers=true"
     echo ""
@@ -149,6 +153,11 @@ show_access_info() {
     echo "  Zewnętrzny: http://${NODE_IP}:30090"
     echo "  Health Check: http://${NODE_IP}:30090/health"
     echo "  API Docs: http://${NODE_IP}:30090/docs"
+    echo ""
+
+    log_info "Frontend (nginx):"
+    echo "  Wewnętrzny: http://trading-ai-frontend-service"
+    echo "  Zewnętrzny: http://${NODE_IP}:30080"
     echo ""
     
     log_info "RabbitMQ Management UI (tylko ClusterIP - dostęp przez port-forward):"
@@ -174,6 +183,7 @@ cleanup() {
     log_info "Usuwanie Application Services..."
     kubectl delete -f deployment-sync.yml --ignore-not-found=true
     kubectl delete -f deployment-rest-api.yml --ignore-not-found=true
+    kubectl delete -f deployment-frontend.yml --ignore-not-found=true
     kubectl delete -f daemonset-celery-workers.yml --ignore-not-found=true
     
     log_info "Usuwanie Infrastructure Services..."
