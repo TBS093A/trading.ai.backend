@@ -37,6 +37,11 @@ async def _get_db():
     return _db_instance
 
 
+async def get_app_database():
+    """Ta sama instancja PostgreSQL co w autentykacji (singleton) — m.in. dla /ready."""
+    return await _get_db()
+
+
 class AuthUser:
     """Klasa reprezentująca zalogowanego użytkownika."""
     

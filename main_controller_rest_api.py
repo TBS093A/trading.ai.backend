@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import auth
-from src.auth import require_auth, require_admin, AuthUser, get_current_user
+from src.auth import require_auth, require_admin, AuthUser, get_current_user, get_app_database
 
 # Import security
 from src.security import (
@@ -198,6 +198,38 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc"
     }
+
+
+@app.get("/live")
+async def live():
+    """
+    Liveness (K8s): proces odpowiada — bez zależności zewnętrznych.
+    Nie wymaga autentykacji.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready():
+    """
+    Readiness (K8s): aplikacja może przyjmować ruch — sprawdzenie PostgreSQL.
+    Nie wymaga autentykacji.
+    """
+    db = await get_app_database()
+    result = await db.test_connection()
+    if result.get("test_passed"):
+        return {
+            "status": "ready",
+            "database": result.get("connection", "OK"),
+        }
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "status": "not_ready",
+            "database": result.get("connection", "FAILED"),
+            "error": result.get("error"),
+        },
+    )
 
 
 @app.get("/health")

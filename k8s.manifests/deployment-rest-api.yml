@@ -315,21 +315,27 @@ spec:
               memory: "1Gi"
               cpu: "1000m"
           
-          livenessProbe:
+          startupProbe:
             httpGet:
-              path: /health
-              port: 9090
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 10
-          
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 9090
-            initialDelaySeconds: 30
+              path: /live
+              port: http
             periodSeconds: 10
             timeoutSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 18
       
       volumes:
         - name: app-storage

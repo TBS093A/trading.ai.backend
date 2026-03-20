@@ -189,7 +189,7 @@ REST API Controller (1 replica):
 - Komenda: `tox run -e rest-api-controller`
 - Port: 9090 (NodePort 30090)
 - Service: `trading-ai-backend-rest-api-service`
-- Health checks: `/health`
+- Probes K8s: **liveness** + **startup** → `GET /live`; **readiness** → `GET /ready` (PostgreSQL). Endpoint `/health` nadal wymaga admina (monitoring z tokenem)
 - Używa PVC: `pvc-trading-ai-backend-rest-api` (25Mi)
 - Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
