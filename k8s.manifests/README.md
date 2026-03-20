@@ -12,7 +12,6 @@ System składa się z następujących komponentów:
 - **Redis** - Cache i Celery result backend
 
 ### Application Services
-- **Sync Controller** - Kontroler synchronizacji danych (main_controller_sync.py)
 - **REST API Controller** - API REST (main_controller_rest_api.py)
 - **Frontend (React/CRA)** - Sklonowanie repozytorium i `npm ci` + `npm run build` w initContainerach; statyczne pliki z `build/` serwuje **nginx**
 - **Celery Workers** - DaemonSet (1 worker per node)
@@ -106,7 +105,6 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-rabbitmq --time
 kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout=300s
 
 # 3. Application Services (każdy ma swój własny PV/PVC)
-kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/deployment-frontend.yml
 kubectl apply -f k8s.manifests/ingress-frontend.yml
@@ -121,9 +119,6 @@ kubectl port-forward service/trading-ai-backend-rest-api-service 9090:9090
 ```bash
 # Sprawdź status wszystkich podów
 kubectl get pods
-
-# Sprawdź logi sync-controller
-kubectl logs -l app=trading-ai-backend-sync-controller -f
 
 # Sprawdź logi rest-api-controller
 kubectl logs -l app=trading-ai-backend-rest-api-controller -f
@@ -170,13 +165,6 @@ Redis 7 Alpine:
 - Service: `trading-ai-backend-redis-service`
 - PVC: `pvc-trading-ai-backend-redis` (1Gi)
 - Resources: 128Mi-256Mi RAM, 100m-250m CPU
-
-### deployment-sync.yml
-Sync Controller (1 replica):
-- Nazwa: `trading-ai-backend-sync-controller`
-- Komenda: `tox run -e sync-controller`
-- Używa PVC: `pvc-trading-ai-backend-sync` (25Mi)
-- Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
 ### deployment-frontend.yml
 Frontend (1 replica, POC bez Jenkinsa):
@@ -292,9 +280,6 @@ Password: <wartość z secret RABBITMQ_PASSWORD>
 # Wszystkie pody aplikacji
 kubectl logs -l component=backend -f --all-containers=true
 
-# Sync Controller
-kubectl logs -l app=trading-ai-backend-sync-controller -f
-
 # REST API
 kubectl logs -l app=trading-ai-backend-rest-api-controller -f
 
@@ -327,7 +312,6 @@ kubectl get pods -l component=database,component=message-broker,component=cache
 kubectl delete pod -l component=backend
 
 # Lub wykonaj rolling update
-kubectl rollout restart deployment/trading-ai-backend-sync-controller
 kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
 kubectl rollout restart deployment/trading-ai-frontend-web
 kubectl rollout restart daemonset/trading-ai-backend-celery-workers
@@ -345,7 +329,6 @@ kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 kubectl apply -f k8s.manifests/config-env.yml
 
 # 4. Zrestartuj pody aby załadować nową konfigurację
-kubectl rollout restart deployment/trading-ai-backend-sync-controller
 kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
 kubectl rollout restart deployment/trading-ai-frontend-web
 kubectl rollout restart daemonset/trading-ai-backend-celery-workers
@@ -369,7 +352,6 @@ PostgreSQL na klastrze nie jest w tych manifestach — pozostaje bez zmian.
 
 2. **Storage**: Każdy komponent ma swój własny PV/PVC (25Mi dla aplikacji):
    - REST API: `pvc-trading-ai-backend-rest-api` (25Mi)
-   - Sync Controller: `pvc-trading-ai-backend-sync` (25Mi)
    - Celery Workers: używają `hostPath` (każdy worker na każdym node ma własny storage)
    - RabbitMQ: `pvc-trading-ai-backend-rabbitmq` (2Gi)
    - Redis: `pvc-trading-ai-backend-redis` (1Gi)
