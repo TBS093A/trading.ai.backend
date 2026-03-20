@@ -45,6 +45,45 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+def register_kubernetes_probe_routes(app: FastAPI) -> None:
+    """
+    Rejestruje /live i /ready po include_router (startup), żeby trasy
+    na pewno były w routerze (uniknięcie 404 przy nietypowej kolejności ładowania).
+    """
+    if getattr(app.state, "_kube_probe_http_registered", False):
+        return
+    app.state._kube_probe_http_registered = True
+
+    async def live_probe():
+        from src.k8s_probes import live_body
+
+        return await live_body()
+
+    async def ready_probe():
+        from src.k8s_probes import ready_body
+
+        status, body = await ready_body()
+        if status == 200:
+            return body
+        return JSONResponse(body, status_code=status)
+
+    app.add_api_route(
+        "/live",
+        live_probe,
+        methods=["GET"],
+        tags=["Kubernetes"],
+        name="kube_live",
+    )
+    app.add_api_route(
+        "/ready",
+        ready_probe,
+        methods=["GET"],
+        tags=["Kubernetes"],
+        name="kube_ready",
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager dla event handlers startup/shutdown."""
@@ -54,7 +93,8 @@ async def lifespan(app: FastAPI):
     # Wczytaj kontrolery REST
     loaded_controllers = load_rest_controllers()
     app.state.loaded_controllers = loaded_controllers
-    
+    register_kubernetes_probe_routes(app)
+
     logger.info(f"📊 Załadowano {len(loaded_controllers)} kontrolerów: {', '.join(loaded_controllers)}")
     logger.info("✅ REST API gotowe do obsługi żądań")
     
@@ -117,7 +157,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 2. Rate Limiting - ogranicza liczbę requestów
 app.add_middleware(RateLimitMiddleware)
 
-# 2b. Sondy K8s — poza łańcuchem auth (ostatnio dodane = najbardziej zewnętrzne)
+# 2b. Sondy K8s — insert(0) w Starlette: ostatnio dodane = pierwsze po ServerErrorMiddleware
 app.add_middleware(KubernetesProbeMiddleware)
 
 # 3. CSRF Protection - waliduje tokeny CSRF dla modyfikujących requestów
@@ -205,28 +245,7 @@ async def root():
     }
 
 
-@app.get("/live")
-async def live():
-    """
-    Liveness (K8s): proces odpowiada — bez zależności zewnętrznych.
-    W praktyce obsługiwane przez KubernetesProbeMiddleware (bez auth).
-    """
-    from src.k8s_probes import live_body
-
-    return await live_body()
-
-
-@app.get("/ready")
-async def ready():
-    """
-    Readiness (K8s): PostgreSQL — w praktyce KubernetesProbeMiddleware (bez auth).
-    """
-    from src.k8s_probes import ready_body
-
-    status, body = await ready_body()
-    if status == 200:
-        return body
-    return JSONResponse(body, status_code=status)
+# GET /live i /ready: register_kubernetes_probe_routes() w lifespan + KubernetesProbeMiddleware
 
 
 @app.get("/health")
