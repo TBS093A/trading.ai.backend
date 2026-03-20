@@ -6,8 +6,8 @@
  *   trading-ai-coindesk-api-key
  *   trading-ai-minio-access-key
  *   trading-ai-minio-secret-key
- *   trading-ai-database-password
- *   trading-ai-rabbitmq-password
+ *   trading-ai-database-credentials (Username with password)
+ *   trading-ai-rabbitmq-credentials (Username with password)
  *   trading-ai-redis-password
  * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
  */
@@ -63,8 +63,16 @@ def generateK8sConfigFromTemplate() {
             string(credentialsId: 'trading-ai-coindesk-api-key', variable: 'COINDESK_API_KEY'),
             string(credentialsId: 'trading-ai-minio-access-key', variable: 'MINIO_ACCESS_KEY'),
             string(credentialsId: 'trading-ai-minio-secret-key', variable: 'MINIO_SECRET_KEY'),
-            string(credentialsId: 'trading-ai-database-password', variable: 'DATABASE_PASSWORD'),
-            string(credentialsId: 'trading-ai-rabbitmq-password', variable: 'RABBITMQ_PASSWORD_PLAIN'),
+            usernamePassword(
+                credentialsId: 'trading-ai-database-credentials',
+                usernameVariable: 'DATABASE_CREDS_USERNAME',
+                passwordVariable: 'DATABASE_CREDS_PASSWORD'
+            ),
+            usernamePassword(
+                credentialsId: 'trading-ai-rabbitmq-credentials',
+                usernameVariable: 'RABBITMQ_CREDS_USERNAME',
+                passwordVariable: 'RABBITMQ_CREDS_PASSWORD'
+            ),
             string(credentialsId: 'trading-ai-redis-password', variable: 'REDIS_PASSWORD_PLAIN'),
         ]
     ) {
@@ -102,13 +110,13 @@ def generateK8sConfigFromTemplate() {
                 --set minio.bucket.name='${escSql(params.MINIO_BUCKET_NAME)}' \\
                 --set local.storage.is.enabled='${escSql(params.LOCAL_STORAGE_IS_ENABLED)}' \\
                 --set local.storage.path='${escSql(params.LOCAL_STORAGE_PATH)}' \\
-                --set database.username='${escSql(params.DATABASE_USERNAME)}' \\
-                --set database.password='${escSql(env.DATABASE_PASSWORD)}' \\
+                --set database.username='${escSql(env.DATABASE_CREDS_USERNAME)}' \\
+                --set database.password='${escSql(env.DATABASE_CREDS_PASSWORD)}' \\
                 --set database.host='${escSql(params.DATABASE_HOST)}' \\
                 --set database.port='${escSql(params.DATABASE_PORT)}' \\
                 --set database.schema='${escSql(params.DATABASE_SCHEMA)}' \\
-                --set rabbitmq.username='${escSql(params.CELERY_BROKER_USERNAME)}' \\
-                --set rabbitmq.password='${escSql(env.RABBITMQ_PASSWORD_PLAIN)}' \\
+                --set rabbitmq.username='${escSql(env.RABBITMQ_CREDS_USERNAME)}' \\
+                --set rabbitmq.password='${escSql(env.RABBITMQ_CREDS_PASSWORD)}' \\
                 --set rabbitmq.port='${escSql(params.CELERY_BROKER_PORT)}' \\
                 --set rabbitmq.management.port='${escSql(params.CELERY_BROKER_MANAGEMENT_PORT)}' \\
                 --set redis.password='${escSql(env.REDIS_PASSWORD_PLAIN)}' \\
@@ -174,13 +182,9 @@ pipeline {
                                 name: 'GIT_REPO_PATH_FRONTEND'
                             ),
                             string(
-                                defaultValue: 'http://localhost:9090',
+                                defaultValue: 'trading-ai-backend-rest-api-service.default.svc.cluster.local',
                                 description: 'REACT_APP_API_URL (z perspektywy przeglądarki — produkcja: publiczny URL API)',
                                 name: 'REACT_APP_API_URL'
-                            ),
-                            string(
-                                defaultValue: 'trading_ai_backend_user',
-                                name: 'DATABASE_USERNAME'
                             ),
                             string(
                                 defaultValue: 'postgresql.default.svc.cluster.local',
@@ -193,11 +197,6 @@ pipeline {
                             string(
                                 defaultValue: 'trading_ai_backend_database',
                                 name: 'DATABASE_SCHEMA'
-                            ),
-                            string(
-                                defaultValue: 'trading_bot_ai_rabbit',
-                                description: 'RabbitMQ user (ConfigMap RABBITMQ_USER)',
-                                name: 'CELERY_BROKER_USERNAME'
                             ),
                             string(
                                 defaultValue: '5672',
