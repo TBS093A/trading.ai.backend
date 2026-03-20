@@ -1,0 +1,230 @@
+---
+# Nginx: SPA (try_files) dla zbudowanego CRA
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trading-ai-frontend-nginx-config
+  namespace: default
+  labels:
+    app: trading-ai-frontend-web
+    component: frontend
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name localhost;
+      root /usr/share/nginx/html;
+      index index.html;
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+    }
+
+---
+# Frontend — init: git clone + npm build; runtime: nginx serwuje katalog build/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-ai-frontend-web
+  namespace: default
+  labels:
+    app: trading-ai-frontend-web
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-ai-frontend-web
+  template:
+    metadata:
+      labels:
+        app: trading-ai-frontend-web
+        component: frontend
+    spec:
+      securityContext:
+        fsGroup: 1000
+
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /app
+              chown -R 1000:1000 /app
+              chmod -R 755 /app
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          securityContext:
+            runAsUser: 0
+
+        - name: remove-old-files
+          image: alpine/git
+          command:
+            - sh
+            - -c
+            - find /app/ -mindepth 1 -delete;
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+
+        - name: clone-repo
+          image: alpine/git
+          command:
+            - sh
+            - -c
+            - git clone $(TRADING_AI_FRONTEND_REPO_URL) -b $(TRADING_AI_FRONTEND_REPO_BRANCH) /app/;
+          env:
+            - name: TRADING_AI_FRONTEND_REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: TRADING_AI_FRONTEND_REPO_URL
+            - name: TRADING_AI_FRONTEND_REPO_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: TRADING_AI_FRONTEND_REPO_BRANCH
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+
+        - name: npm-install-build
+          image: node:20-bookworm
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              cd /app
+              npm ci
+              npm run build
+          env:
+            - name: REACT_APP_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: REACT_APP_API_URL
+            - name: CI
+              value: "true"
+            - name: GENERATE_SOURCEMAP
+              value: "false"
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: app-storage
+              mountPath: /usr/share/nginx/html
+              subPath: build
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+
+      volumes:
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: pvc-trading-ai-frontend
+        - name: nginx-config
+          configMap:
+            name: trading-ai-frontend-nginx-config
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-frontend
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /k8s/pv/trading-ai-frontend
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - k8s.node.001
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-trading-ai-frontend
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: pv-trading-ai-frontend
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-ai-frontend-service
+  namespace: default
+  labels:
+    app: trading-ai-frontend-web
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+      protocol: TCP
+      name: http
+  selector:
+    app: trading-ai-frontend-web

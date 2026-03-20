@@ -14,6 +14,7 @@ System składa się z następujących komponentów:
 ### Application Services
 - **Sync Controller** - Kontroler synchronizacji danych (main_controller_sync.py)
 - **REST API Controller** - API REST (main_controller_rest_api.py)
+- **Frontend (React/CRA)** - Sklonowanie repozytorium i `npm ci` + `npm run build` w initContainerach; statyczne pliki z `build/` serwuje **nginx**
 - **Celery Workers** - DaemonSet (1 worker per node)
 
 ## 🚀 Quick Start
@@ -37,6 +38,9 @@ source .env;
 ./set.envs.sh \
   --set trading.ai.backend.repo.url=$REPO_URL \
   --set trading.ai.backend.repo.branch=$REPO_BRANCH \
+  --set trading.ai.frontend.repo.url=$FRONTEND_REPO_URL \
+  --set trading.ai.frontend.repo.branch=$FRONTEND_REPO_BRANCH \
+  --set react.app.api.url=$REACT_APP_API_URL \
   --set telethon.bot.name=$TELETHON_BOT_NAME \
   --set telethon.bot.token=$TELETHON_BOT_TOKEN \
   --set telethon.api.phone=$TELETHON_API_PHONE \
@@ -102,6 +106,7 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout
 # 3. Application Services (każdy ma swój własny PV/PVC)
 kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
+kubectl apply -f k8s.manifests/deployment-frontend.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
 
 # 4. Expose Rest api on localhost for CLI
@@ -170,6 +175,17 @@ Sync Controller (1 replica):
 - Używa PVC: `pvc-trading-ai-backend-sync` (25Mi)
 - Resources: 512Mi-1Gi RAM, 500m-1000m CPU
 
+### deployment-frontend.yml
+Frontend (1 replica, POC bez Jenkinsa):
+- Nazwa: `trading-ai-frontend-web`
+- **Init:** `fix-permissions` → `remove-old-files` → `clone-repo` (jak backend, zmienne `TRADING_AI_FRONTEND_*`) → `npm-install-build` (`node:20-bookworm`, `npm ci` + `npm run build`, `REACT_APP_API_URL` z ConfigMap na czas buildu)
+- **Runtime:** `nginx:alpine` montuje `subPath: build` jako document root; `ConfigMap` `trading-ai-frontend-nginx-config` — `try_files` pod SPA
+- PVC: `pvc-trading-ai-frontend` (**2Gi** — repo + `node_modules` + artefakt build)
+- PV: hostPath `/k8s/pv/trading-ai-frontend`, afinitacja węzła jak inne PV (domyślnie `k8s.node.001` — dostosuj do klastra)
+- Service **NodePort** `30080`, ClusterIP `trading-ai-frontend-service:80`
+
+**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. zewnętrzny URL API, NodePort/Ingress backendu), nie wyłącznie `*.svc.cluster.local`.
+
 ### deployment-rest-api.yml
 REST API Controller (1 replica):
 - Nazwa: `trading-ai-backend-rest-api-controller`
@@ -224,6 +240,15 @@ http://trading-ai-backend-rest-api-service:9090
 
 # Z zewnątrz (NodePort)
 http://<NODE_IP>:30090
+```
+
+### Frontend
+```bash
+# Z wewnątrz klastra
+http://trading-ai-frontend-service
+
+# Z zewnątrz (NodePort)
+http://<NODE_IP>:30080
 ```
 
 ### RabbitMQ Management UI
@@ -284,6 +309,7 @@ kubectl delete pod -l component=backend
 # Lub wykonaj rolling update
 kubectl rollout restart deployment/trading-ai-backend-sync-controller
 kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
+kubectl rollout restart deployment/trading-ai-frontend-web
 kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 ```
 
@@ -301,6 +327,7 @@ kubectl apply -f k8s.manifests/config-env.yml
 # 4. Zrestartuj pody aby załadować nową konfigurację
 kubectl rollout restart deployment/trading-ai-backend-sync-controller
 kubectl rollout restart deployment/trading-ai-backend-rest-api-controller
+kubectl rollout restart deployment/trading-ai-frontend-web
 kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 ```
 
@@ -310,6 +337,7 @@ kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 # Usuń wszystkie komponenty aplikacji
 kubectl delete -f k8s.manifests/deployment-sync.yml
 kubectl delete -f k8s.manifests/deployment-rest-api.yml
+kubectl delete -f k8s.manifests/deployment-frontend.yml
 kubectl delete -f k8s.manifests/daemonset-celery-workers.yml
 
 # Usuń infrastructure (RabbitMQ, Redis)
