@@ -12,16 +12,22 @@
  * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
  */
 
-def escSql(String s) {
-    if (s == null) {
-        return ''
+def escSql(s) {
+    try {
+        if (s == null) {
+            return ''
+        }
+        return s.toString().replace("'", "'\\''")
+    } catch (Exception e) {
+        echo "escSql failed: ${e.message}"
+        throw e
     }
-    return s.replace("'", "'\\''")
 }
 
 def generateK8sConfigFromTemplate() {
-    withCredentials(
-        [
+    try {
+        withCredentials(
+            [
             usernamePassword(
                 credentialsId: 'git-gitea-tbs093a',
                 passwordVariable: 'GIT_TOKEN',
@@ -123,16 +129,25 @@ def generateK8sConfigFromTemplate() {
                 --set redis.port='${escSql(params.CELERY_RESULT_BACKEND_PORT)}' \\
                 --dir ./k8s.manifests
         """
+        }
+    } catch (Throwable e) {
+        echo "generateK8sConfigFromTemplate failed: ${e.message}"
+        throw e
     }
 }
 
 def deployTradingAiK8s() {
-    sh """
-        export KUBECONFIG="/home/jenkins/.kube/config"
-        chmod +x ./k8s.manifests/deploy.sh
-        cd ./k8s.manifests
-        ./deploy.sh deploy
-    """
+    try {
+        sh """
+            export KUBECONFIG="/home/jenkins/.kube/config"
+            chmod +x ./k8s.manifests/deploy.sh
+            cd ./k8s.manifests
+            ./deploy.sh deploy
+        """
+    } catch (Exception e) {
+        echo "Error deploying Trading AI on K8s: ${e.message}"
+        throw e
+    }
 }
 
 pipeline {
