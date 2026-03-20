@@ -93,6 +93,8 @@ Processing template: ./k8s.manifests/config-env.template.yml
 # 1. ConfigMap i Secret (zmienne środowiskowe)
 kubectl apply -f k8s.manifests/config-env.yml
 
+# Frontend z Ingress: **Ingress NGINX** (`ingressClassName: nginx`), rekord DNS `00x097.com` → adres ingressu
+
 # 2. Infrastructure Services (RabbitMQ, Redis)
 # Uwaga: PostgreSQL używamy istniejący na klastrze (postgresql.default.svc.cluster.local)
 # Storage (PV/PVC) jest teraz wdrażany razem z każdym serwisem
@@ -107,6 +109,7 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout
 kubectl apply -f k8s.manifests/deployment-sync.yml
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/deployment-frontend.yml
+kubectl apply -f k8s.manifests/ingress-frontend.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
 
 # 4. Expose Rest api on localhost for CLI
@@ -178,13 +181,17 @@ Sync Controller (1 replica):
 ### deployment-frontend.yml
 Frontend (1 replica, POC bez Jenkinsa):
 - Nazwa: `trading-ai-frontend-web`
-- **Init:** `fix-permissions` → `remove-old-files` → `clone-repo` (jak backend, zmienne `TRADING_AI_FRONTEND_*`) → `npm-install-build` (`node:20-bookworm`, `npm ci` + `npm run build`, `REACT_APP_API_URL` z ConfigMap na czas buildu)
+- **Init:** `fix-permissions` → `remove-old-files` → `clone-repo` (jak backend, zmienne `TRADING_AI_FRONTEND_*`) → `npm-install-build`: obraz **`node:24.12.0-bookworm`**, `npm install -g npm@11.6.2`, potem `npm ci` + `npm run build` (init jako root, na końcu `chown` `1000:1000` na `/app`), `REACT_APP_API_URL` z ConfigMap na czas buildu
 - **Runtime:** `nginx:alpine` montuje `subPath: build` jako document root; `ConfigMap` `trading-ai-frontend-nginx-config` — `try_files` pod SPA
 - PVC: `pvc-trading-ai-frontend` (**2Gi** — repo + `node_modules` + artefakt build)
 - PV: hostPath `/k8s/pv/trading-ai-frontend`, afinitacja węzła jak inne PV (domyślnie `k8s.node.001` — dostosuj do klastra)
-- Service **NodePort** `30080`, ClusterIP `trading-ai-frontend-service:80`
+- Service **ClusterIP** `trading-ai-frontend-service:80` (ruch zewnętrzny przez Ingress)
 
-**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. zewnętrzny URL API, NodePort/Ingress backendu), nie wyłącznie `*.svc.cluster.local`.
+### ingress-frontend.yml
+- **Ingress** host `00x097.com` → `trading-ai-frontend-service:80` (HTTP, bez cert-manager / TLS w repo)
+- `ingressClassName: nginx` — dopasuj do swojego Ingress Controllera
+
+**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. publiczny URL API z Ingress/NodePort), nie wyłącznie `*.svc.cluster.local`. TLS (np. Let’s Encrypt) możesz dodać osobno w klastrze (własny Issuer / adnotacje na Ingress).
 
 ### deployment-rest-api.yml
 REST API Controller (1 replica):
@@ -245,10 +252,12 @@ http://<NODE_IP>:30090
 ### Frontend
 ```bash
 # Z wewnątrz klastra
-http://trading-ai-frontend-service
+http://trading-ai-frontend-service.default.svc.cluster.local
 
-# Z zewnątrz (NodePort)
-http://<NODE_IP>:30080
+# Z internetu (po DNS + Ingress HTTP)
+http://00x097.com
+
+kubectl get ingress -n default
 ```
 
 ### RabbitMQ Management UI
@@ -337,6 +346,7 @@ kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 # Usuń wszystkie komponenty aplikacji
 kubectl delete -f k8s.manifests/deployment-sync.yml
 kubectl delete -f k8s.manifests/deployment-rest-api.yml
+kubectl delete -f k8s.manifests/ingress-frontend.yml
 kubectl delete -f k8s.manifests/deployment-frontend.yml
 kubectl delete -f k8s.manifests/daemonset-celery-workers.yml
 
@@ -377,12 +387,11 @@ cd k8s.manifests
 
 5. **Nazewnictwo**: Wszystkie obiekty mają prefix `trading-ai-backend-` dla łatwej identyfikacji przynależności do ekosystemu.
 
-6. **NodePort**: Tylko REST API jest dostępny przez NodePort (30090). RabbitMQ Management jest dostępny przez ClusterIP (użyj port-forward).
+6. **NodePort / Ingress**: REST API może być wystawione przez NodePort (30090) — zależnie od manifestu. Frontend: **ClusterIP** + **Ingress** HTTP na `00x097.com`. RabbitMQ Management: ClusterIP (port-forward).
 
 7. **Template Files**: 
    - Commituj do repo: `*.template.*` (z placeholderami)
-   - NIE commituj: pliki wygenerowane bez `.template.` (zawierają sekrety)
-   - Plik `config-env.yml` jest w `.gitignore` - automatycznie bezpieczny
+   - NIE commituj: `config-env.yml` (`.gitignore`)
 
 ## 🔐 Bezpieczeństwo
 

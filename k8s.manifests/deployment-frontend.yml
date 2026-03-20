@@ -97,16 +97,21 @@ spec:
             runAsUser: 1000
             runAsGroup: 1000
 
+        # Obraz + npm jak na stacji dev (node -v / npm -v); npm global wymaga root, na końcu chown dla spójności z nginx
         - name: npm-install-build
-          image: node:20-bookworm
+          image: node:24.12.0-bookworm
           command:
             - bash
             - -c
             - |
               set -euo pipefail
+              npm install -g npm@11.6.2
+              node -v
+              npm -v
               cd /app
               npm ci
               npm run build
+              chown -R 1000:1000 /app
           env:
             - name: REACT_APP_API_URL
               valueFrom:
@@ -121,8 +126,7 @@ spec:
             - name: app-storage
               mountPath: /app
           securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
+            runAsUser: 0
           resources:
             requests:
               memory: "1Gi"
@@ -219,11 +223,10 @@ metadata:
   labels:
     app: trading-ai-frontend-web
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30080
       protocol: TCP
       name: http
   selector:

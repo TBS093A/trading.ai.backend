@@ -101,6 +101,9 @@ deploy_applications() {
 
     kubectl apply -f deployment-frontend.yml
     log_success "Frontend (nginx + CRA z init) został wdrożony"
+
+    kubectl apply -f ingress-frontend.yml
+    log_success "Ingress frontendu (00x097.com) został wdrożony"
     
     kubectl apply -f daemonset-celery-workers.yml
     log_success "Celery Workers zostały wdrożone"
@@ -155,9 +158,9 @@ show_access_info() {
     echo "  API Docs: http://${NODE_IP}:30090/docs"
     echo ""
 
-    log_info "Frontend (nginx):"
-    echo "  Wewnętrzny: http://trading-ai-frontend-service"
-    echo "  Zewnętrzny: http://${NODE_IP}:30080"
+    log_info "Frontend (nginx, ClusterIP + Ingress):"
+    echo "  W klastrze: http://trading-ai-frontend-service.default.svc.cluster.local"
+    echo "  Publicznie (po DNS + Ingress): http://00x097.com"
     echo ""
     
     log_info "RabbitMQ Management UI (tylko ClusterIP - dostęp przez port-forward):"
@@ -183,6 +186,7 @@ cleanup() {
     log_info "Usuwanie Application Services..."
     kubectl delete -f deployment-sync.yml --ignore-not-found=true
     kubectl delete -f deployment-rest-api.yml --ignore-not-found=true
+    kubectl delete -f ingress-frontend.yml --ignore-not-found=true
     kubectl delete -f deployment-frontend.yml --ignore-not-found=true
     kubectl delete -f daemonset-celery-workers.yml --ignore-not-found=true
     
@@ -198,7 +202,7 @@ cleanup() {
     
     log_info "Usuwanie ConfigMap i Secret..."
     kubectl delete -f config-env.yml --ignore-not-found=true
-    
+
     log_success "Cleanup zakończony"
 }
 
