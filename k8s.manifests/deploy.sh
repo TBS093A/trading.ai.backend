@@ -1,19 +1,44 @@
 #!/bin/bash
 #
-# Skrypt do deploymentu Trading AI Backend na Kubernetes
-# Autor: AI Assistant
-# Data: 2025
+# Skrypt do deploymentu Trading AI Backend na Kubernetes.
+# Manifesty: wszystkie *.yml / *.yaml w tym katalogu (bez *.template.*).
+# cleanup / cleanup --yes: kubectl delete -f dla tych plików (sort odwrotnie).
 #
 
 set -e  # Exit on error
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "${REPO_ROOT}/.env" ]; then
   # shellcheck disable=SC1090
   set -a
   source "${REPO_ROOT}/.env"
   set +a
 fi
+
+# Wszystkie *.yml / *.yaml w tym katalogu poza szablonami (*.template.*); kolejność = sort alfabetyczny
+list_manifest_files() {
+    find "${SCRIPT_DIR}" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
+        ! -name '*.template.*' \
+        -print | LC_ALL=C sort
+}
+
+list_manifest_files_reverse() {
+    list_manifest_files | LC_ALL=C sort -r
+}
+
+kubectl_delete_manifests_from_list() {
+    local n=0
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        log_info "kubectl delete -f $(basename "$f") --ignore-not-found=true"
+        kubectl delete -f "$f" --ignore-not-found=true
+        n=$((n + 1))
+    done
+    if [ "$n" -eq 0 ]; then
+        log_warning "Brak plików manifestów do usunięcia w ${SCRIPT_DIR}"
+    fi
+}
 
 # Kolory dla lepszej czytelności
 RED='\033[0;31m'
@@ -57,11 +82,25 @@ check_cluster_connection() {
     log_success "Połączono z klastrem Kubernetes"
 }
 
-# Deploy ConfigMap i Secret
+# Deploy ConfigMap i Secret (config-env.* wygenerowany z template — nie committowany)
 deploy_config() {
-    log_info "Deployowanie ConfigMap i Secret..."
-    kubectl apply -f config-env.yml
-    log_success "ConfigMap i Secret zostały wdrożone"
+    log_info "Deployowanie ConfigMap i Secret (config-env.*)..."
+    local found=0
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        case "$(basename "$f")" in
+            config-env.yml|config-env.yaml)
+                log_info "kubectl apply -f $(basename "$f")"
+                kubectl apply -f "$f"
+                found=1
+                ;;
+        esac
+    done < <(list_manifest_files)
+    if [ "$found" -eq 0 ]; then
+        log_warning "Brak config-env.yml / config-env.yaml — uruchom set.envs.sh przed deployem"
+    else
+        log_success "ConfigMap i Secret zostały wdrożone"
+    fi
 }
 
 # Deploy Storage
@@ -71,16 +110,21 @@ deploy_storage() {
     log_success "Storage będzie wdrożony z odpowiednimi deploymentami"
 }
 
-# Deploy Infrastructure
+# Deploy Infrastructure (pliki, których nazwa zawiera rabbitmq lub redis)
 deploy_infrastructure() {
     log_info "Deployowanie Infrastructure Services (RabbitMQ, Redis)..."
     log_info "Uwaga: Używamy istniejącego PostgreSQL na klastrze (postgresql.default.svc.cluster.local)"
     
-    kubectl apply -f deployment-rabbitmq.yml
-    log_success "RabbitMQ został wdrożony"
-    
-    kubectl apply -f deployment-redis.yml
-    log_success "Redis został wdrożony"
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        b=$(basename "$f")
+        case "$b" in
+            *rabbitmq*|*redis*)
+                log_info "kubectl apply -f $b"
+                kubectl apply -f "$f"
+                ;;
+        esac
+    done < <(list_manifest_files)
     
     log_info "Oczekiwanie na gotowość Infrastructure Services..."
     
@@ -95,31 +139,44 @@ deploy_infrastructure() {
     log_success "Infrastructure Services są gotowe"
 }
 
-# Deploy Application Services
+# Deploy Application Services — wszystko poza config-env, infrastrukturą mq/redis i services.*
 deploy_applications() {
-    log_info "Deployowanie Application Services..."
+    log_info "Deployowanie Application Services (pozostałe manifesty wg nazw plików)..."
     
-    kubectl apply -f deployment-sync.yml
-    log_success "Sync Controller został wdrożony"
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        b=$(basename "$f")
+        case "$b" in
+            config-env.yml|config-env.yaml) continue ;;
+            *rabbitmq*|*redis*) continue ;;
+            services.yml|services.yaml) continue ;;
+        esac
+        log_info "kubectl apply -f $b"
+        kubectl apply -f "$f"
+    done < <(list_manifest_files)
     
-    kubectl apply -f deployment-rest-api.yml
-    log_success "REST API Controller został wdrożony"
-
-    kubectl apply -f deployment-frontend.yml
-    log_success "Frontend (nginx + CRA z init) został wdrożony"
-
-    kubectl apply -f ingress-frontend.yml
-    log_success "Ingress frontendu (00x097.com) został wdrożony"
-    
-    kubectl apply -f daemonset-celery-workers.yml
-    log_success "Celery Workers zostały wdrożone"
+    log_success "Application Services wdrożone (kolejność alfabetyczna — prefiksy 10-, 20- w nazwach plików jeśli zależności tego wymagają)"
 }
 
-# Deploy Services
+# Deploy Services (services.yml / services.yaml)
 deploy_services() {
     log_info "Deployowanie Services..."
-    kubectl apply -f services.yml
-    log_success "Services zostały wdrożone"
+    local found=0
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        case "$(basename "$f")" in
+            services.yml|services.yaml)
+                log_info "kubectl apply -f $(basename "$f")"
+                kubectl apply -f "$f"
+                found=1
+                ;;
+        esac
+    done < <(list_manifest_files)
+    if [ "$found" -eq 0 ]; then
+        log_info "Brak services.yml — pomijam"
+    else
+        log_success "Services zostały wdrożone"
+    fi
 }
 
 # Wyświetl status
@@ -179,35 +236,24 @@ show_access_info() {
     log_success "==================== DEPLOYMENT ZAKOŃCZONY ===================="
 }
 
-# Cleanup (usunięcie wszystkich zasobów)
+# Cleanup (usunięcie zasobów z manifestów w tym katalogu; odwrotna kolejność nazw plików)
 cleanup() {
-    log_warning "Usuwanie wszystkich zasobów Trading AI Backend..."
+    local auto_confirm="${1:-}"
+    log_warning "Usuwanie zasobów Trading AI Backend z manifestów w ${SCRIPT_DIR}..."
     
-    read -p "Czy na pewno chcesz usunąć wszystkie zasoby? (yes/no): " confirm
-    if [ "$confirm" != "yes" ]; then
-        log_info "Anulowano cleanup"
-        exit 0
+    if [ "$auto_confirm" != "--yes" ]; then
+        read -r -p "Czy na pewno chcesz usunąć wszystkie zasoby? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            log_info "Anulowano cleanup"
+            exit 0
+        fi
+    else
+        log_info "Potwierdzenie pominięte (--yes, np. CI)"
     fi
     
-    log_info "Usuwanie Application Services..."
-    kubectl delete -f deployment-sync.yml --ignore-not-found=true
-    kubectl delete -f deployment-rest-api.yml --ignore-not-found=true
-    kubectl delete -f ingress-frontend.yml --ignore-not-found=true
-    kubectl delete -f deployment-frontend.yml --ignore-not-found=true
-    kubectl delete -f daemonset-celery-workers.yml --ignore-not-found=true
-    
-    log_info "Usuwanie Infrastructure Services..."
-    log_info "Uwaga: PostgreSQL nie jest usuwany (używamy istniejącego PostgreSQL na klastrze)"
-    kubectl delete -f deployment-rabbitmq.yml --ignore-not-found=true
-    kubectl delete -f deployment-redis.yml --ignore-not-found=true
-    
-    log_info "Usuwanie Services..."
-    kubectl delete -f services.yml --ignore-not-found=true
-    
-    log_info "Storage jest teraz usuwany razem z aplikacjami (PV/PVC są w plikach deploymentów)"
-    
-    log_info "Usuwanie ConfigMap i Secret..."
-    kubectl delete -f config-env.yml --ignore-not-found=true
+    log_info "Uwaga: PostgreSQL na klastrze nie jest częścią tych manifestów"
+    log_info "kubectl delete (kolejność odwrotna do sortowania alfabetycznego nazw plików)..."
+    kubectl_delete_manifests_from_list < <(list_manifest_files_reverse)
 
     log_success "Cleanup zakończony"
 }
@@ -226,7 +272,7 @@ show_help() {
     echo "  status          - Wyświetl status wszystkich komponentów"
     echo "  logs            - Wyświetl informacje o logach"
     echo "  access          - Wyświetl informacje o dostępie do serwisów"
-    echo "  cleanup         - Usuń wszystkie zasoby"
+    echo "  cleanup         - Usuń zasoby ze wszystkich *.yml/*.yaml (bez template); opcjonalnie: cleanup --yes (CI)"
     echo "  help            - Wyświetl tę pomoc"
     echo ""
 }
@@ -288,7 +334,7 @@ main() {
         cleanup)
             check_kubectl
             check_cluster_connection
-            cleanup
+            cleanup "${2:-}"
             ;;
         help|--help|-h)
             show_help

@@ -154,16 +154,9 @@ def deleteTradingAiK8sManifests() {
     try {
         sh """
             export KUBECONFIG="/home/jenkins/.kube/config"
+            chmod +x ./k8s.manifests/deploy.sh
             cd ./k8s.manifests
-            kubectl delete -f deployment-sync.yml --ignore-not-found=true
-            kubectl delete -f deployment-rest-api.yml --ignore-not-found=true
-            kubectl delete -f ingress-frontend.yml --ignore-not-found=true
-            kubectl delete -f deployment-frontend.yml --ignore-not-found=true
-            kubectl delete -f daemonset-celery-workers.yml --ignore-not-found=true
-            kubectl delete -f deployment-rabbitmq.yml --ignore-not-found=true
-            kubectl delete -f deployment-redis.yml --ignore-not-found=true
-            kubectl delete -f services.yml --ignore-not-found=true
-            kubectl delete -f config-env.yml --ignore-not-found=true
+            ./deploy.sh cleanup --yes
         """
     } catch (Exception e) {
         echo "deleteTradingAiK8sManifests failed: ${e.message}"
@@ -278,7 +271,7 @@ pipeline {
                             ),
                             booleanParam(
                                 defaultValue: false,
-                                description: '<b>Teardown:</b> <code>kubectl delete -f</code> na manifestach (jak cleanup w deploy.sh) — przed generowaniem configu; PostgreSQL na klastrze bez zmian',
+                                description: '<b>Teardown:</b> <code>./deploy.sh cleanup --yes</code> (wszystkie *.yml/*.yaml bez template, kolejność jak w skrypcie) — przed generowaniem configu',
                                 name: 'K8S_DELETE_MANIFESTS'
                             ),
                         ])
@@ -293,14 +286,14 @@ pipeline {
             }
         }
 
-        stage('Delete Trading AI from K8s (kubectl delete)') {
+        stage('Delete Trading AI from K8s (deploy.sh cleanup --yes)') {
             when {
                 expression {
                     params.K8S_DELETE_MANIFESTS == true || params.K8S_DELETE_MANIFESTS?.toString() == 'true'
                 }
             }
             steps {
-                echo 'K8S_DELETE_MANIFESTS: kubectl delete -f (manifesty w k8s.manifests/)'
+                echo 'K8S_DELETE_MANIFESTS: ./deploy.sh cleanup --yes'
                 script {
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                         deleteTradingAiK8sManifests()
