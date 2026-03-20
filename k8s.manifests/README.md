@@ -93,7 +93,7 @@ Processing template: ./k8s.manifests/config-env.template.yml
 # 1. ConfigMap i Secret (zmienne środowiskowe)
 kubectl apply -f k8s.manifests/config-env.yml
 
-# Frontend z Ingress: **Ingress NGINX** (`ingressClassName: nginx`), rekord DNS `00x097.com` → adres ingressu
+# Frontend z Ingress: **Ingress NGINX** + **cert-manager** (ClusterIssuer `letsencrypt-staging`), TLS → secret `00x097-trading-tls`; DNS `00x097.com` → LB ingressu
 
 # 2. Infrastructure Services (RabbitMQ, Redis)
 # Uwaga: PostgreSQL używamy istniejący na klastrze (postgresql.default.svc.cluster.local)
@@ -188,10 +188,12 @@ Frontend (1 replica, POC bez Jenkinsa):
 - Service **ClusterIP** `trading-ai-frontend-service:80` (ruch zewnętrzny przez Ingress)
 
 ### ingress-frontend.yml
-- **Ingress** host `00x097.com` → `trading-ai-frontend-service:80` (HTTP, bez cert-manager / TLS w repo)
-- `ingressClassName: nginx` — dopasuj do swojego Ingress Controllera
+- **Ingress** host `00x097.com` → `trading-ai-frontend-service` (port `http`)
+- Adnotacje jak w innych appach (nginx): `kubernetes.io/ingress.class`, **cert-manager** `cluster-issuer: letsencrypt-staging`, proxy body/timeouts, **SSL redirect**
+- **TLS:** secretName **`00x097-trading-tls`** (wypełnia cert-manager)
+- Na klastrze musi istnieć **ClusterIssuer** `letsencrypt-staging` (staging LE — ostrzeżenia certyfikatu w przeglądarce). Produkcja: osobny issuer + zmiana adnotacji na `letsencrypt-prod`
 
-**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. publiczny URL API z Ingress/NodePort), nie wyłącznie `*.svc.cluster.local`. TLS (np. Let’s Encrypt) możesz dodać osobno w klastrze (własny Issuer / adnotacje na Ingress).
+**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. publiczny URL API z Ingress/NodePort), nie wyłącznie `*.svc.cluster.local`.
 
 ### deployment-rest-api.yml
 REST API Controller (1 replica):
@@ -262,10 +264,11 @@ http://<NODE_IP>:30090
 # Z wewnątrz klastra
 http://trading-ai-frontend-service.default.svc.cluster.local
 
-# Z internetu (po DNS + Ingress HTTP)
-http://00x097.com
+# Z internetu (po DNS + Ingress + cert-manager staging)
+https://00x097.com
 
 kubectl get ingress -n default
+kubectl describe certificate -n default 00x097-trading-tls
 ```
 
 ### RabbitMQ Management UI
@@ -380,7 +383,7 @@ PostgreSQL na klastrze nie jest w tych manifestach — pozostaje bez zmian.
 
 5. **Nazewnictwo**: Wszystkie obiekty mają prefix `trading-ai-backend-` dla łatwej identyfikacji przynależności do ekosystemu.
 
-6. **NodePort / Ingress**: REST API może być wystawione przez NodePort (30090) — zależnie od manifestu. Frontend: **ClusterIP** + **Ingress** HTTP na `00x097.com`. RabbitMQ Management: ClusterIP (port-forward).
+6. **NodePort / Ingress**: REST API może być wystawione przez NodePort (30090) — zależnie od manifestu. Frontend: **ClusterIP** + **Ingress** HTTPS (`00x097.com`, cert-manager **staging**). RabbitMQ Management: ClusterIP (port-forward).
 
 7. **Template Files**: 
    - Commituj do repo: `*.template.*` (z placeholderami)

@@ -1,4 +1,4 @@
-# Wymaga: Ingress Controller (nginx). DNS: 00x097.com → adres LoadBalancera / ingressu
+# Ingress NGINX + cert-manager (ClusterIssuer letsencrypt-staging). DNS: 00x097.com → LB ingressu
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,8 +7,19 @@ metadata:
   labels:
     app: trading-ai-frontend-web
     component: frontend
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
-  ingressClassName: nginx
+  tls:
+    - hosts:
+        - 00x097.com
+      secretName: 00x097-trading-tls
   rules:
     - host: 00x097.com
       http:
@@ -19,4 +30,4 @@ spec:
               service:
                 name: trading-ai-frontend-service
                 port:
-                  number: 80
+                  name: http
