@@ -15,14 +15,16 @@ from typing import List, Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Import auth
-from src.auth import require_auth, require_admin, AuthUser, get_current_user, get_app_database
+from src.auth import require_auth, require_admin, AuthUser, get_current_user
 
 # Import security
 from src.security import (
     SecurityHeadersMiddleware,
     RateLimitMiddleware,
+    KubernetesProbeMiddleware,
     CSRFMiddleware,
     CSRFTokenManager,
     InputSanitizer,
@@ -115,6 +117,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 2. Rate Limiting - ogranicza liczbę requestów
 app.add_middleware(RateLimitMiddleware)
 
+# 2b. Sondy K8s — poza łańcuchem auth (ostatnio dodane = najbardziej zewnętrzne)
+app.add_middleware(KubernetesProbeMiddleware)
+
 # 3. CSRF Protection - waliduje tokeny CSRF dla modyfikujących requestów
 # UWAGA: Tymczasowo wyłączone dla łatwiejszego developmentu
 # W produkcji należy odkomentować:
@@ -204,32 +209,24 @@ async def root():
 async def live():
     """
     Liveness (K8s): proces odpowiada — bez zależności zewnętrznych.
-    Nie wymaga autentykacji.
+    W praktyce obsługiwane przez KubernetesProbeMiddleware (bez auth).
     """
-    return {"status": "ok"}
+    from src.k8s_probes import live_body
+
+    return await live_body()
 
 
 @app.get("/ready")
 async def ready():
     """
-    Readiness (K8s): aplikacja może przyjmować ruch — sprawdzenie PostgreSQL.
-    Nie wymaga autentykacji.
+    Readiness (K8s): PostgreSQL — w praktyce KubernetesProbeMiddleware (bez auth).
     """
-    db = await get_app_database()
-    result = await db.test_connection()
-    if result.get("test_passed"):
-        return {
-            "status": "ready",
-            "database": result.get("connection", "OK"),
-        }
-    raise HTTPException(
-        status_code=503,
-        detail={
-            "status": "not_ready",
-            "database": result.get("connection", "FAILED"),
-            "error": result.get("error"),
-        },
-    )
+    from src.k8s_probes import ready_body
+
+    status, body = await ready_body()
+    if status == 200:
+        return body
+    return JSONResponse(body, status_code=status)
 
 
 @app.get("/health")
