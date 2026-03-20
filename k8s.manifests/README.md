@@ -219,7 +219,7 @@ Serwisy (tylko Redis - reszta jest w odpowiednich plikach deploymentów):
 
 ## Jenkins (`Jenkinsfile` w katalogu głównym repo)
 
-Pipeline: `checkout scm` → usuwa `k8s.manifests/config-env.yml` → `./set.envs.sh ... --dir ./k8s.manifests` (wartości z **parametrów** builda + **withCredentials**) → `k8s.manifests/deploy.sh deploy` (gdy zaznaczono **DEPLOY**).
+Pipeline: `checkout scm` → opcjonalnie **K8S_DELETE_MANIFESTS**: `kubectl delete -f` (kolejność jak `deploy.sh cleanup`) → usuwa `k8s.manifests/config-env.yml` → `./set.envs.sh ...` → `deploy.sh deploy` (gdy **DEPLOY**).
 
 **Secret text** (IDs — nagłówek `Jenkinsfile`): OpenAI, CryptoPanic, GNews, CoinDesk, MinIO access/secret, Redis. **Username with password:** `trading-ai-database-credentials`, `trading-ai-rabbitmq-credentials` (user/hasło do `database.*` i `rabbitmq.*` w `config-env`). Pozostałe: `usernamePassword` (Git, Telegram, KuCoin, MEXC).
 
