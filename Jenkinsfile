@@ -138,12 +138,47 @@ def generateK8sConfigFromTemplate() {
 
 def deployTradingAiK8s() {
     try {
-        sh """
+        /* Po apply manifestów Pod nie zawsze się odnawia (np. ta sama spec) — rollout restart
+         * wymusza przejęcie nowego configu / initów. Tylko gdy dany Deployment lub DaemonSet
+         * już istniał przed tym uruchomieniem (pierwszy deploy bez podwójnego rolloutu). */
+        sh '''
             export KUBECONFIG="/home/jenkins/.kube/config"
             chmod +x ./k8s.manifests/deploy.sh
             cd ./k8s.manifests
+            NS=default
+
+            exists_deploy() {
+                kubectl -n "$NS" get deployment "$1" -o name 2>/dev/null | grep -q .
+            }
+            exists_ds() {
+                kubectl -n "$NS" get daemonset "$1" -o name 2>/dev/null | grep -q .
+            }
+
+            pre_rabbitmq=0; exists_deploy trading-ai-backend-rabbitmq && pre_rabbitmq=1
+            pre_redis=0; exists_deploy trading-ai-backend-redis && pre_redis=1
+            pre_rest=0; exists_deploy trading-ai-backend-rest-api-controller && pre_rest=1
+            pre_front=0; exists_deploy trading-ai-frontend-web && pre_front=1
+            pre_celery=0; exists_ds trading-ai-backend-celery-workers && pre_celery=1
+
             ./deploy.sh deploy
-        """
+
+            rollout_deploy() {
+                [ "$1" = 1 ] || return 0
+                echo "[INFO] kubectl rollout restart deployment/$2 (istniał przed deploy)"
+                kubectl -n "$NS" rollout restart "deployment/$2"
+            }
+            rollout_ds() {
+                [ "$1" = 1 ] || return 0
+                echo "[INFO] kubectl rollout restart daemonset/$2 (istniał przed deploy)"
+                kubectl -n "$NS" rollout restart "daemonset/$2"
+            }
+
+            rollout_deploy "$pre_rabbitmq" trading-ai-backend-rabbitmq
+            rollout_deploy "$pre_redis" trading-ai-backend-redis
+            rollout_deploy "$pre_rest" trading-ai-backend-rest-api-controller
+            rollout_deploy "$pre_front" trading-ai-frontend-web
+            rollout_ds "$pre_celery" trading-ai-backend-celery-workers
+        '''
     } catch (Exception e) {
         echo "Error deploying Trading AI on K8s: ${e.message}"
         throw e
@@ -266,7 +301,7 @@ pipeline {
                             ),
                             booleanParam(
                                 defaultValue: true,
-                                description: 'Uruchom <b>k8s.manifests/deploy.sh deploy</b> po wygenerowaniu config-env.yml',
+                                description: 'Uruchom <b>k8s.manifests/deploy.sh deploy</b> po wygenerowaniu config-env.yml; jeśli dany Deployment / DaemonSet już był w klastrze — potem <code>kubectl rollout restart</code> (nowy config / init clone+build)',
                                 name: 'DEPLOY'
                             ),
                             booleanParam(
@@ -325,7 +360,7 @@ pipeline {
                 }
             }
             steps {
-                echo 'Deploy: k8s.manifests/deploy.sh deploy'
+                echo 'Deploy: deploy.sh deploy + rollout restart dla workloadów istniejących przed deploy'
                 script {
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                         deployTradingAiK8s()
