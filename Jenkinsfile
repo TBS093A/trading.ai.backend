@@ -150,6 +150,27 @@ def deployTradingAiK8s() {
     }
 }
 
+def deleteTradingAiK8sManifests() {
+    try {
+        sh """
+            export KUBECONFIG="/home/jenkins/.kube/config"
+            cd ./k8s.manifests
+            kubectl delete -f deployment-sync.yml --ignore-not-found=true
+            kubectl delete -f deployment-rest-api.yml --ignore-not-found=true
+            kubectl delete -f ingress-frontend.yml --ignore-not-found=true
+            kubectl delete -f deployment-frontend.yml --ignore-not-found=true
+            kubectl delete -f daemonset-celery-workers.yml --ignore-not-found=true
+            kubectl delete -f deployment-rabbitmq.yml --ignore-not-found=true
+            kubectl delete -f deployment-redis.yml --ignore-not-found=true
+            kubectl delete -f services.yml --ignore-not-found=true
+            kubectl delete -f config-env.yml --ignore-not-found=true
+        """
+    } catch (Exception e) {
+        echo "deleteTradingAiK8sManifests failed: ${e.message}"
+        throw e
+    }
+}
+
 pipeline {
 
     agent {
@@ -182,7 +203,7 @@ pipeline {
                                 name: 'DATA_SOURCE_BRANCH'
                             ),
                             string(
-                                defaultValue: 'master',
+                                defaultValue: 'main',
                                 description: 'Branch repozytorium <b>trading.ai.frontend</b>',
                                 name: 'FRONTEND_REPO_BRANCH'
                             ),
@@ -255,6 +276,11 @@ pipeline {
                                 description: 'Uruchom <b>k8s.manifests/deploy.sh deploy</b> po wygenerowaniu config-env.yml',
                                 name: 'DEPLOY'
                             ),
+                            booleanParam(
+                                defaultValue: false,
+                                description: '<b>Teardown:</b> <code>kubectl delete -f</code> na manifestach (jak cleanup w deploy.sh) — przed generowaniem configu; PostgreSQL na klastrze bez zmian',
+                                name: 'K8S_DELETE_MANIFESTS'
+                            ),
                         ])
                     ])
                 }
@@ -264,6 +290,22 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Delete Trading AI from K8s (kubectl delete)') {
+            when {
+                expression {
+                    params.K8S_DELETE_MANIFESTS == true || params.K8S_DELETE_MANIFESTS?.toString() == 'true'
+                }
+            }
+            steps {
+                echo 'K8S_DELETE_MANIFESTS: kubectl delete -f (manifesty w k8s.manifests/)'
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        deleteTradingAiK8sManifests()
+                    }
+                }
             }
         }
 
