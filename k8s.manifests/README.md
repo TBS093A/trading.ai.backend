@@ -219,7 +219,7 @@ Serwisy (tylko Redis - reszta jest w odpowiednich plikach deploymentów):
 
 ## Jenkins (`Jenkinsfile` w katalogu głównym repo)
 
-Pipeline: `checkout scm` → opcjonalnie **K8S_DELETE_MANIFESTS**: `kubectl delete -f` (kolejność jak `deploy.sh cleanup`) → usuwa `k8s.manifests/config-env.yml` → `./set.envs.sh ...` → `deploy.sh deploy` (gdy **DEPLOY**).
+Pipeline: `checkout scm` → opcjonalnie **K8S_DELETE_MANIFESTS**: `./deploy.sh cleanup --yes` → usuwa lokalny `config-env.yml` → `./set.envs.sh ...` → `deploy.sh deploy` (gdy **DEPLOY**).
 
 **Secret text** (IDs — nagłówek `Jenkinsfile`): OpenAI, CryptoPanic, GNews, CoinDesk, MinIO access/secret, Redis. **Username with password:** `trading-ai-database-credentials`, `trading-ai-rabbitmq-credentials` (user/hasło do `database.*` i `rabbitmq.*` w `config-env`). Pozostałe: `usernamePassword` (Git, Telegram, KuCoin, MEXC).
 
@@ -350,30 +350,15 @@ kubectl rollout restart daemonset/trading-ai-backend-celery-workers
 
 ## 🧹 Cleanup
 
-```bash
-# Usuń wszystkie komponenty aplikacji
-kubectl delete -f k8s.manifests/deployment-sync.yml
-kubectl delete -f k8s.manifests/deployment-rest-api.yml
-kubectl delete -f k8s.manifests/ingress-frontend.yml
-kubectl delete -f k8s.manifests/deployment-frontend.yml
-kubectl delete -f k8s.manifests/daemonset-celery-workers.yml
+`deploy.sh cleanup` wykrywa wszystkie pliki `*.yml` / `*.yaml` w `k8s.manifests/` (bez `*.template.*`) i wykonuje `kubectl delete -f` w **odwrotnej** kolejności sortowania nazw (config-env na końcu).
 
-# Usuń infrastructure (RabbitMQ, Redis)
-# Uwaga: PostgreSQL nie jest usuwany (używamy istniejącego na klastrze)
-kubectl delete -f k8s.manifests/deployment-rabbitmq.yml
-kubectl delete -f k8s.manifests/deployment-redis.yml
-
-# Usuń konfigurację
-kubectl delete -f k8s.manifests/config-env.yml
-
-# Uwaga: Storage (PV/PVC) jest automatycznie usuwany razem z aplikacjami
-```
-
-Lub użyj skryptu:
 ```bash
 cd k8s.manifests
-./deploy.sh cleanup
+./deploy.sh cleanup          # wymaga wpisania yes
+./deploy.sh cleanup --yes    # bez pytania (Jenkins, skrypty)
 ```
+
+PostgreSQL na klastrze nie jest w tych manifestach — pozostaje bez zmian.
 
 ## 📝 Uwagi
 
@@ -400,6 +385,8 @@ cd k8s.manifests
 7. **Template Files**: 
    - Commituj do repo: `*.template.*` (z placeholderami)
    - NIE commituj: `config-env.yml` (`.gitignore`)
+
+8. **deploy.sh a pliki manifestów**: Skrypt uwzględnia wszystkie `*.yml` / `*.yaml` w `k8s.manifests/` z wyłączeniem `*.template.*`. Fazy `deploy`: `config-env.*` → pliki z `rabbitmq` lub `redis` w nazwie (sort) → pozostałe (sort) → `services.*`. `cleanup` / `cleanup --yes`: `kubectl delete` dla tych samych plików w **odwrotnej** kolejności sortowania nazw. Nowe manifesty dodajesz jako pliki w katalogu bez edycji list w skrypcie; przy wymuszonej kolejności zależności użyj prefiksów w nazwach (np. `10-`, `20-`).
 
 ## 🔐 Bezpieczeństwo
 
