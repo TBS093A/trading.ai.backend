@@ -20,6 +20,41 @@ data:
       }
     }
 
+--- 
+# Frontend — PVC + PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-trading-ai-frontend
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /k8s/pv/trading-ai-frontend
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - k8s.node.001
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-trading-ai-frontend
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: pv-trading-ai-frontend
 ---
 # Frontend — init: git clone + npm build; runtime: nginx serwuje katalog build/
 apiVersion: apps/v1
@@ -178,42 +213,6 @@ spec:
         - name: nginx-config
           configMap:
             name: trading-ai-frontend-nginx-config
-
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: pv-trading-ai-frontend
-spec:
-  capacity:
-    storage: 2Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: /k8s/pv/trading-ai-frontend
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - k8s.node.001
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pvc-trading-ai-frontend
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
-  volumeName: pv-trading-ai-frontend
-
 ---
 apiVersion: v1
 kind: Service
