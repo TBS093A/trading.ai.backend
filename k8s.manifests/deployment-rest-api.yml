@@ -308,6 +308,27 @@ spec:
                 configMapKeyRef:
                   name: trading-ai-config
                   key: CORS_ALLOWED_ORIGINS
+            
+            - name: ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: ADMIN_USERNAME
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-ai-secrets
+                  key: ADMIN_PASSWORD
+            - name: ADMIN_CREATE_FORCE
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: ADMIN_CREATE_FORCE
+            - name: SESSION_EXPIRY_PERIOD
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: SESSION_EXPIRY_PERIOD
           
           volumeMounts:
             - name: app-storage
