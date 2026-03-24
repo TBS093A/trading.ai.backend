@@ -4,25 +4,15 @@ from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
 
 import yfinance as yf
-from yfinance import Screener
+from yfinance import EquityQuery, FundQuery
 
 from .abstract import AbstractAPI
 
 logger = logging.getLogger(__name__)
 
-SCREENER_QUOTE_TYPES = [
-    "EQUITY",
-    "ETF",
-    "CRYPTOCURRENCY",
-    "CURRENCY",
-    "FUTURES",
-    "INDEX",
-    "MUTUALFUND",
-]
-
-SCREENER_PAGE_SIZE = 250
-SCREENER_SLEEP_BETWEEN_PAGES = 1.5
-SCREENER_SLEEP_BETWEEN_TYPES = 3.0
+SCREEN_PAGE_SIZE = 250
+SCREEN_SLEEP_BETWEEN_PAGES = 1.5
+SCREEN_SLEEP_BETWEEN_TYPES = 3.0
 
 
 class YahooFinanceAPI(AbstractAPI):
@@ -110,40 +100,25 @@ class YahooFinanceAPI(AbstractAPI):
             raise
 
     # ------------------------------------------------------------------
-    # _get_symbols  (Screener — dynamicznie, jak Binance exchange_info)
+    # _get_symbols  (yf.screen — dynamicznie, jak Binance exchange_info)
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _fetch_screener_page(quote_type: str, offset: int = 0) -> dict:
-        """Pojedyncze żądanie do Yahoo Finance Screener."""
-        sc = Screener()
-        sc.set_body({
-            "offset": offset,
-            "size": SCREENER_PAGE_SIZE,
-            "sortField": "intradaymarketcap",
-            "sortType": "desc",
-            "quoteType": quote_type,
-            "query": {"operator": "and", "operands": []},
-        })
-        return sc.response
-
-    def _fetch_all_for_quote_type(self, quote_type: str) -> List[Dict[str, any]]:
-        """Paginuje przez Yahoo Finance Screener i zwraca wszystkie symbole danego typu."""
+    def _screen_paginated(
+        query,
+        label: str,
+        seen: set,
+    ) -> List[Dict[str, any]]:
+        """Paginuje przez yf.screen() i zwraca wszystkie symbole."""
         symbols: list = []
-        seen: set = set()
         offset = 0
 
         while True:
             try:
-                resp = self._fetch_screener_page(quote_type, offset)
+                resp = yf.screen(query, size=SCREEN_PAGE_SIZE, offset=offset)
 
-                results = resp.get("finance", {}).get("result", [])
-                if not results:
-                    break
-
-                first_result = results[0]
-                quotes = first_result.get("quotes", [])
-                total = first_result.get("total", 0)
+                quotes = resp.get("quotes", [])
+                total = resp.get("total", 0)
 
                 if not quotes:
                     break
@@ -159,17 +134,14 @@ class YahooFinanceAPI(AbstractAPI):
                             "quote_asset": "USDT",
                         })
 
-                offset += SCREENER_PAGE_SIZE
+                offset += SCREEN_PAGE_SIZE
                 if offset >= total:
                     break
 
-                time.sleep(SCREENER_SLEEP_BETWEEN_PAGES)
+                time.sleep(SCREEN_SLEEP_BETWEEN_PAGES)
 
             except Exception as e:
-                logger.warning(
-                    f"Yahoo Finance Screener: błąd dla {quote_type} "
-                    f"(offset={offset}): {e}"
-                )
+                logger.warning(f"Yahoo Finance screen ({label}, offset={offset}): {e}")
                 break
 
         return symbols
@@ -182,13 +154,10 @@ class YahooFinanceAPI(AbstractAPI):
         symbol_status: Optional[str] = None,
     ) -> List[Dict[str, any]]:
         """
-        Pobiera wszystkie dostępne symbole z Yahoo Finance przez Screener API.
+        Pobiera wszystkie dostępne symbole z Yahoo Finance przez yf.screen().
 
-        Bez hardcoded list — dynamicznie odpytuje Yahoo Finance o każdy
-        quoteType (EQUITY, ETF, CRYPTOCURRENCY, CURRENCY, FUTURES, INDEX,
-        MUTUALFUND) i paginuje po 250 wyników, identycznie jak Binance
-        exchange_info().
-
+        Dynamicznie odpytuje Yahoo Finance Screener (EquityQuery + FundQuery)
+        i paginuje po 250 wyników — analogicznie do Binance exchange_info().
         Ticker Yahoo Finance = base_asset (1:1, bez konwersji).
         """
         try:
@@ -206,23 +175,23 @@ class YahooFinanceAPI(AbstractAPI):
             all_symbols: list = []
             seen: set = set()
 
-            for idx, qt in enumerate(SCREENER_QUOTE_TYPES):
-                if idx > 0:
-                    time.sleep(SCREENER_SLEEP_BETWEEN_TYPES)
+            # Equities — wszystkie akcje z ceną > 0
+            logger.info("Yahoo Finance screen: pobieranie EQUITY...")
+            eq_query = EquityQuery("gt", ["intradayprice", 0])
+            eq_symbols = self._screen_paginated(eq_query, "EQUITY", seen)
+            all_symbols.extend(eq_symbols)
+            logger.info(f"Yahoo Finance screen: EQUITY → {len(eq_symbols)} symboli")
 
-                logger.info(f"Yahoo Finance Screener: pobieranie {qt}...")
-                qt_symbols = self._fetch_all_for_quote_type(qt)
+            time.sleep(SCREEN_SLEEP_BETWEEN_TYPES)
 
-                new_count = 0
-                for s in qt_symbols:
-                    if s["symbol"] not in seen:
-                        seen.add(s["symbol"])
-                        all_symbols.append(s)
-                        new_count += 1
+            # Funds / ETF — wszystkie fundusze z ceną > 0
+            logger.info("Yahoo Finance screen: pobieranie FUND/ETF...")
+            fund_query = FundQuery("gt", ["intradayprice", 0])
+            fund_symbols = self._screen_paginated(fund_query, "FUND", seen)
+            all_symbols.extend(fund_symbols)
+            logger.info(f"Yahoo Finance screen: FUND/ETF → {len(fund_symbols)} symboli")
 
-                logger.info(f"Yahoo Finance Screener: {qt} → {new_count} nowych symboli")
-
-            logger.info(f"Yahoo Finance Screener: łącznie {len(all_symbols)} unikalnych symboli")
+            logger.info(f"Yahoo Finance screen: łącznie {len(all_symbols)} unikalnych symboli")
             return all_symbols
 
         except Exception as error:
