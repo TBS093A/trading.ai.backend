@@ -451,52 +451,81 @@ async def search_exchanges(
 # KLINES DATA
 # ===================
 
+EXCHANGE_PRIORITY = ["BINANCE", "YAHOO"]
+
+EXCHANGE_API_GETTER = {
+    "BINANCE": lambda fabric: fabric.get_binance_api(),
+    "YAHOO": lambda fabric: fabric.get_yahoofinance_api(),
+    "MEXC": lambda fabric: fabric.get_mexc_api(),
+}
+
+
 @router.get("/klines/{asset_id}/{interval}")
 async def get_klines(
     asset_id: int = Path(..., ge=1),
     interval: str = Path(...),
     start_time: Optional[int] = Query(default=None),
     end_time: Optional[int] = Query(default=None),
-    limit: int = Query(default=500, ge=1, le=1000)
+    limit: int = Query(default=500, ge=1, le=1000),
+    exchange: Optional[str] = Query(default=None, description="Wymuszenie giełdy (np. BINANCE, YAHOO)"),
 ):
-    """Pobiera klines dla assetu."""
+    """Pobiera klines dla assetu. Automatycznie wybiera giełdę wg priorytetu lub wymuszaną przez parametr exchange."""
     db = await get_db()
     assets_table = db.get_factory().get_assets_table()
     asset_exchanges_table = db.get_factory().get_asset_exchanges_table()
-    
+
     asset = await assets_table.get_by_id(asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
-    
+
     asset_name = asset['asset']
     quote_name = asset['quote']
-    
-    # Sprawdź czy na Binance (BinanceAPI w bazie)
+
     asset_exchanges = await asset_exchanges_table.get_by_asset_id(asset_id)
-    binance_found = any("BINANCE" in ex.get('exchange_name', '').upper() for ex in asset_exchanges)
-    
-    if not binance_found:
-        raise HTTPException(status_code=404, detail="Asset not available on Binance")
-    
-    # Pobierz klines
+    exchange_names_upper = {ex.get('exchange_name', '').upper() for ex in asset_exchanges}
+
     api_facade = get_api_facade()
-    binance_api = api_facade.get_fabric().get_binance_api()
-    
-    klines_data = binance_api._get_klines(
+    fabric = api_facade.get_fabric()
+
+    if exchange:
+        forced = exchange.upper()
+        getter = EXCHANGE_API_GETTER.get(forced)
+        if not getter:
+            raise HTTPException(status_code=400, detail=f"Nieznana giełda: {exchange}")
+        exchange_api = getter(fabric)
+        chosen_exchange = forced
+    else:
+        exchange_api = None
+        chosen_exchange = None
+        for prio_name in EXCHANGE_PRIORITY:
+            if any(prio_name in en for en in exchange_names_upper):
+                getter = EXCHANGE_API_GETTER.get(prio_name)
+                if getter:
+                    exchange_api = getter(fabric)
+                    chosen_exchange = prio_name
+                    break
+
+        if exchange_api is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Brak obsługiwanej giełdy dla assetu {asset_name}. Dostępne: {exchange_names_upper}",
+            )
+
+    klines_data = exchange_api._get_klines(
         base_currency=asset_name,
         quote_currency=quote_name,
         interval=interval,
         start_time=start_time,
         end_time=end_time,
-        limit=limit
+        limit=limit,
     )
-    
+
     return {
         "asset": asset_name,
         "quote": quote_name,
         "interval": interval,
-        "exchange": "BINANCE",
-        "klines": klines_data
+        "exchange": chosen_exchange,
+        "klines": klines_data,
     }
 
 
