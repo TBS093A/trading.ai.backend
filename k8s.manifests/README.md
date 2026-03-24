@@ -176,12 +176,14 @@ Frontend (1 replica, POC bez Jenkinsa):
 - Service **ClusterIP** `trading-ai-frontend-service:80` (ruch zewnętrzny przez Ingress)
 
 ### ingress-frontend.yml
-- **Ingress** host `00x097.com` → `trading-ai-frontend-service` (port `http`)
-- Adnotacje jak w innych appach (nginx): `kubernetes.io/ingress.class`, **cert-manager** `cluster-issuer: letsencrypt-staging`, proxy body/timeouts, **SSL redirect**
-- **TLS:** secretName **`00x097-trading-tls`** (wypełnia cert-manager)
-- Na klastrze musi istnieć **ClusterIssuer** `letsencrypt-staging` (staging LE — ostrzeżenia certyfikatu w przeglądarce). Produkcja: osobny issuer + zmiana adnotacji na `letsencrypt-prod`
+Dwa obiekty Ingress w jednym pliku:
+1. **`trading-ai-frontend`** — `00x097.com/` → `trading-ai-frontend-service` (SPA); TLS secret `00x097-trading-tls`
+2. **`trading-ai-backend-api`** — `api.00x097.com/` → `trading-ai-backend-rest-api-service:9090` (osobna subdomena, bez rewrite); TLS secret `api-00x097-trading-tls`
+- Adnotacje: `kubernetes.io/ingress.class: nginx`, **cert-manager** `letsencrypt-prod`, proxy body/timeouts, **SSL redirect**
 
-**Uwaga:** `REACT_APP_API_URL` musi być adresem **osiągalnym z przeglądarki użytkownika** (np. publiczny URL API z Ingress/NodePort), nie wyłącznie `*.svc.cluster.local`.
+**`REACT_APP_API_URL`** w Jenkins = `https://api.00x097.com` (publiczny adres backendu widoczny z przeglądarki).
+
+**DNS:** dodaj rekord A/CNAME `api.00x097.com` wskazujący na ten sam LB co `00x097.com`.
 
 ### deployment-rest-api.yml
 REST API Controller (1 replica):
