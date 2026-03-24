@@ -92,7 +92,7 @@ Processing template: ./k8s.manifests/config-env.template.yml
 # 1. ConfigMap i Secret (zmienne środowiskowe)
 kubectl apply -f k8s.manifests/config-env.yml
 
-# Frontend z Ingress: **Ingress NGINX** + **cert-manager** (ClusterIssuer `letsencrypt-staging`), TLS → secret `00x097-trading-tls`; DNS `00x097.com` → LB ingressu
+# Ingress: **NGINX** + **cert-manager** (`letsencrypt-prod`): `00x097.com` + `api.00x097.com`, TLS `00x097-trading-tls` / `api-00x097-trading-tls`
 
 # 2. Infrastructure Services (RabbitMQ, Redis)
 # Uwaga: PostgreSQL używamy istniejący na klastrze (postgresql.default.svc.cluster.local)
@@ -107,7 +107,7 @@ kubectl wait --for=condition=ready pod -l app=trading-ai-backend-redis --timeout
 # 3. Application Services (każdy ma swój własny PV/PVC)
 kubectl apply -f k8s.manifests/deployment-rest-api.yml
 kubectl apply -f k8s.manifests/deployment-frontend.yml
-kubectl apply -f k8s.manifests/ingress-frontend.yml
+kubectl apply -f k8s.manifests/ingress.yml
 kubectl apply -f k8s.manifests/daemonset-celery-workers.yml
 
 # 4. Expose Rest api on localhost for CLI
@@ -175,7 +175,7 @@ Frontend (1 replica, POC bez Jenkinsa):
 - PV: hostPath `/k8s/pv/trading-ai-frontend`, afinitacja węzła jak inne PV (domyślnie `k8s.node.001` — dostosuj do klastra)
 - Service **ClusterIP** `trading-ai-frontend-service:80` (ruch zewnętrzny przez Ingress)
 
-### ingress-frontend.yml
+### ingress.yml
 Dwa obiekty Ingress w jednym pliku:
 1. **`trading-ai-frontend`** — `00x097.com/` → `trading-ai-frontend-service` (SPA); TLS secret `00x097-trading-tls`
 2. **`trading-ai-backend-api`** — `api.00x097.com/` → `trading-ai-backend-rest-api-service:9090` (osobna subdomena, bez rewrite); TLS secret `api-00x097-trading-tls`
