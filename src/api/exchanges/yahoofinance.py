@@ -3,94 +3,23 @@ from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
 
 import yfinance as yf
+from yfinance import Screener
 
 from .abstract import AbstractAPI
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Domyślne tickery Yahoo Finance — wszystkie kategorie
-# Ticker = base_asset (przechowywany w bazie 1:1)
-# ---------------------------------------------------------------------------
-
-CRYPTO_TICKERS = [
-    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
-    "SOL-USD", "DOGE-USD", "DOT-USD", "MATIC-USD", "SHIB-USD",
-    "AVAX-USD", "LTC-USD", "LINK-USD", "UNI-USD", "ATOM-USD",
-    "XLM-USD", "ETC-USD", "FIL-USD", "NEAR-USD", "ALGO-USD",
-    "VET-USD", "ICP-USD", "APT-USD", "OP-USD", "ARB-USD",
-    "SUI-USD", "SEI-USD", "TIA-USD", "AAVE-USD", "MKR-USD",
-    "CRV-USD", "SNX-USD", "COMP-USD", "LDO-USD", "RUNE-USD",
-    "INJ-USD", "FTM-USD", "MANA-USD", "SAND-USD", "AXS-USD",
-    "GALA-USD", "ENJ-USD", "CHZ-USD", "BAT-USD", "ZRX-USD",
-    "1INCH-USD", "SUSHI-USD", "YFI-USD", "CAKE-USD", "PEPE-USD",
-    "WIF-USD", "BONK-USD", "FLOKI-USD", "RENDER-USD", "FET-USD",
-    "AGIX-USD", "OCEAN-USD", "TAO-USD", "WLD-USD", "RNDR-USD",
-    "GRT-USD", "AR-USD", "STX-USD", "IMX-USD", "BLUR-USD",
-    "JUP-USD", "PYTH-USD", "W-USD", "PENDLE-USD", "ENA-USD",
-    "ETHFI-USD", "ONDO-USD",
+SCREENER_QUOTE_TYPES = [
+    "EQUITY",
+    "ETF",
+    "CRYPTOCURRENCY",
+    "CURRENCY",
+    "FUTURES",
+    "INDEX",
+    "MUTUALFUND",
 ]
 
-STOCK_TICKERS = [
-    # US — Tech / Mega-Cap
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO",
-    "ORCL", "CRM", "ADBE", "AMD", "INTC", "CSCO", "QCOM", "TXN",
-    "NFLX", "SHOP", "SNOW", "UBER", "ABNB", "SQ", "PLTR", "COIN",
-    "PYPL", "NOW", "PANW", "CRWD", "DDOG", "ZS", "NET", "MDB",
-    "TEAM", "WDAY", "VEEV", "HUBS", "TTD", "ROKU", "SNAP", "PINS",
-    "RBLX", "U", "HOOD", "RIVN", "LCID", "NIO", "XPEV", "LI",
-    # US — Finanse
-    "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "BLK",
-    "SCHW", "C", "BRK-B", "SPGI", "MCO", "ICE", "CME",
-    # US — Healthcare / Pharma
-    "UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "ABT",
-    "DHR", "BMY", "AMGN", "GILD", "ISRG", "MDT", "VRTX", "REGN",
-    "MRNA", "BIIB",
-    # US — Przemysł / Energia / Materiały
-    "XOM", "CVX", "COP", "SLB", "EOG", "OXY", "PSX",
-    "CAT", "DE", "HON", "GE", "RTX", "LMT", "BA", "UPS", "FDX",
-    "MMM",
-    # US — Consumer / Retail
-    "WMT", "COST", "HD", "LOW", "TGT", "NKE", "SBUX", "MCD",
-    "KO", "PEP", "PG", "CL", "PM", "MO", "DIS", "CMCSA",
-    # EU / Global
-    "ASML", "SAP", "NVO", "TM", "SONY", "TSM", "BABA", "JD",
-    "PDD", "TCEHY", "BIDU", "SE", "GRAB", "MELI",
-]
-
-ETF_TICKERS = [
-    "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV",
-    "XLF", "XLK", "XLE", "XLV", "XLI", "XLP", "XLU", "XLY", "XLRE",
-    "XLC", "XLB",
-    "EEM", "EFA", "VWO", "IEMG", "FXI", "KWEB", "INDA",
-    "TLT", "IEF", "SHY", "BND", "HYG", "LQD", "AGG",
-    "GLD", "SLV", "USO", "UNG", "PDBC", "DBA",
-    "SQQQ", "TQQQ", "SOXL", "SOXS", "ARKK", "ARKG",
-    "BOTZ", "ROBO", "HACK", "SOXX", "SMH", "BLOK", "BITO",
-]
-
-INDEX_TICKERS = [
-    "^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX",
-    "^FTSE", "^GDAXI", "^N225", "^HSI", "^STOXX50E",
-]
-
-COMMODITY_TICKERS = [
-    "GC=F", "SI=F", "CL=F", "BZ=F", "NG=F",
-    "HG=F", "PL=F", "ZC=F", "ZW=F", "ZS=F",
-]
-
-FOREX_TICKERS = [
-    "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X",
-    "USDCAD=X", "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X",
-    "USDPLN=X", "USDTRY=X", "USDBRL=X", "USDMXN=X", "USDINR=X",
-    "USDCNY=X", "USDSGD=X", "USDHKD=X", "USDKRW=X", "DX-Y.NYB",
-]
-
-ALL_DEFAULT_TICKERS = (
-    CRYPTO_TICKERS + STOCK_TICKERS + ETF_TICKERS
-    + INDEX_TICKERS + COMMODITY_TICKERS + FOREX_TICKERS
-)
+SCREENER_PAGE_SIZE = 250
 
 
 class YahooFinanceAPI(AbstractAPI):
@@ -127,8 +56,7 @@ class YahooFinanceAPI(AbstractAPI):
         Pobiera kline/candlestick z Yahoo Finance.
 
         base_currency to bezpośredni ticker Yahoo Finance (np. AAPL, BTC-USD,
-        ^GSPC, GC=F, EURUSD=X). interval i pozostałe parametry lecą prosto
-        do yfinance bez żadnych mapowań.
+        ^GSPC, GC=F, EURUSD=X). Parametry lecą prosto do yfinance.
         """
         try:
             symbol = base_currency
@@ -179,8 +107,67 @@ class YahooFinanceAPI(AbstractAPI):
             raise
 
     # ------------------------------------------------------------------
-    # _get_symbols
+    # _get_symbols  (Screener — dynamicznie, jak Binance exchange_info)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fetch_screener_page(quote_type: str, offset: int = 0) -> dict:
+        """Pojedyncze żądanie do Yahoo Finance Screener."""
+        sc = Screener()
+        sc.set_body({
+            "offset": offset,
+            "size": SCREENER_PAGE_SIZE,
+            "sortField": "intradaymarketcap",
+            "sortType": "desc",
+            "quoteType": quote_type,
+            "query": {"operator": "and", "operands": []},
+        })
+        return sc.response
+
+    def _fetch_all_for_quote_type(self, quote_type: str) -> List[Dict[str, any]]:
+        """Paginuje przez Yahoo Finance Screener i zwraca wszystkie symbole danego typu."""
+        symbols: list = []
+        seen: set = set()
+        offset = 0
+
+        while True:
+            try:
+                resp = self._fetch_screener_page(quote_type, offset)
+
+                results = resp.get("finance", {}).get("result", [])
+                if not results:
+                    break
+
+                first_result = results[0]
+                quotes = first_result.get("quotes", [])
+                total = first_result.get("total", 0)
+
+                if not quotes:
+                    break
+
+                for q in quotes:
+                    sym = q.get("symbol")
+                    if sym and sym not in seen:
+                        seen.add(sym)
+                        symbols.append({
+                            "symbol": sym,
+                            "status": "TRADING",
+                            "base_asset": sym,
+                            "quote_asset": "USDT",
+                        })
+
+                offset += SCREENER_PAGE_SIZE
+                if offset >= total:
+                    break
+
+            except Exception as e:
+                logger.warning(
+                    f"Yahoo Finance Screener: błąd dla {quote_type} "
+                    f"(offset={offset}): {e}"
+                )
+                break
+
+        return symbols
 
     def _get_symbols(
         self,
@@ -190,61 +177,45 @@ class YahooFinanceAPI(AbstractAPI):
         symbol_status: Optional[str] = None,
     ) -> List[Dict[str, any]]:
         """
-        Pobiera dostępne symbole z Yahoo Finance — krypto, akcje, ETF-y,
-        indeksy, surowce, forex.
+        Pobiera wszystkie dostępne symbole z Yahoo Finance przez Screener API.
+
+        Bez hardcoded list — dynamicznie odpytuje Yahoo Finance o każdy
+        quoteType (EQUITY, ETF, CRYPTOCURRENCY, CURRENCY, FUTURES, INDEX,
+        MUTUALFUND) i paginuje po 250 wyników, identycznie jak Binance
+        exchange_info().
 
         Ticker Yahoo Finance = base_asset (1:1, bez konwersji).
-        Waliduje batchowo przez yf.download().
         """
         try:
-            yahoo_symbols = list(asset_codes) if asset_codes else list(ALL_DEFAULT_TICKERS)
+            if asset_codes:
+                return [
+                    {
+                        "symbol": code,
+                        "status": "TRADING",
+                        "base_asset": code,
+                        "quote_asset": "USDT",
+                    }
+                    for code in asset_codes
+                ]
 
-            symbols_info: list = []
-            batch_size = 100
+            all_symbols: list = []
+            seen: set = set()
 
-            for i in range(0, len(yahoo_symbols), batch_size):
-                batch = yahoo_symbols[i : i + batch_size]
-                logger.info(
-                    f"Yahoo Finance: walidacja batch {i // batch_size + 1} "
-                    f"({len(batch)} tickerów)"
-                )
+            for qt in SCREENER_QUOTE_TYPES:
+                logger.info(f"Yahoo Finance Screener: pobieranie {qt}...")
+                qt_symbols = self._fetch_all_for_quote_type(qt)
 
-                data = yf.download(batch, period="5d", progress=False, threads=True)
+                new_count = 0
+                for s in qt_symbols:
+                    if s["symbol"] not in seen:
+                        seen.add(s["symbol"])
+                        all_symbols.append(s)
+                        new_count += 1
 
-                if data.empty:
-                    continue
+                logger.info(f"Yahoo Finance Screener: {qt} → {new_count} nowych symboli")
 
-                if len(batch) == 1:
-                    if not data["Close"].dropna().empty:
-                        symbols_info.append({
-                            "symbol": batch[0],
-                            "status": "TRADING",
-                            "base_asset": batch[0],
-                            "quote_asset": "USDT",
-                        })
-                else:
-                    for yf_sym in batch:
-                        try:
-                            col = (
-                                data["Close"][yf_sym]
-                                if yf_sym in data["Close"].columns
-                                else None
-                            )
-                            if col is not None and not col.dropna().empty:
-                                symbols_info.append({
-                                    "symbol": yf_sym,
-                                    "status": "TRADING",
-                                    "base_asset": yf_sym,
-                                    "quote_asset": "USDT",
-                                })
-                        except (KeyError, TypeError):
-                            continue
-
-            logger.info(
-                f"Yahoo Finance: znaleziono {len(symbols_info)} aktywnych symboli "
-                f"(z {len(yahoo_symbols)} sprawdzonych)"
-            )
-            return symbols_info
+            logger.info(f"Yahoo Finance Screener: łącznie {len(all_symbols)} unikalnych symboli")
+            return all_symbols
 
         except Exception as error:
             logger.error(f"Yahoo Finance _get_symbols error: {error}")
