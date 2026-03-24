@@ -1,6 +1,6 @@
 from .comunication import TelegramAPI
 from .llms import OpenaiAPI
-from .exchanges import BinanceAPI, MexcAPI, KucoinAPI
+from .exchanges import BinanceAPI, MexcAPI, KucoinAPI, YahooFinanceAPI
 from .news_services import CryptoPanicService, GNewsService, CoinDeskService
 from .storage import MinIOStorage, LocalStorage
 from typing import List
@@ -36,6 +36,9 @@ class ApiFabric:
         return KucoinAPI(
             **self.config.kucoin_config
         )
+
+    def get_yahoofinance_api(self):
+        return YahooFinanceAPI()
     
     def get_crypto_panic_api(self):
         return CryptoPanicService(
@@ -74,6 +77,7 @@ class ApiFabric:
             self.get_binance_api(),
             self.get_mexc_api(),
             # self.get_kucoin_api()
+            self.get_yahoofinance_api(),
         ]
 
     def get_llm_apis(self):
