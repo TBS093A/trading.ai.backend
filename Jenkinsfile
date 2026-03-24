@@ -93,6 +93,7 @@ def generateK8sConfigFromTemplate() {
                 --set trading.ai.frontend.repo.url='${frontendRepoUrl}' \\
                 --set trading.ai.frontend.repo.branch='${escSql(params.FRONTEND_REPO_BRANCH)}' \\
                 --set react.app.api.url='${escSql(params.REACT_APP_API_URL)}' \\
+                --set cors.allowed.origins='${escSql(params.CORS_ALLOWED_ORIGINS ?: '')}' \\
                 --set telethon.bot.name='${escSql(env.TELETHON_BOT_NAME)}' \\
                 --set telethon.bot.token='${escSql(env.TELETHON_BOT_TOKEN)}' \\
                 --set telethon.api.phone='${escSql(env.TELETHON_API_PHONE)}' \\
@@ -213,6 +214,7 @@ pipeline {
                 [key: 'DATA_SOURCE_BRANCH', value: '$.DATA_SOURCE_BRANCH'],
                 [key: 'TESTS', value: '$.TESTS'],
                 [key: 'DEPLOY', value: '$.DEPLOY'],
+                [key: 'CORS_ALLOWED_ORIGINS', value: '$.CORS_ALLOWED_ORIGINS'],
             ],
             token: '077ff7e0-8460-4a63-9a33-71503bbad374'
         )
@@ -249,6 +251,11 @@ pipeline {
                                 defaultValue: 'trading-ai-backend-rest-api-service.default.svc.cluster.local',
                                 description: 'REACT_APP_API_URL (z perspektywy przeglądarki — produkcja: publiczny URL API)',
                                 name: 'REACT_APP_API_URL'
+                            ),
+                            string(
+                                defaultValue: '',
+                                description: '<code>CORS_ALLOWED_ORIGINS</code> dla REST API (originy po przecinku, np. <code>https://00x097.com,http://localhost:3000</code>); puste — domyślne według <code>ENVIRONMENT</code> w aplikacji (lokalnie/K8s bez tej zmiennej)',
+                                name: 'CORS_ALLOWED_ORIGINS'
                             ),
                             string(
                                 defaultValue: 'postgresql.default.svc.cluster.local',
