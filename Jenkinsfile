@@ -248,8 +248,8 @@ pipeline {
                                 name: 'GIT_REPO_PATH_FRONTEND'
                             ),
                             string(
-                                defaultValue: 'trading-ai-backend-rest-api-service.default.svc.cluster.local',
-                                description: 'REACT_APP_API_URL (z perspektywy przeglądarki — produkcja: publiczny URL API)',
+                                defaultValue: 'https://api.00x097.com',
+                                description: 'REACT_APP_API_URL — <b>publiczny</b> URL backendu widoczny z przeglądarki (Ingress api.00x097.com → REST svc)',
                                 name: 'REACT_APP_API_URL'
                             ),
                             string(
