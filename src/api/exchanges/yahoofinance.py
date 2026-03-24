@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
 
@@ -20,6 +21,8 @@ SCREENER_QUOTE_TYPES = [
 ]
 
 SCREENER_PAGE_SIZE = 250
+SCREENER_SLEEP_BETWEEN_PAGES = 1.5
+SCREENER_SLEEP_BETWEEN_TYPES = 3.0
 
 
 class YahooFinanceAPI(AbstractAPI):
@@ -160,6 +163,8 @@ class YahooFinanceAPI(AbstractAPI):
                 if offset >= total:
                     break
 
+                time.sleep(SCREENER_SLEEP_BETWEEN_PAGES)
+
             except Exception as e:
                 logger.warning(
                     f"Yahoo Finance Screener: błąd dla {quote_type} "
@@ -201,7 +206,10 @@ class YahooFinanceAPI(AbstractAPI):
             all_symbols: list = []
             seen: set = set()
 
-            for qt in SCREENER_QUOTE_TYPES:
+            for idx, qt in enumerate(SCREENER_QUOTE_TYPES):
+                if idx > 0:
+                    time.sleep(SCREENER_SLEEP_BETWEEN_TYPES)
+
                 logger.info(f"Yahoo Finance Screener: pobieranie {qt}...")
                 qt_symbols = self._fetch_all_for_quote_type(qt)
 
