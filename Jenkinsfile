@@ -9,6 +9,7 @@
  *   trading-ai-database-credentials (Username with password)
  *   trading-ai-rabbitmq-credentials (Username with password)
  *   trading-ai-redis-password
+ *   trading-ai-admin-credentials (Username with password)
  * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
  */
 
@@ -80,6 +81,11 @@ def generateK8sConfigFromTemplate() {
                 passwordVariable: 'RABBITMQ_CREDS_PASSWORD'
             ),
             string(credentialsId: 'trading-ai-redis-password', variable: 'REDIS_PASSWORD_PLAIN'),
+            usernamePassword(
+                credentialsId: 'trading-ai-admin-credentials',
+                usernameVariable: 'ADMIN_USERNAME',
+                passwordVariable: 'ADMIN_PASSWORD'
+            ),
         ]
     ) {
         def backendRepoUrl = escSql("https://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_BACKEND}")
@@ -128,6 +134,10 @@ def generateK8sConfigFromTemplate() {
                 --set rabbitmq.management.port='${escSql(params.CELERY_BROKER_MANAGEMENT_PORT)}' \\
                 --set redis.password='${escSql(env.REDIS_PASSWORD_PLAIN)}' \\
                 --set redis.port='${escSql(params.CELERY_RESULT_BACKEND_PORT)}' \\
+                --set admin.username='${escSql(env.ADMIN_USERNAME)}' \\
+                --set admin.password='${escSql(env.ADMIN_PASSWORD)}' \\
+                --set admin.create.force='${escSql(params.ADMIN_CREATE_FORCE ?: 'false')}' \\
+                --set session.expiry.period='${escSql(params.SESSION_EXPIRY_PERIOD ?: '15h')}' \\
                 --dir ./k8s.manifests
         """
         }
@@ -305,6 +315,16 @@ pipeline {
                                 defaultValue: '7411839891',
                                 description: 'TELETHON_BOT_ID (numeryczny ID bota)',
                                 name: 'TELETHON_BOT_ID'
+                            ),
+                            booleanParam(
+                                defaultValue: false,
+                                description: 'Wymusza utworzenie konta admina przy starcie (nadpisuje istniejące)',
+                                name: 'ADMIN_CREATE_FORCE'
+                            ),
+                            string(
+                                defaultValue: '15h',
+                                description: 'Czas życia sesji użytkownika (np. <code>15h</code>, <code>24h</code>, <code>7d</code>)',
+                                name: 'SESSION_EXPIRY_PERIOD'
                             ),
                             booleanParam(
                                 defaultValue: true,

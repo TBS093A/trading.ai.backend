@@ -41,6 +41,10 @@ data:
   # Storage configuration
   LOCAL_STORAGE_IS_ENABLED: "<<local.storage.is.enabled>>"
   LOCAL_STORAGE_PATH: "<<local.storage.path>>"
+
+  # Admin & session
+  ADMIN_CREATE_FORCE: "<<admin.create.force>>"
+  SESSION_EXPIRY_PERIOD: "<<session.expiry.period>>"
   
   # URLs (będą budowane w deploymentach)
   # DATABASE_URL będzie budowany jako: postgresql://${DB_USER}:${DB_PASSWORD}@postgres-service:${DB_PORT}/${DB_NAME}
@@ -96,4 +100,8 @@ stringData:
   
   # Redis password
   REDIS_PASSWORD: "<<redis.password>>"
+
+  # Admin credentials
+  ADMIN_USERNAME: "<<admin.username>>"
+  ADMIN_PASSWORD: "<<admin.password>>"
 
