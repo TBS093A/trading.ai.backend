@@ -44,7 +44,7 @@ metadata:
     component: backend
   annotations:
     kubernetes.io/ingress.class: "nginx"
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
