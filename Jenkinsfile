@@ -253,7 +253,7 @@ pipeline {
                                 name: 'REACT_APP_API_URL'
                             ),
                             string(
-                                defaultValue: '',
+                                defaultValue: 'https://00x097.com',
                                 description: '<code>CORS_ALLOWED_ORIGINS</code> dla REST API (originy po przecinku, np. <code>https://00x097.com,http://localhost:3000</code>); puste — domyślne według <code>ENVIRONMENT</code> w aplikacji (lokalnie/K8s bez tej zmiennej)',
                                 name: 'CORS_ALLOWED_ORIGINS'
                             ),
