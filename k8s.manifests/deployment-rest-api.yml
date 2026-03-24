@@ -302,6 +302,12 @@ spec:
                 configMapKeyRef:
                   name: trading-ai-config
                   key: LOCAL_STORAGE_PATH
+            
+            - name: CORS_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: trading-ai-config
+                  key: CORS_ALLOWED_ORIGINS
           
           volumeMounts:
             - name: app-storage

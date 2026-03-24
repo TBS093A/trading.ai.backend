@@ -16,6 +16,9 @@ data:
   # URL API widoczny w przeglądarce (build-time); w klastrze zwykle Ingress lub NodePort backendu
   REACT_APP_API_URL: "<<react.app.api.url>>"
 
+  # CORS (FastAPI): lista originów po przecinku; puste = domyślne z ENVIRONMENT w kodzie (w K8s ustaw z Jenkins)
+  CORS_ALLOWED_ORIGINS: "<<cors.allowed.origins>>"
+
   # Database configuration (używamy istniejącego PostgreSQL na klastrze)
   DATABASE_HOST: "<<database.host>>"
   DATABASE_PORT: "<<database.port>>"
