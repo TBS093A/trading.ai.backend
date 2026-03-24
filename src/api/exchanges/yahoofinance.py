@@ -10,24 +10,28 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Kryptowaluty — na Yahoo Finance ticker format: CODE-USD
+# Domyślne tickery Yahoo Finance — wszystkie kategorie
+# Ticker = base_asset (przechowywany w bazie 1:1)
 # ---------------------------------------------------------------------------
-CRYPTO_TICKERS = {
-    "BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT",
-    "MATIC", "SHIB", "AVAX", "LTC", "LINK", "UNI", "ATOM",
-    "XLM", "ETC", "FIL", "NEAR", "ALGO", "VET", "ICP",
-    "APT", "OP", "ARB", "SUI", "SEI", "TIA", "AAVE", "MKR",
-    "CRV", "SNX", "COMP", "LDO", "RUNE", "INJ", "FTM", "MANA",
-    "SAND", "AXS", "GALA", "ENJ", "CHZ", "BAT", "ZRX", "1INCH",
-    "SUSHI", "YFI", "CAKE", "PEPE", "WIF", "BONK", "FLOKI",
-    "RENDER", "FET", "AGIX", "OCEAN", "TAO", "WLD", "RNDR",
-    "GRT", "AR", "STX", "IMX", "BLUR", "JUP", "PYTH", "W",
-    "PENDLE", "ENA", "ETHFI", "ONDO",
-}
 
-# ---------------------------------------------------------------------------
-# Akcje — bezpośredni ticker (S&P 500, NASDAQ, blue-chips globalne)
-# ---------------------------------------------------------------------------
+CRYPTO_TICKERS = [
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
+    "SOL-USD", "DOGE-USD", "DOT-USD", "MATIC-USD", "SHIB-USD",
+    "AVAX-USD", "LTC-USD", "LINK-USD", "UNI-USD", "ATOM-USD",
+    "XLM-USD", "ETC-USD", "FIL-USD", "NEAR-USD", "ALGO-USD",
+    "VET-USD", "ICP-USD", "APT-USD", "OP-USD", "ARB-USD",
+    "SUI-USD", "SEI-USD", "TIA-USD", "AAVE-USD", "MKR-USD",
+    "CRV-USD", "SNX-USD", "COMP-USD", "LDO-USD", "RUNE-USD",
+    "INJ-USD", "FTM-USD", "MANA-USD", "SAND-USD", "AXS-USD",
+    "GALA-USD", "ENJ-USD", "CHZ-USD", "BAT-USD", "ZRX-USD",
+    "1INCH-USD", "SUSHI-USD", "YFI-USD", "CAKE-USD", "PEPE-USD",
+    "WIF-USD", "BONK-USD", "FLOKI-USD", "RENDER-USD", "FET-USD",
+    "AGIX-USD", "OCEAN-USD", "TAO-USD", "WLD-USD", "RNDR-USD",
+    "GRT-USD", "AR-USD", "STX-USD", "IMX-USD", "BLUR-USD",
+    "JUP-USD", "PYTH-USD", "W-USD", "PENDLE-USD", "ENA-USD",
+    "ETHFI-USD", "ONDO-USD",
+]
+
 STOCK_TICKERS = [
     # US — Tech / Mega-Cap
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO",
@@ -55,62 +59,27 @@ STOCK_TICKERS = [
     "PDD", "TCEHY", "BIDU", "SE", "GRAB", "MELI",
 ]
 
-# ---------------------------------------------------------------------------
-# ETF-y — bezpośredni ticker
-# ---------------------------------------------------------------------------
 ETF_TICKERS = [
-    # Indeksowe US
     "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV",
-    # Sektorowe
     "XLF", "XLK", "XLE", "XLV", "XLI", "XLP", "XLU", "XLY", "XLRE",
     "XLC", "XLB",
-    # Rynki zagraniczne / EM
     "EEM", "EFA", "VWO", "IEMG", "FXI", "KWEB", "INDA",
-    # Obligacje
     "TLT", "IEF", "SHY", "BND", "HYG", "LQD", "AGG",
-    # Surowce / Złoto
     "GLD", "SLV", "USO", "UNG", "PDBC", "DBA",
-    # Volatility / Leverage
     "SQQQ", "TQQQ", "SOXL", "SOXS", "ARKK", "ARKG",
-    # Tematyczne
     "BOTZ", "ROBO", "HACK", "SOXX", "SMH", "BLOK", "BITO",
 ]
 
-# ---------------------------------------------------------------------------
-# Indeksy — format ^CODE
-# ---------------------------------------------------------------------------
 INDEX_TICKERS = [
-    "^GSPC",   # S&P 500
-    "^IXIC",   # NASDAQ Composite
-    "^DJI",    # Dow Jones
-    "^RUT",    # Russell 2000
-    "^VIX",    # CBOE Volatility
-    "^FTSE",   # FTSE 100
-    "^GDAXI",  # DAX
-    "^N225",   # Nikkei 225
-    "^HSI",    # Hang Seng
-    "^STOXX50E",  # Euro Stoxx 50
+    "^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX",
+    "^FTSE", "^GDAXI", "^N225", "^HSI", "^STOXX50E",
 ]
 
-# ---------------------------------------------------------------------------
-# Surowce / Futures — format CODE=F
-# ---------------------------------------------------------------------------
 COMMODITY_TICKERS = [
-    "GC=F",    # Gold
-    "SI=F",    # Silver
-    "CL=F",    # Crude Oil WTI
-    "BZ=F",    # Brent Crude
-    "NG=F",    # Natural Gas
-    "HG=F",    # Copper
-    "PL=F",    # Platinum
-    "ZC=F",    # Corn
-    "ZW=F",    # Wheat
-    "ZS=F",    # Soybeans
+    "GC=F", "SI=F", "CL=F", "BZ=F", "NG=F",
+    "HG=F", "PL=F", "ZC=F", "ZW=F", "ZS=F",
 ]
 
-# ---------------------------------------------------------------------------
-# Forex — format CODE=X
-# ---------------------------------------------------------------------------
 FOREX_TICKERS = [
     "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X",
     "USDCAD=X", "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X",
@@ -118,49 +87,10 @@ FOREX_TICKERS = [
     "USDCNY=X", "USDSGD=X", "USDHKD=X", "USDKRW=X", "DX-Y.NYB",
 ]
 
-# ---------------------------------------------------------------------------
-INTERVAL_MAP = {
-    "1m": "1m",
-    "2m": "2m",
-    "5m": "5m",
-    "15m": "15m",
-    "30m": "30m",
-    "1h": "1h",
-    "4h": "1h",
-    "1d": "1d",
-    "1w": "1wk",
-    "1M": "1mo",
-}
-
-QUOTE_TO_YAHOO = {
-    "USDT": "USD",
-    "USD": "USD",
-    "BUSD": "USD",
-    "EUR": "EUR",
-    "GBP": "GBP",
-    "JPY": "JPY",
-}
-
-
-def _yahoo_symbol_for(base: str) -> str:
-    """Zwraca pełny ticker Yahoo Finance na podstawie kodu assetu."""
-    base_upper = base.upper()
-    if base_upper in CRYPTO_TICKERS:
-        return f"{base_upper}-USD"
-    return base_upper
-
-
-def _base_from_yahoo_symbol(yf_sym: str) -> str:
-    """Wyciąga bazowy kod assetu z tickera Yahoo Finance."""
-    if yf_sym.endswith("-USD"):
-        return yf_sym[:-4]
-    if yf_sym.startswith("^"):
-        return yf_sym
-    if "=F" in yf_sym:
-        return yf_sym
-    if "=X" in yf_sym:
-        return yf_sym
-    return yf_sym
+ALL_DEFAULT_TICKERS = (
+    CRYPTO_TICKERS + STOCK_TICKERS + ETF_TICKERS
+    + INDEX_TICKERS + COMMODITY_TICKERS + FOREX_TICKERS
+)
 
 
 class YahooFinanceAPI(AbstractAPI):
@@ -173,22 +103,10 @@ class YahooFinanceAPI(AbstractAPI):
         super().__init__()
 
     @staticmethod
-    def _build_yahoo_symbol(base_currency: str, quote_currency: str) -> str:
-        """Konwertuje parę (base, quote) na ticker Yahoo Finance.
-
-        Krypto → CODE-USD, indeksy/futures/forex → bez zmian, akcje/ETF → ticker.
-        """
-        base = base_currency.upper()
-        if base in CRYPTO_TICKERS:
-            yf_quote = QUOTE_TO_YAHOO.get(quote_currency.upper(), quote_currency.upper())
-            return f"{base}-{yf_quote}"
-        return base
-
-    @staticmethod
-    def _default_period_for_interval(yf_interval: str) -> str:
-        if yf_interval in ("1m", "2m", "5m", "15m", "30m"):
+    def _default_period_for_interval(interval: str) -> str:
+        if interval in ("1m", "2m", "5m", "15m", "30m"):
             return "7d"
-        if yf_interval in ("1h", "60m", "90m"):
+        if interval in ("1h", "60m", "90m"):
             return "60d"
         return "1y"
 
@@ -198,7 +116,7 @@ class YahooFinanceAPI(AbstractAPI):
 
     def _get_klines(
         self,
-        base_currency: str = "BTC",
+        base_currency: str = "BTC-USD",
         quote_currency: str = "USDT",
         interval: str = "1d",
         start_time: Optional[int] = None,
@@ -208,15 +126,14 @@ class YahooFinanceAPI(AbstractAPI):
         """
         Pobiera kline/candlestick z Yahoo Finance.
 
-        Obsługuje kryptowaluty (BTC-USD), akcje (AAPL), ETF-y (SPY),
-        indeksy (^GSPC), surowce (GC=F) i forex (EURUSD=X).
+        base_currency to bezpośredni ticker Yahoo Finance (np. AAPL, BTC-USD,
+        ^GSPC, GC=F, EURUSD=X). interval i pozostałe parametry lecą prosto
+        do yfinance bez żadnych mapowań.
         """
         try:
-            symbol = self._build_yahoo_symbol(base_currency, quote_currency)
-            yf_interval = INTERVAL_MAP.get(interval, interval)
-
+            symbol = base_currency
             ticker = yf.Ticker(symbol)
-            kwargs: dict = {"interval": yf_interval}
+            kwargs: dict = {"interval": interval}
 
             if start_time:
                 kwargs["start"] = datetime.fromtimestamp(
@@ -228,12 +145,12 @@ class YahooFinanceAPI(AbstractAPI):
                 ).strftime("%Y-%m-%d")
 
             if not start_time and not end_time:
-                kwargs["period"] = self._default_period_for_interval(yf_interval)
+                kwargs["period"] = self._default_period_for_interval(interval)
 
             history = ticker.history(**kwargs)
 
             if history.empty:
-                logger.warning(f"Yahoo Finance: brak danych dla {symbol} ({yf_interval})")
+                logger.warning(f"Yahoo Finance: brak danych dla {symbol} ({interval})")
                 return []
 
             if len(history) > limit:
@@ -242,10 +159,7 @@ class YahooFinanceAPI(AbstractAPI):
             formatted_klines: list = []
             for idx, row in history.iterrows():
                 ts = idx
-                if hasattr(ts, "timestamp"):
-                    open_time_ms = int(ts.timestamp() * 1000)
-                else:
-                    open_time_ms = int(ts)
+                open_time_ms = int(ts.timestamp() * 1000) if hasattr(ts, "timestamp") else int(ts)
 
                 formatted_klines.append({
                     "open_time": open_time_ms,
@@ -261,27 +175,12 @@ class YahooFinanceAPI(AbstractAPI):
             return formatted_klines
 
         except Exception as error:
-            logger.error(
-                f"Yahoo Finance _get_klines error ({base_currency}/{quote_currency}, "
-                f"{interval}): {error}"
-            )
+            logger.error(f"Yahoo Finance _get_klines error ({base_currency}, {interval}): {error}")
             raise
 
     # ------------------------------------------------------------------
     # _get_symbols
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_default_yahoo_symbols() -> List[str]:
-        """Buduje pełną listę tickerów Yahoo Finance ze wszystkich kategorii."""
-        symbols: list = []
-        symbols.extend(f"{c}-USD" for c in sorted(CRYPTO_TICKERS))
-        symbols.extend(STOCK_TICKERS)
-        symbols.extend(ETF_TICKERS)
-        symbols.extend(INDEX_TICKERS)
-        symbols.extend(COMMODITY_TICKERS)
-        symbols.extend(FOREX_TICKERS)
-        return symbols
 
     def _get_symbols(
         self,
@@ -294,13 +193,11 @@ class YahooFinanceAPI(AbstractAPI):
         Pobiera dostępne symbole z Yahoo Finance — krypto, akcje, ETF-y,
         indeksy, surowce, forex.
 
-        Waliduje batchowo przez yf.download() (jedno żądanie HTTP na batch).
+        Ticker Yahoo Finance = base_asset (1:1, bez konwersji).
+        Waliduje batchowo przez yf.download().
         """
         try:
-            if asset_codes:
-                yahoo_symbols = [_yahoo_symbol_for(code) for code in asset_codes]
-            else:
-                yahoo_symbols = self._build_default_yahoo_symbols()
+            yahoo_symbols = list(asset_codes) if asset_codes else list(ALL_DEFAULT_TICKERS)
 
             symbols_info: list = []
             batch_size = 100
@@ -312,23 +209,17 @@ class YahooFinanceAPI(AbstractAPI):
                     f"({len(batch)} tickerów)"
                 )
 
-                data = yf.download(
-                    batch,
-                    period="5d",
-                    progress=False,
-                    threads=True,
-                )
+                data = yf.download(batch, period="5d", progress=False, threads=True)
 
                 if data.empty:
                     continue
 
                 if len(batch) == 1:
                     if not data["Close"].dropna().empty:
-                        base = _base_from_yahoo_symbol(batch[0])
                         symbols_info.append({
                             "symbol": batch[0],
                             "status": "TRADING",
-                            "base_asset": base,
+                            "base_asset": batch[0],
                             "quote_asset": "USDT",
                         })
                 else:
@@ -340,11 +231,10 @@ class YahooFinanceAPI(AbstractAPI):
                                 else None
                             )
                             if col is not None and not col.dropna().empty:
-                                base = _base_from_yahoo_symbol(yf_sym)
                                 symbols_info.append({
                                     "symbol": yf_sym,
                                     "status": "TRADING",
-                                    "base_asset": base,
+                                    "base_asset": yf_sym,
                                     "quote_asset": "USDT",
                                 })
                         except (KeyError, TypeError):
