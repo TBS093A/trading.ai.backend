@@ -4,15 +4,321 @@ from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
 
 import yfinance as yf
-from yfinance import EquityQuery, FundQuery
 
 from .abstract import AbstractAPI
 
 logger = logging.getLogger(__name__)
 
-SCREEN_PAGE_SIZE = 250
-SCREEN_SLEEP_BETWEEN_PAGES = 1.5
-SCREEN_SLEEP_BETWEEN_TYPES = 3.0
+# ---------------------------------------------------------------------------
+# Tickery per giełda/kraj — format Yahoo Finance
+# US: bez sufiksu, reszta: TICKER.SUFFIX
+# ---------------------------------------------------------------------------
+
+US_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO",
+    "ORCL", "CRM", "ADBE", "AMD", "INTC", "CSCO", "QCOM", "TXN",
+    "NFLX", "UBER", "ABNB", "SQ", "PLTR", "COIN", "PYPL", "NOW",
+    "PANW", "CRWD", "DDOG", "ZS", "NET", "SNOW", "SHOP",
+    "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "BLK", "BRK-B",
+    "UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "ABT", "MRNA",
+    "XOM", "CVX", "COP", "SLB",
+    "CAT", "DE", "HON", "GE", "RTX", "LMT", "BA",
+    "WMT", "COST", "HD", "LOW", "NKE", "SBUX", "MCD",
+    "KO", "PEP", "PG", "DIS", "CMCSA",
+    "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI",
+    "GLD", "SLV", "TLT", "ARKK", "SOXX", "TQQQ", "SQQQ",
+]
+
+JP_TICKERS = [
+    "7203.T",   # Toyota
+    "6758.T",   # Sony
+    "9984.T",   # SoftBank Group
+    "6861.T",   # Keyence
+    "8306.T",   # MUFG
+    "6501.T",   # Hitachi
+    "7741.T",   # HOYA
+    "6902.T",   # Denso
+    "4063.T",   # Shin-Etsu Chemical
+    "8035.T",   # Tokyo Electron
+    "6367.T",   # Daikin
+    "9433.T",   # KDDI
+    "6098.T",   # Recruit
+    "4519.T",   # Chugai Pharma
+    "7974.T",   # Nintendo
+    "8001.T",   # Itochu
+    "6594.T",   # Nidec
+    "9432.T",   # NTT
+    "4661.T",   # Oriental Land (Disney)
+    "6723.T",   # Renesas
+]
+
+CN_TICKERS = [
+    # Hong Kong
+    "0700.HK",  # Tencent
+    "9988.HK",  # Alibaba
+    "9618.HK",  # JD.com
+    "3690.HK",  # Meituan
+    "1810.HK",  # Xiaomi
+    "2318.HK",  # Ping An
+    "0941.HK",  # China Mobile
+    "1398.HK",  # ICBC
+    "0939.HK",  # CCB
+    "2628.HK",  # China Life
+    "0005.HK",  # HSBC
+    "1211.HK",  # BYD
+    "9888.HK",  # Baidu
+    "9999.HK",  # NetEase
+    "2020.HK",  # Anta Sports
+    # Shanghai / Shenzhen
+    "600519.SS",  # Kweichow Moutai
+    "601318.SS",  # Ping An (A)
+    "600036.SS",  # China Merchants Bank
+    "000858.SZ",  # Wuliangye
+    "300750.SZ",  # CATL
+]
+
+DE_TICKERS = [
+    "SAP.DE",    # SAP
+    "SIE.DE",    # Siemens
+    "ALV.DE",    # Allianz
+    "DTE.DE",    # Deutsche Telekom
+    "MBG.DE",    # Mercedes-Benz
+    "BMW.DE",    # BMW
+    "VOW3.DE",   # Volkswagen
+    "BAS.DE",    # BASF
+    "MUV2.DE",   # Munich Re
+    "AIR.DE",    # Airbus
+    "IFX.DE",    # Infineon
+    "ADS.DE",    # Adidas
+    "RHM.DE",    # Rheinmetall
+    "DB1.DE",    # Deutsche Börse
+    "HEN3.DE",   # Henkel
+    "DHL.DE",    # DHL Group
+    "DTG.DE",    # Daimler Truck
+    "SHL.DE",    # Siemens Healthineers
+    "BEI.DE",    # Beiersdorf
+    "MRK.DE",    # Merck KGaA
+]
+
+GB_TICKERS = [
+    "SHEL.L",   # Shell
+    "AZN.L",    # AstraZeneca
+    "HSBA.L",   # HSBC
+    "ULVR.L",   # Unilever
+    "BP.L",     # BP
+    "GSK.L",    # GSK
+    "RIO.L",    # Rio Tinto
+    "DGE.L",    # Diageo
+    "LSEG.L",   # London Stock Exchange
+    "REL.L",    # RELX
+    "BATS.L",   # BAT
+    "NG.L",     # National Grid
+    "VOD.L",    # Vodafone
+    "LLOY.L",   # Lloyds
+    "BARC.L",   # Barclays
+    "AAL.L",    # Anglo American
+    "RR.L",     # Rolls-Royce
+    "BA.L",     # BAE Systems
+    "CPG.L",    # Compass Group
+    "ABF.L",    # AB Foods
+]
+
+PL_TICKERS = [
+    "PKN.WA",   # PKN Orlen
+    "PKO.WA",   # PKO BP
+    "PEO.WA",   # Bank Pekao
+    "PZU.WA",   # PZU
+    "KGH.WA",   # KGHM
+    "CDR.WA",   # CD Projekt
+    "LPP.WA",   # LPP
+    "ALE.WA",   # Allegro
+    "DNP.WA",   # Dino Polska
+    "SPL.WA",   # Santander PL
+    "JSW.WA",   # JSW
+    "KRU.WA",   # Kruk
+    "CPS.WA",   # Cyfrowy Polsat
+    "MBK.WA",   # mBank
+    "OPL.WA",   # Orange Polska
+]
+
+RU_TICKERS = [
+    "SBER.ME",  # Sberbank
+    "GAZP.ME",  # Gazprom
+    "LKOH.ME",  # Lukoil
+    "GMKN.ME",  # Nornickel
+    "NVTK.ME",  # Novatek
+    "ROSN.ME",  # Rosneft
+    "YNDX.ME",  # Yandex
+    "MTSS.ME",  # MTS
+    "MGNT.ME",  # Magnit
+    "PLZL.ME",  # Polyus
+]
+
+IL_TICKERS = [
+    "TEVA.TA",    # Teva Pharma
+    "LUMI.TA",    # Bank Leumi
+    "DSCT.TA",    # Bank Discount
+    "NICE.TA",    # NICE Systems
+    "HARL.TA",    # Bank Hapoalim
+    "ICL.TA",     # ICL Group
+    "BEZQ.TA",    # Bezeq
+    "ESLT.TA",    # Elbit Systems
+    "AZRG.TA",    # Azrieli Group
+    "MZTF.TA",    # Mizrahi Tefahot
+]
+
+FR_TICKERS = [
+    "MC.PA",     # LVMH
+    "OR.PA",     # L'Oréal
+    "TTE.PA",    # TotalEnergies
+    "SAN.PA",    # Sanofi
+    "AI.PA",     # Air Liquide
+    "SU.PA",     # Schneider Electric
+    "BN.PA",     # Danone
+    "CS.PA",     # AXA
+    "RMS.PA",    # Hermès
+    "KER.PA",    # Kering
+    "BNP.PA",    # BNP Paribas
+    "GLE.PA",    # Société Générale
+    "RI.PA",     # Pernod Ricard
+    "DSY.PA",    # Dassault Systèmes
+    "CAP.PA",    # Capgemini
+    "STM.PA",    # STMicroelectronics (Euronext)
+    "SGO.PA",    # Saint-Gobain
+    "VIE.PA",    # Veolia
+    "DG.PA",     # Vinci
+    "SAF.PA",    # Safran
+]
+
+CH_TICKERS = [
+    "NESN.SW",  # Nestlé
+    "ROG.SW",   # Roche
+    "NOVN.SW",  # Novartis
+    "ABBN.SW",  # ABB
+    "ZURN.SW",  # Zurich Insurance
+    "UBSG.SW",  # UBS
+    "CSGN.SW",  # Credit Suisse (legacy)
+    "SREN.SW",  # Swiss Re
+    "GIVN.SW",  # Givaudan
+    "SLHN.SW",  # Swiss Life
+    "LONN.SW",  # Lonza
+    "SIKA.SW",  # Sika
+    "GEBN.SW",  # Geberit
+    "SCMN.SW",  # Swisscom
+    "PGHN.SW",  # Partners Group
+]
+
+CRYPTO_TICKERS = [
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
+    "SOL-USD", "DOGE-USD", "DOT-USD", "AVAX-USD", "LTC-USD",
+    "LINK-USD", "UNI-USD", "ATOM-USD", "MATIC-USD", "SHIB-USD",
+    "XLM-USD", "ETC-USD", "NEAR-USD", "APT-USD", "ARB-USD",
+    "OP-USD", "SUI-USD", "AAVE-USD", "INJ-USD", "FTM-USD",
+    "RENDER-USD", "FET-USD", "GRT-USD", "PEPE-USD", "WIF-USD",
+]
+
+INDEX_TICKERS = [
+    "^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX",      # US
+    "^N225",                                           # Japan
+    "^HSI",                                            # Hong Kong
+    "^GDAXI",                                          # Germany
+    "^FTSE",                                           # UK
+    "^FCHI",                                           # France (CAC 40)
+    "^SSMI",                                           # Switzerland (SMI)
+    "^STOXX50E",                                       # Euro Stoxx 50
+    "^TA125.TA",                                       # Israel TA-125
+]
+
+COMMODITY_ETF_TICKERS = [
+    # Ropa naftowa
+    "USO",    # United States Oil Fund (WTI)
+    "BNO",    # United States Brent Oil Fund
+    "UCO",    # ProShares Ultra Bloomberg Crude Oil (2x)
+    "SCO",    # ProShares UltraShort Bloomberg Crude Oil (-2x)
+    "XLE",    # Energy Select Sector SPDR (spółki naftowe)
+    "OIH",    # VanEck Oil Services ETF
+    "XOP",    # SPDR S&P Oil & Gas Exploration & Production
+    # Złoto
+    "GDX",    # VanEck Gold Miners ETF
+    "GDXJ",   # VanEck Junior Gold Miners ETF
+    "IAU",    # iShares Gold Trust
+    "SGOL",   # Aberdeen Standard Physical Gold Shares
+    "NUGT",   # Direxion Daily Gold Miners Bull 2x
+    # Srebro
+    "SIL",    # Global X Silver Miners ETF
+    "SILJ",   # ETFMG Prime Junior Silver Miners ETF
+    "SIVR",   # Aberdeen Standard Physical Silver Shares
+    # Platyna / Pallad
+    "PPLT",   # Aberdeen Standard Physical Platinum Shares
+    "PALL",   # Aberdeen Standard Physical Palladium Shares
+    # Gaz ziemny
+    "UNG",    # United States Natural Gas Fund
+    "BOIL",   # ProShares Ultra Bloomberg Natural Gas (2x)
+    "KOLD",   # ProShares UltraShort Bloomberg Natural Gas (-2x)
+    # Surowce rolne
+    "DBA",    # Invesco DB Agriculture Fund (zboża, cukier, kawa)
+    "WEAT",   # Teucrium Wheat Fund
+    "CORN",   # Teucrium Corn Fund
+    "SOYB",   # Teucrium Soybean Fund
+    "CANE",   # Teucrium Sugar Fund
+    "NIB",    # iPath Bloomberg Cocoa (kakao)
+    "JO",     # iPath Bloomberg Coffee (kawa)
+    "COW",    # iPath Bloomberg Livestock (bydło)
+    # Surowce szerokie / multi-commodity
+    "DJP",    # iPath Bloomberg Commodity Index
+    "GSG",    # iShares S&P GSCI Commodity
+    "DBC",    # Invesco DB Commodity Index
+    "PDBC",   # Invesco Optimum Yield Diversified Commodity
+    "COM",    # Direxion Auspice Broad Commodity Strategy
+    # Miedź / metale przemysłowe
+    "COPX",   # Global X Copper Miners ETF
+    "CPER",   # United States Copper Index Fund
+    "PICK",   # iShares MSCI Global Metals & Mining
+    # Uran
+    "URA",    # Global X Uranium ETF
+    "URNM",   # Sprott Uranium Miners ETF
+    # Lit / baterie
+    "LIT",    # Global X Lithium & Battery Tech ETF
+    # Drewno
+    "WOOD",   # iShares Global Timber & Forestry ETF
+    "CUT",    # Invesco MSCI Global Timber ETF
+    # Woda
+    "PHO",    # Invesco Water Resources ETF
+    "FIW",    # First Trust Water ETF
+    # Nieruchomości (REIT)
+    "VNQ",    # Vanguard Real Estate ETF
+    "IYR",    # iShares U.S. Real Estate ETF
+    "XLRE",   # Real Estate Select Sector SPDR
+    # Kontrakty futures (direct commodities via Yahoo)
+    "CL=F",   # WTI Crude Oil Futures
+    "BZ=F",   # Brent Crude Oil Futures
+    "GC=F",   # Gold Futures
+    "SI=F",   # Silver Futures
+    "PL=F",   # Platinum Futures
+    "PA=F",   # Palladium Futures
+    "HG=F",   # Copper Futures
+    "NG=F",   # Natural Gas Futures
+    "ZC=F",   # Corn Futures
+    "ZW=F",   # Wheat Futures
+    "ZS=F",   # Soybean Futures
+    "KC=F",   # Coffee Futures
+    "SB=F",   # Sugar Futures
+    "CC=F",   # Cocoa Futures
+    "CT=F",   # Cotton Futures
+    "LBS=F",  # Lumber Futures
+    "LE=F",   # Live Cattle Futures
+    "HE=F",   # Lean Hogs Futures
+]
+
+ALL_TICKERS = (
+    US_TICKERS + JP_TICKERS + CN_TICKERS + DE_TICKERS
+    + GB_TICKERS + PL_TICKERS + RU_TICKERS + IL_TICKERS
+    + FR_TICKERS + CH_TICKERS + CRYPTO_TICKERS + INDEX_TICKERS
+    + COMMODITY_ETF_TICKERS
+)
+
+VALIDATION_BATCH_SIZE = 100
+VALIDATION_SLEEP = 1.5
 
 
 class YahooFinanceAPI(AbstractAPI):
@@ -48,8 +354,8 @@ class YahooFinanceAPI(AbstractAPI):
         """
         Pobiera kline/candlestick z Yahoo Finance.
 
-        base_currency to bezpośredni ticker Yahoo Finance (np. AAPL, BTC-USD,
-        ^GSPC, GC=F, EURUSD=X). Parametry lecą prosto do yfinance.
+        base_currency to bezpośredni ticker Yahoo Finance (np. AAPL, 7203.T,
+        BTC-USD, ^GSPC, PKN.WA). Parametry lecą prosto do yfinance.
         """
         try:
             symbol = base_currency
@@ -100,51 +406,8 @@ class YahooFinanceAPI(AbstractAPI):
             raise
 
     # ------------------------------------------------------------------
-    # _get_symbols  (yf.screen — dynamicznie, jak Binance exchange_info)
+    # _get_symbols
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _screen_paginated(
-        query,
-        label: str,
-        seen: set,
-    ) -> List[Dict[str, any]]:
-        """Paginuje przez yf.screen() i zwraca wszystkie symbole."""
-        symbols: list = []
-        offset = 0
-
-        while True:
-            try:
-                resp = yf.screen(query, size=SCREEN_PAGE_SIZE, offset=offset)
-
-                quotes = resp.get("quotes", [])
-                total = resp.get("total", 0)
-
-                if not quotes:
-                    break
-
-                for q in quotes:
-                    sym = q.get("symbol")
-                    if sym and sym not in seen:
-                        seen.add(sym)
-                        symbols.append({
-                            "symbol": sym,
-                            "status": "TRADING",
-                            "base_asset": sym,
-                            "quote_asset": "USDT",
-                        })
-
-                offset += SCREEN_PAGE_SIZE
-                if offset >= total:
-                    break
-
-                time.sleep(SCREEN_SLEEP_BETWEEN_PAGES)
-
-            except Exception as e:
-                logger.warning(f"Yahoo Finance screen ({label}, offset={offset}): {e}")
-                break
-
-        return symbols
 
     def _get_symbols(
         self,
@@ -154,45 +417,62 @@ class YahooFinanceAPI(AbstractAPI):
         symbol_status: Optional[str] = None,
     ) -> List[Dict[str, any]]:
         """
-        Pobiera wszystkie dostępne symbole z Yahoo Finance przez yf.screen().
+        Pobiera symbole z Yahoo Finance — giełdy: US, JP, CN/HK, DE, GB,
+        PL, RU, IL, FR, CH + crypto + indeksy.
 
-        Dynamicznie odpytuje Yahoo Finance Screener (EquityQuery + FundQuery)
-        i paginuje po 250 wyników — analogicznie do Binance exchange_info().
-        Ticker Yahoo Finance = base_asset (1:1, bez konwersji).
+        Waliduje batchowo przez yf.download(). Ticker = base_asset (1:1).
         """
         try:
-            if asset_codes:
-                return [
-                    {
-                        "symbol": code,
-                        "status": "TRADING",
-                        "base_asset": code,
-                        "quote_asset": "USDT",
-                    }
-                    for code in asset_codes
-                ]
+            yahoo_symbols = list(asset_codes) if asset_codes else list(ALL_TICKERS)
 
-            all_symbols: list = []
-            seen: set = set()
+            symbols_info: list = []
 
-            # Equities — wszystkie akcje z ceną > 0
-            logger.info("Yahoo Finance screen: pobieranie EQUITY...")
-            eq_query = EquityQuery("gt", ["intradayprice", 0])
-            eq_symbols = self._screen_paginated(eq_query, "EQUITY", seen)
-            all_symbols.extend(eq_symbols)
-            logger.info(f"Yahoo Finance screen: EQUITY → {len(eq_symbols)} symboli")
+            for i in range(0, len(yahoo_symbols), VALIDATION_BATCH_SIZE):
+                batch = yahoo_symbols[i : i + VALIDATION_BATCH_SIZE]
+                logger.info(
+                    f"Yahoo Finance: walidacja batch {i // VALIDATION_BATCH_SIZE + 1} "
+                    f"({len(batch)} tickerów)"
+                )
 
-            time.sleep(SCREEN_SLEEP_BETWEEN_TYPES)
+                data = yf.download(batch, period="5d", progress=False, threads=True)
 
-            # Funds / ETF — wszystkie fundusze z ceną > 0
-            logger.info("Yahoo Finance screen: pobieranie FUND/ETF...")
-            fund_query = FundQuery("gt", ["intradayprice", 0])
-            fund_symbols = self._screen_paginated(fund_query, "FUND", seen)
-            all_symbols.extend(fund_symbols)
-            logger.info(f"Yahoo Finance screen: FUND/ETF → {len(fund_symbols)} symboli")
+                if data.empty:
+                    continue
 
-            logger.info(f"Yahoo Finance screen: łącznie {len(all_symbols)} unikalnych symboli")
-            return all_symbols
+                if len(batch) == 1:
+                    if not data["Close"].dropna().empty:
+                        symbols_info.append({
+                            "symbol": batch[0],
+                            "status": "TRADING",
+                            "base_asset": batch[0],
+                            "quote_asset": "USDT",
+                        })
+                else:
+                    for yf_sym in batch:
+                        try:
+                            col = (
+                                data["Close"][yf_sym]
+                                if yf_sym in data["Close"].columns
+                                else None
+                            )
+                            if col is not None and not col.dropna().empty:
+                                symbols_info.append({
+                                    "symbol": yf_sym,
+                                    "status": "TRADING",
+                                    "base_asset": yf_sym,
+                                    "quote_asset": "USDT",
+                                })
+                        except (KeyError, TypeError):
+                            continue
+
+                if i + VALIDATION_BATCH_SIZE < len(yahoo_symbols):
+                    time.sleep(VALIDATION_SLEEP)
+
+            logger.info(
+                f"Yahoo Finance: znaleziono {len(symbols_info)} aktywnych symboli "
+                f"(z {len(yahoo_symbols)} sprawdzonych)"
+            )
+            return symbols_info
 
         except Exception as error:
             logger.error(f"Yahoo Finance _get_symbols error: {error}")
