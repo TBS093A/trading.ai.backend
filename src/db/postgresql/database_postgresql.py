@@ -76,9 +76,23 @@ class DatabasePostgreSQL:
                     
                     logger.info(f"Sprawdzono/utworzono tabelę: {table_name}")
             
+            await self._run_migrations(connection)
+            
             # Inicjalizuj domyślne dane po utworzeniu wszystkich tabel
             await self._seed_initial_data()
     
+    @staticmethod
+    async def _run_migrations(connection) -> None:
+        """Migracje schematu — idempotentne ALTER TABLE dla istniejących baz."""
+        migrations = [
+            "ALTER TABLE assets ADD COLUMN IF NOT EXISTS full_name TEXT",
+        ]
+        for sql in migrations:
+            try:
+                await connection.execute(sql)
+            except Exception as e:
+                logger.warning(f"Migracja pominięta: {e}")
+
     async def _seed_initial_data(self):
         """Inicjalizuje domyślne dane we wszystkich tabelach używając abstrakcyjnej metody seed_default_records."""
         try:

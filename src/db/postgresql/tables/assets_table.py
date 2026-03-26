@@ -14,16 +14,17 @@ class AssetsTable(AbstractTable):
             id SERIAL PRIMARY KEY,
             asset TEXT NOT NULL,
             quote TEXT NOT NULL,
+            full_name TEXT,
             UNIQUE(asset, quote)
         );
         """
     
-    async def create(self, asset: str, quote: str) -> Optional[int]:
+    async def create(self, asset: str, quote: str, full_name: Optional[str] = None) -> Optional[int]:
         """Tworzy nowy asset i zwraca jego ID."""
         try:
             asset_id = await self.fetch_val(
-                "INSERT INTO assets (asset, quote) VALUES ($1, $2) RETURNING id",
-                asset, quote
+                "INSERT INTO assets (asset, quote, full_name) VALUES ($1, $2, $3) RETURNING id",
+                asset, quote, full_name
             )
             logger.info(f"Utworzono asset: {asset}/{quote} z ID: {asset_id}")
             return asset_id
@@ -84,7 +85,7 @@ class AssetsTable(AbstractTable):
         Tworzy wiele assetów jednym zapytaniem i zwraca ich ID.
         
         Args:
-            assets: Lista słowników z kluczami 'asset' i 'quote'
+            assets: Lista słowników z kluczami 'asset', 'quote' i opcjonalnym 'full_name'
             
         Returns:
             Dict[str, int]: Słownik mapujący asset na jego ID
@@ -93,29 +94,31 @@ class AssetsTable(AbstractTable):
             return {}
         
         try:
-            # Przygotuj parametry dla zapytania
-            asset_quotes = [(item['asset'], item['quote']) for item in assets]
-            
-            # Buduj zapytanie INSERT z wieloma wartościami
             values_list = []
             params = []
             param_counter = 1
             
-            for asset, quote in asset_quotes:
-                values_list.append(f"(${param_counter}, ${param_counter + 1})")
-                params.extend([asset, quote])
-                param_counter += 2
+            for item in assets:
+                values_list.append(
+                    f"(${param_counter}, ${param_counter + 1}, ${param_counter + 2})"
+                )
+                params.extend([
+                    item['asset'],
+                    item['quote'],
+                    item.get('full_name'),
+                ])
+                param_counter += 3
             
             query = f"""
-                INSERT INTO assets (asset, quote) 
+                INSERT INTO assets (asset, quote, full_name) 
                 VALUES {', '.join(values_list)}
-                ON CONFLICT (asset, quote) DO NOTHING
+                ON CONFLICT (asset, quote) DO UPDATE SET
+                    full_name = COALESCE(EXCLUDED.full_name, assets.full_name)
                 RETURNING id, asset, quote
             """
             
             results = await self.fetch_all(query, *params)
             
-            # Mapuj wyniki na słownik
             created_assets = {}
             for result in results:
                 asset_key = f"{result['asset']}/{result['quote']}"
@@ -131,21 +134,21 @@ class AssetsTable(AbstractTable):
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera asset po ID."""
         return await self.fetch_one(
-            "SELECT id, asset, quote FROM assets WHERE id = $1",
+            "SELECT id, asset, quote, full_name FROM assets WHERE id = $1",
             record_id
         )
     
     async def get_by_asset(self, asset: str) -> Optional[Dict[str, Any]]:
         """Pobiera pierwszy asset po nazwie asset (bez względu na quote)."""
         return await self.fetch_one(
-            "SELECT id, asset, quote FROM assets WHERE asset = $1 ORDER BY id LIMIT 1",
+            "SELECT id, asset, quote, full_name FROM assets WHERE asset = $1 ORDER BY id LIMIT 1",
             asset
         )
     
     async def get_by_asset_quote(self, asset: str, quote: str) -> Optional[Dict[str, Any]]:
         """Pobiera asset po asset i quote."""
         return await self.fetch_one(
-            "SELECT id, asset, quote FROM assets WHERE asset = $1 AND quote = $2",
+            "SELECT id, asset, quote, full_name FROM assets WHERE asset = $1 AND quote = $2",
             asset, quote
         )
     
@@ -177,21 +180,22 @@ class AssetsTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie assety z limitem i offsetem."""
         return await self.fetch_all(
-            "SELECT id, asset, quote FROM assets ORDER BY id LIMIT $1 OFFSET $2",
+            "SELECT id, asset, quote, full_name FROM assets ORDER BY id LIMIT $1 OFFSET $2",
             limit, offset
         )
     
     async def search_by_asset(self, asset: str) -> List[Dict[str, Any]]:
-        """Wyszukuje assety po nazwie asset."""
+        """Wyszukuje assety po nazwie asset lub full_name."""
         return await self.fetch_all(
-            "SELECT id, asset, quote FROM assets WHERE asset ILIKE $1 ORDER BY asset",
+            "SELECT id, asset, quote, full_name FROM assets "
+            "WHERE asset ILIKE $1 OR full_name ILIKE $1 ORDER BY asset",
             f"%{asset}%"
         )
     
     async def search_by_quote(self, quote: str) -> List[Dict[str, Any]]:
         """Wyszukuje assety po nazwie quote."""
         return await self.fetch_all(
-            "SELECT id, asset, quote FROM assets WHERE quote ILIKE $1 ORDER BY quote",
+            "SELECT id, asset, quote, full_name FROM assets WHERE quote ILIKE $1 ORDER BY quote",
             f"%{quote}%"
         )
     

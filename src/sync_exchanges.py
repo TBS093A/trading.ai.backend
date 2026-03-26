@@ -103,6 +103,7 @@ class Exchanges:
                     if rich:
                         asset_key = base_asset
                         cleaned_asset = base_asset
+                        full_name = symbol_info.get('full_name', '')
                         kind = symbol_info.get('kind', '')
                         country = symbol_info.get('country', '')
                     else:
@@ -110,6 +111,7 @@ class Exchanges:
                             continue
                         cleaned_asset = self._clean_asset_code(base_asset)
                         asset_key = base_asset
+                        full_name = ''
                         kind = 'CRYPTO'
                         country = 'CRYPTO'
 
@@ -122,6 +124,7 @@ class Exchanges:
                     asset_meta[asset_key] = {
                         'cleaned_asset': cleaned_asset,
                         'quote': quote_asset,
+                        'full_name': full_name or None,
                         'kind': kind,
                         'country': country,
                     }
@@ -152,6 +155,7 @@ class Exchanges:
                     assets_to_create.append({
                         'asset': meta['cleaned_asset'],
                         'quote': meta['quote'],
+                        'full_name': meta.get('full_name'),
                     })
 
             added_count = 0

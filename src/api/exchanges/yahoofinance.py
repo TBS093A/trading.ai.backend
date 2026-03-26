@@ -11,26 +11,9 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Ticker registry — {yf_ticker: display_name} per kraj / kategoria
-# Format base_asset w bazie: <yf_ticker>_<nazwa>_<kraj>
-# Każda grupa ma: quote_asset, country, kind
+# base_asset w bazie = yf_ticker (np. AAPL, 7203.T, PKN.WA)
+# full_name w bazie = display_name (np. Apple, Toyota, PKN Orlen)
 # ---------------------------------------------------------------------------
-
-
-def _sanitize(name: str) -> str:
-    return (
-        name.replace(" ", "-")
-        .replace("_", "-")
-        .replace("&", "and")
-        .replace("'", "")
-        .replace(",", "")
-        .replace(".", "")
-        .replace("(", "")
-        .replace(")", "")
-    )
-
-
-def _build_base_asset(yf_ticker: str, name: str, country: str) -> str:
-    return f"{yf_ticker}_{_sanitize(name)}_{country}"
 
 
 # ── US Stocks (NYSE / NASDAQ) ── quote: USD, kind: STOCK ──────────────────
@@ -464,8 +447,7 @@ FOREX_TICKERS = {
 
 TICKER_REGISTRY: List[tuple] = []
 
-_BASE_ASSET_TO_YF: Dict[str, str] = {}
-_YF_TO_BASE_ASSET: Dict[str, str] = {}
+_YF_TO_NAME: Dict[str, str] = {}
 _YF_TO_QUOTE: Dict[str, str] = {}
 _YF_TO_KIND: Dict[str, str] = {}
 _YF_TO_COUNTRY: Dict[str, str] = {}
@@ -475,10 +457,8 @@ def _register_group(
     tickers: Dict[str, str], quote: str, country: str, kind: str
 ) -> None:
     for yf_ticker, name in tickers.items():
-        base = _build_base_asset(yf_ticker, name, country)
         TICKER_REGISTRY.append((yf_ticker, name, quote, country, kind))
-        _BASE_ASSET_TO_YF[base] = yf_ticker
-        _YF_TO_BASE_ASSET[yf_ticker] = base
+        _YF_TO_NAME[yf_ticker] = name
         _YF_TO_QUOTE[yf_ticker] = quote
         _YF_TO_KIND[yf_ticker] = kind
         _YF_TO_COUNTRY[yf_ticker] = country
@@ -486,10 +466,8 @@ def _register_group(
 
 def _register_indexes() -> None:
     for yf_ticker, (name, quote, country) in INDEX_TICKERS.items():
-        base = _build_base_asset(yf_ticker, name, country)
         TICKER_REGISTRY.append((yf_ticker, name, quote, country, "INDEX"))
-        _BASE_ASSET_TO_YF[base] = yf_ticker
-        _YF_TO_BASE_ASSET[yf_ticker] = base
+        _YF_TO_NAME[yf_ticker] = name
         _YF_TO_QUOTE[yf_ticker] = quote
         _YF_TO_KIND[yf_ticker] = "INDEX"
         _YF_TO_COUNTRY[yf_ticker] = country
@@ -534,13 +512,6 @@ class YahooFinanceAPI(AbstractAPI):
         super().__init__()
 
     @staticmethod
-    def _resolve_yf_ticker(base_currency: str) -> str:
-        """Zamienia base_asset (format DB) na Yahoo Finance ticker."""
-        if base_currency in _BASE_ASSET_TO_YF:
-            return _BASE_ASSET_TO_YF[base_currency]
-        return base_currency
-
-    @staticmethod
     def _default_period_for_interval(interval: str) -> str:
         if interval in ("1m", "2m", "5m", "15m", "30m"):
             return "7d"
@@ -554,7 +525,7 @@ class YahooFinanceAPI(AbstractAPI):
 
     def _get_klines(
         self,
-        base_currency: str = "AAPL_Apple_US",
+        base_currency: str = "AAPL",
         quote_currency: str = "USD",
         interval: str = "1d",
         start_time: Optional[int] = None,
@@ -564,12 +535,11 @@ class YahooFinanceAPI(AbstractAPI):
         """
         Pobiera kline/candlestick z Yahoo Finance.
 
-        base_currency może być w formacie DB (np. AAPL_Apple_US) lub
-        bezpośrednim tickerem YF (np. AAPL). Automatycznie rozwiązuje
-        przez _resolve_yf_ticker().
+        base_currency to bezpośredni ticker YF (np. AAPL, 7203.T,
+        PKN.WA, GC=F, EURUSD=X).
         """
         try:
-            symbol = self._resolve_yf_ticker(base_currency)
+            symbol = base_currency
             ticker = yf.Ticker(symbol)
             kwargs: dict = {"interval": interval}
 
@@ -630,7 +600,7 @@ class YahooFinanceAPI(AbstractAPI):
         """
         Pobiera symbole z Yahoo Finance.
 
-        Zwraca base_asset w formacie <yf_ticker>_<nazwa>_<kraj>,
+        base_asset = yf_ticker, full_name = display name,
         quote_asset = waluta lokalna, plus kind i country do mapowania M2M.
         """
         try:
@@ -688,8 +658,9 @@ class YahooFinanceAPI(AbstractAPI):
         return {
             "symbol": yf_sym,
             "status": "TRADING",
-            "base_asset": _YF_TO_BASE_ASSET.get(yf_sym, yf_sym),
+            "base_asset": yf_sym,
             "quote_asset": _YF_TO_QUOTE.get(yf_sym, "USD"),
+            "full_name": _YF_TO_NAME.get(yf_sym, ""),
             "kind": _YF_TO_KIND.get(yf_sym, ""),
             "country": _YF_TO_COUNTRY.get(yf_sym, ""),
         }
