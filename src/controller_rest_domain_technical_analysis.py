@@ -110,6 +110,17 @@ class PatternExistsResponse(BaseModel):
     pattern_id: Optional[int] = None
 
 
+class IntervalPatternCount(BaseModel):
+    interval: str
+    bullish: int
+    bearish: int
+
+
+class PatternCountsResponse(BaseModel):
+    asset_id: int
+    counts: List[IntervalPatternCount]
+
+
 class SyncTechnicalAnalysisRequest(BaseModel):
     """Request do uruchomienia synchronizacji analiz technicznych."""
     limit: int = Field(default=50, ge=1, le=1000, description="Limit rekordów do przetworzenia")
@@ -1194,6 +1205,33 @@ async def get_all_technical_analyses_with_images(
     except Exception as e:
         logger.error(f"Error getting technical analyses with images: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get analyses with images: {str(e)}")
+
+
+# ===================
+# PATTERN COUNTS PER INTERVAL
+# ===================
+
+@router.get("/pattern-counts/{asset_id}", response_model=PatternCountsResponse)
+async def get_pattern_counts(
+    asset_id: int = Path(..., ge=1, description="ID assetu"),
+):
+    """Returns bullish/bearish pattern counts per interval for an asset."""
+    try:
+        db = await _get_db()
+        table = db.technical_analysis_harmonic_patterns_table
+        rows = await table.get_pattern_counts_by_asset_id(asset_id)
+        counts = [
+            IntervalPatternCount(
+                interval=r["interval"],
+                bullish=r["bullish"],
+                bearish=r["bearish"],
+            )
+            for r in rows
+        ]
+        return PatternCountsResponse(asset_id=asset_id, counts=counts)
+    except Exception as e:
+        logger.error(f"Error getting pattern counts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===================
