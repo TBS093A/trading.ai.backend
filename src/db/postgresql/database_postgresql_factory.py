@@ -12,12 +12,16 @@ class DatabasePostgreSQLFactory:
         'assets': AssetsTable,
         'exchanges': ExchangesTable,
         'asset_exchanges': AssetExchangesTable,
+        'asset_kinds': AssetKindsTable,
+        'countries': CountriesTable,
+        'asset_kind_map': AssetKindMapTable,
+        'asset_country_map': AssetCountryMapTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
         'system_sync_job': SystemSyncJobTable,
         'cron_system_sync_job': CronSystemSyncJobTable,
         'users': UsersTable,
         'user_sessions': UserSessionsTable,
-        'saved_analyses': SavedAnalysesTable
+        'saved_analyses': SavedAnalysesTable,
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -71,6 +75,22 @@ class DatabasePostgreSQLFactory:
     def get_saved_analyses_table(self) -> SavedAnalysesTable:
         """Zwraca tabelę SavedAnalyses."""
         return self.get_table('saved_analyses')
+
+    def get_asset_kinds_table(self) -> AssetKindsTable:
+        """Zwraca tabelę AssetKinds."""
+        return self.get_table('asset_kinds')
+
+    def get_countries_table(self) -> CountriesTable:
+        """Zwraca tabelę Countries."""
+        return self.get_table('countries')
+
+    def get_asset_kind_map_table(self) -> AssetKindMapTable:
+        """Zwraca tabelę AssetKindMap."""
+        return self.get_table('asset_kind_map')
+
+    def get_asset_country_map_table(self) -> AssetCountryMapTable:
+        """Zwraca tabelę AssetCountryMap."""
+        return self.get_table('asset_country_map')
     
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""
