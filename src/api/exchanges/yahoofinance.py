@@ -777,12 +777,21 @@ class YahooFinanceAPI(AbstractAPI):
     def __init__(self) -> None:
         super().__init__()
 
+    _INTERVAL_MAP = {
+        "1w": "1wk",
+        "1M": "1mo",
+    }
+
     @staticmethod
     def _default_period_for_interval(interval: str) -> str:
         if interval in ("1m", "2m", "5m", "15m", "30m"):
             return "7d"
         if interval in ("1h", "60m", "90m"):
             return "60d"
+        if interval in ("1w", "1wk"):
+            return "5y"
+        if interval in ("1M", "1mo"):
+            return "max"
         return "1y"
 
     # ------------------------------------------------------------------
@@ -807,7 +816,8 @@ class YahooFinanceAPI(AbstractAPI):
         try:
             symbol = base_currency
             ticker = yf.Ticker(symbol)
-            kwargs: dict = {"interval": interval}
+            yf_interval = self._INTERVAL_MAP.get(interval, interval)
+            kwargs: dict = {"interval": yf_interval}
 
             if start_time:
                 kwargs["start"] = datetime.fromtimestamp(
