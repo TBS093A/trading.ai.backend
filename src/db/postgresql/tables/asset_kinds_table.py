@@ -5,17 +5,67 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_ASSET_KINDS = [
-    "STOCK",
-    "ETF",
+    # Sektory giełdowe
+    "IT",
+    "FINANCE",
+    "HEALTHCARE",
+    "ENERGY",
+    "DEFENSE",
+    "INDUSTRIAL",
+    "CONSUMER",
+    "AUTOMOTIVE",
+    "TELECOM",
+    "MINING",
+    "CHEMICALS",
+    "LUXURY",
+    "CONGLOMERATE",
+    "MEDIA",
+    # Indeksy
     "INDEX",
-    "FUTURES",
+    # ETF per resource
+    "ETF_INDEX",
+    "ETF_TECH",
+    "ETF_BONDS",
+    "ETF_OIL",
+    "ETF_GOLD",
+    "ETF_SILVER",
+    "ETF_PLATINUM",
+    "ETF_PALLADIUM",
+    "ETF_NATGAS",
+    "ETF_AGRICULTURE",
+    "ETF_MULTI_COMMODITY",
+    "ETF_COPPER",
+    "ETF_URANIUM",
+    "ETF_LITHIUM",
+    "ETF_TIMBER",
+    "ETF_WATER",
+    "ETF_REAL_ESTATE",
+    # Futures per resource
+    "FUTURES_OIL",
+    "FUTURES_GOLD",
+    "FUTURES_SILVER",
+    "FUTURES_PLATINUM",
+    "FUTURES_PALLADIUM",
+    "FUTURES_COPPER",
+    "FUTURES_NATGAS",
+    "FUTURES_CORN",
+    "FUTURES_WHEAT",
+    "FUTURES_SOYBEAN",
+    "FUTURES_COFFEE",
+    "FUTURES_SUGAR",
+    "FUTURES_COCOA",
+    "FUTURES_COTTON",
+    "FUTURES_LUMBER",
+    "FUTURES_CATTLE",
+    "FUTURES_HOGS",
+    # Forex i Crypto
     "FOREX",
     "CRYPTO",
 ]
 
 
 class AssetKindsTable(AbstractTable):
-    """Tabela lookup dla rodzajów assetów (STOCK, ETF, INDEX, FUTURES, FOREX, CRYPTO)."""
+    """Tabela lookup dla rodzajów assetów (sektory, ETF_*, FUTURES_*, INDEX, FOREX, CRYPTO)."""
 
     def create_table(self) -> str:
         return """
