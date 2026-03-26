@@ -1217,8 +1217,8 @@ async def get_pattern_counts(
 ):
     """Returns bullish/bearish pattern counts per interval for an asset."""
     try:
-        db = await _get_db()
-        table = db.technical_analysis_harmonic_patterns_table
+        db = await get_db()
+        table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
         rows = await table.get_pattern_counts_by_asset_id(asset_id)
         counts = [
             IntervalPatternCount(
