@@ -710,3 +710,15 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """
         duplicates = await self.find_duplicates(asset_id)
         return len(duplicates)
+
+    async def get_pattern_counts_by_asset_id(self, asset_id: int) -> List[Dict[str, Any]]:
+        """Returns bullish/bearish pattern counts per interval for an asset."""
+        return await self.fetch_all("""
+            SELECT
+                interval,
+                COUNT(*) FILTER (WHERE ta_object_json::jsonb->>'is_bullish' = 'true')  AS bullish,
+                COUNT(*) FILTER (WHERE ta_object_json::jsonb->>'is_bullish' = 'false') AS bearish
+            FROM technical_analysis_harmonic_patterns
+            WHERE asset_id = $1
+            GROUP BY interval
+        """, asset_id)
