@@ -43,6 +43,9 @@ class AssetResponse(BaseModel):
     id: int
     asset: str
     quote: str
+    full_name: Optional[str] = None
+    kind: Optional[str] = None
+    country: Optional[str] = None
 
 
 class AssetCreate(BaseModel):
@@ -96,6 +99,9 @@ class AssetWithPatternResponse(BaseModel):
     id: int
     asset: str
     quote: str
+    full_name: Optional[str] = None
+    kind: Optional[str] = None
+    country: Optional[str] = None
     latest_pattern_timestamp: Optional[int] = None
     latest_pattern_date: Optional[str] = None
     patterns_count: int = 0
@@ -120,6 +126,31 @@ class StandardResponse(BaseModel):
     success: bool
     message: str
     data: Optional[Dict[str, Any]] = None
+
+
+def _asset_response(a: Dict[str, Any], id_key: str = 'id') -> AssetResponse:
+    return AssetResponse(
+        id=a[id_key],
+        asset=a['asset'],
+        quote=a['quote'],
+        full_name=a.get('full_name'),
+        kind=a.get('kind'),
+        country=a.get('country'),
+    )
+
+
+def _asset_pattern_response(a: Dict[str, Any], latest_ts, latest_date) -> AssetWithPatternResponse:
+    return AssetWithPatternResponse(
+        id=a['id'],
+        asset=a['asset'],
+        quote=a['quote'],
+        full_name=a.get('full_name'),
+        kind=a.get('kind'),
+        country=a.get('country'),
+        latest_pattern_timestamp=latest_ts,
+        latest_pattern_date=latest_date,
+        patterns_count=a.get('patterns_count', 0),
+    )
 
 
 # Singleton dla DatabasePostgreSQL z blokadą dla bezpieczeństwa wątkowego
@@ -212,10 +243,7 @@ async def list_assets(
         page_assets = assets[:limit]
         
         # Konwertuj na response model
-        asset_responses = [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
-            for a in page_assets
-        ]
+        asset_responses = [_asset_response(a) for a in page_assets]
         
         pagination_info = PaginationInfo(
             limit=limit,
@@ -277,10 +305,7 @@ async def search_by_asset(
         
         assets = await assets_table.search_by_asset(asset_name)
         
-        return [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
-            for a in assets
-        ]
+        return [_asset_response(a) for a in assets]
         
     except Exception as e:
         logger.error(f"Error searching assets by name '{asset_name}': {e}")
@@ -306,10 +331,7 @@ async def search_by_quote(
         
         assets = await assets_table.search_by_quote(quote_name)
         
-        return [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
-            for a in assets
-        ]
+        return [_asset_response(a) for a in assets]
         
     except Exception as e:
         logger.error(f"Error searching assets by quote '{quote_name}': {e}")
@@ -390,10 +412,7 @@ async def get_assets_by_exchange(
         page_assets = assets[:limit]
         
         # Konwertuj na response model
-        asset_responses = [
-            AssetResponse(id=a['asset_id'], asset=a['asset'], quote=a['quote'])
-            for a in page_assets
-        ]
+        asset_responses = [_asset_response(a, id_key='asset_id') for a in page_assets]
         
         pagination_info = PaginationInfo(
             limit=limit,
@@ -549,7 +568,7 @@ async def get_assets_without_harmonic_patterns(
         page_assets = assets[:limit]
         
         asset_responses = [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
+            _asset_response(a)
             for a in page_assets
         ]
         
@@ -614,14 +633,7 @@ async def get_assets_with_harmonic_patterns(
                 except:
                     pass
             
-            asset_responses.append(AssetWithPatternResponse(
-                id=asset['id'],
-                asset=asset['asset'],
-                quote=asset['quote'],
-                latest_pattern_timestamp=latest_ts,
-                latest_pattern_date=latest_date,
-                patterns_count=asset.get('patterns_count', 0)
-            ))
+            asset_responses.append(_asset_pattern_response(asset, latest_ts, latest_date))
         
         pagination_info = PaginationInfo(
             limit=limit,
@@ -675,7 +687,7 @@ async def get_assets_with_old_harmonic_patterns(
         page_assets = assets[:limit]
         
         asset_responses = [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
+            _asset_response(a)
             for a in page_assets
         ]
         
@@ -730,7 +742,7 @@ async def get_assets_with_recent_harmonic_patterns(
         page_assets = assets[:limit]
         
         asset_responses = [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
+            _asset_response(a)
             for a in page_assets
         ]
         
@@ -784,7 +796,7 @@ async def get_assets_with_unprocessed_chart_images(
         page_assets = assets[:limit]
         
         asset_responses = [
-            AssetResponse(id=a['id'], asset=a['asset'], quote=a['quote'])
+            _asset_response(a)
             for a in page_assets
         ]
         
@@ -879,11 +891,7 @@ async def get_asset(
         if not asset:
             raise HTTPException(status_code=404, detail=f"Asset with ID {asset_id} not found")
         
-        return AssetResponse(
-            id=asset['id'],
-            asset=asset['asset'],
-            quote=asset['quote']
-        )
+        return _asset_response(asset)
         
     except HTTPException:
         raise

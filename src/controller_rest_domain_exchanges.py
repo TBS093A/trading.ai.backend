@@ -523,6 +523,9 @@ async def get_klines(
     return {
         "asset": asset_name,
         "quote": quote_name,
+        "full_name": asset.get('full_name'),
+        "kind": asset.get('kind'),
+        "country": asset.get('country'),
         "interval": interval,
         "exchange": chosen_exchange,
         "klines": klines_data,

@@ -106,10 +106,13 @@ class AssetExchangesTable(AbstractTable):
         """, asset_id)
     
     async def get_by_exchange_id(self, exchange_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-        """Pobiera wszystkie assety dla danego exchange."""
+        """Pobiera wszystkie assety dla danego exchange z kind i country."""
         return await self.fetch_all("""
             SELECT ae.id, ae.asset_id, ae.exchange_id, ae.created_at,
-                   a.asset, a.quote, e.name as exchange_name
+                   a.asset, a.quote, a.full_name,
+                   (SELECT ak.name FROM asset_kind_map akm JOIN asset_kinds ak ON akm.kind_id = ak.id WHERE akm.asset_id = a.id LIMIT 1) as kind,
+                   (SELECT c.code FROM asset_country_map acm JOIN countries c ON acm.country_id = c.id WHERE acm.asset_id = a.id LIMIT 1) as country,
+                   e.name as exchange_name
             FROM asset_exchanges ae
             JOIN assets a ON ae.asset_id = a.id
             JOIN exchanges e ON ae.exchange_id = e.id

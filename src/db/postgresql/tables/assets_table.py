@@ -131,24 +131,31 @@ class AssetsTable(AbstractTable):
             logger.error(f"Błąd podczas tworzenia wielu assetów: {e}", exc_info=True)
             return {}
     
+    _SELECT_ASSET = """
+        SELECT id, asset, quote, full_name,
+               (SELECT ak.name FROM asset_kind_map akm JOIN asset_kinds ak ON akm.kind_id = ak.id WHERE akm.asset_id = assets.id LIMIT 1) as kind,
+               (SELECT c.code FROM asset_country_map acm JOIN countries c ON acm.country_id = c.id WHERE acm.asset_id = assets.id LIMIT 1) as country
+        FROM assets
+    """
+
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Pobiera asset po ID."""
         return await self.fetch_one(
-            "SELECT id, asset, quote, full_name FROM assets WHERE id = $1",
+            self._SELECT_ASSET + " WHERE id = $1",
             record_id
         )
     
     async def get_by_asset(self, asset: str) -> Optional[Dict[str, Any]]:
         """Pobiera pierwszy asset po nazwie asset (bez względu na quote)."""
         return await self.fetch_one(
-            "SELECT id, asset, quote, full_name FROM assets WHERE asset = $1 ORDER BY id LIMIT 1",
+            self._SELECT_ASSET + " WHERE asset = $1 ORDER BY id LIMIT 1",
             asset
         )
     
     async def get_by_asset_quote(self, asset: str, quote: str) -> Optional[Dict[str, Any]]:
         """Pobiera asset po asset i quote."""
         return await self.fetch_one(
-            "SELECT id, asset, quote, full_name FROM assets WHERE asset = $1 AND quote = $2",
+            self._SELECT_ASSET + " WHERE asset = $1 AND quote = $2",
             asset, quote
         )
     
@@ -180,22 +187,21 @@ class AssetsTable(AbstractTable):
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wszystkie assety z limitem i offsetem."""
         return await self.fetch_all(
-            "SELECT id, asset, quote, full_name FROM assets ORDER BY id LIMIT $1 OFFSET $2",
+            self._SELECT_ASSET + " ORDER BY id LIMIT $1 OFFSET $2",
             limit, offset
         )
     
     async def search_by_asset(self, asset: str) -> List[Dict[str, Any]]:
         """Wyszukuje assety po nazwie asset lub full_name."""
         return await self.fetch_all(
-            "SELECT id, asset, quote, full_name FROM assets "
-            "WHERE asset ILIKE $1 OR full_name ILIKE $1 ORDER BY asset",
+            self._SELECT_ASSET + " WHERE asset ILIKE $1 OR full_name ILIKE $1 ORDER BY asset",
             f"%{asset}%"
         )
     
     async def search_by_quote(self, quote: str) -> List[Dict[str, Any]]:
         """Wyszukuje assety po nazwie quote."""
         return await self.fetch_all(
-            "SELECT id, asset, quote, full_name FROM assets WHERE quote ILIKE $1 ORDER BY quote",
+            self._SELECT_ASSET + " WHERE quote ILIKE $1 ORDER BY quote",
             f"%{quote}%"
         )
     
@@ -360,34 +366,38 @@ class AssetsTable(AbstractTable):
         """
         try:
             if exchange_id is not None:
-                # Z filtrem po giełdzie
                 results = await self.fetch_all("""
                     SELECT 
                         a.id,
                         a.asset,
                         a.quote,
+                        a.full_name,
+                        (SELECT ak.name FROM asset_kind_map akm JOIN asset_kinds ak ON akm.kind_id = ak.id WHERE akm.asset_id = a.id LIMIT 1) as kind,
+                        (SELECT c.code FROM asset_country_map acm JOIN countries c ON acm.country_id = c.id WHERE acm.asset_id = a.id LIMIT 1) as country,
                         MAX(hp.d_point_timestamp) as latest_pattern_timestamp,
                         COUNT(hp.id) as patterns_count
                     FROM assets a
                     INNER JOIN technical_analysis_harmonic_patterns hp ON a.id = hp.asset_id
                     INNER JOIN asset_exchanges ae ON a.id = ae.asset_id
                     WHERE ae.exchange_id = $1
-                    GROUP BY a.id, a.asset, a.quote
+                    GROUP BY a.id, a.asset, a.quote, a.full_name
                     ORDER BY MAX(hp.d_point_timestamp) DESC
                     LIMIT $2 OFFSET $3
                 """, exchange_id, limit, offset)
             else:
-                # Bez filtra po giełdzie
                 results = await self.fetch_all("""
                     SELECT 
                         a.id,
                         a.asset,
                         a.quote,
+                        a.full_name,
+                        (SELECT ak.name FROM asset_kind_map akm JOIN asset_kinds ak ON akm.kind_id = ak.id WHERE akm.asset_id = a.id LIMIT 1) as kind,
+                        (SELECT c.code FROM asset_country_map acm JOIN countries c ON acm.country_id = c.id WHERE acm.asset_id = a.id LIMIT 1) as country,
                         MAX(hp.d_point_timestamp) as latest_pattern_timestamp,
                         COUNT(hp.id) as patterns_count
                     FROM assets a
                     INNER JOIN technical_analysis_harmonic_patterns hp ON a.id = hp.asset_id
-                    GROUP BY a.id, a.asset, a.quote
+                    GROUP BY a.id, a.asset, a.quote, a.full_name
                     ORDER BY MAX(hp.d_point_timestamp) DESC
                     LIMIT $1 OFFSET $2
                 """, limit, offset)
