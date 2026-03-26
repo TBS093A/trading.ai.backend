@@ -45,14 +45,18 @@ class DatabasePostgreSQL:
             
             # Wykonaj zapytania w odpowiedniej kolejności (z uwzględnieniem zależności)
             table_order = [
-                'system_sync_job',  # Musi być przed cron_system_sync_job
-                'cron_system_sync_job',  # Zależy od system_sync_job
-                'users',  # Musi być przed user_sessions i saved_analyses
-                'user_sessions',  # Zależy od users
-                'saved_analyses',  # Zależy od users
+                'system_sync_job',
+                'cron_system_sync_job',
+                'users',
+                'user_sessions',
+                'saved_analyses',
                 'assets',
                 'exchanges',
                 'asset_exchanges',
+                'asset_kinds',
+                'countries',
+                'asset_kind_map',
+                'asset_country_map',
                 'technical_analysis_harmonic_patterns',
             ]
             
