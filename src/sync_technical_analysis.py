@@ -4,7 +4,10 @@ from datetime import datetime, timedelta
 from .api import ApiFacade
 from .db.database_facade import DatabaseFacade
 from .technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade
-from .utils.harmonic_patterns import FibClusterDetector, HigherTFFibDetector, merge_confluences
+from .utils.harmonic_patterns import (
+    FibClusterDetector, HigherTFFibDetector, merge_confluences,
+    HigherTFSRDetector, HigherTFTrendlineDetector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +364,61 @@ class TechnicalAnalysis:
             logger.error(f"Błąd Higher TF Fib (asset_id={asset_id}): {e}", exc_info=True)
         return updated
 
+    async def _update_higher_tf_sr_confluences(self, asset_id: int, klines_cache: Dict[str, List[Dict]]) -> int:
+        """
+        Post-processing: wykrywa S/R i trendline z wyższych timeframe'ów.
+        Wymaga klines_cache zebranego podczas sync loop.
+
+        Returns:
+            Liczba zaktualizowanych rekordów.
+        """
+        updated = 0
+        if not klines_cache or len(klines_cache) < 2:
+            return 0
+
+        try:
+            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
+            all_patterns = await table.get_by_asset_id(asset_id, limit=2000)
+            if not all_patterns:
+                return 0
+
+            replace_types = [
+                'higher_tf_support_zone', 'higher_tf_resistance_zone',
+                'higher_tf_support_trendline', 'higher_tf_resistance_trendline',
+            ]
+
+            for pattern in all_patterns:
+                iv = pattern.get('interval')
+                if not iv:
+                    continue
+
+                new_entries = []
+
+                sr_result = HigherTFSRDetector.detect(klines_cache, pattern, iv)
+                if sr_result is not None:
+                    new_entries.append(sr_result)
+
+                tl_result = HigherTFTrendlineDetector.detect(klines_cache, pattern, iv)
+                if tl_result is not None:
+                    new_entries.append(tl_result)
+
+                if not new_entries:
+                    continue
+
+                merged = merge_confluences(
+                    pattern.get('confluences_json'),
+                    new_entries,
+                    replace_types=replace_types,
+                )
+                await table.update(pattern['id'], confluences_json=merged)
+                updated += 1
+
+            if updated:
+                logger.info(f"Higher TF S/R: zaktualizowano {updated} patternów (asset_id={asset_id})")
+        except Exception as e:
+            logger.error(f"Błąd Higher TF S/R (asset_id={asset_id}): {e}", exc_info=True)
+        return updated
+
     async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_ids: Optional[List[int]] = None) -> None:
         """
         Synchronizuje analizę techniczną dla assetów i interwałów.
@@ -430,6 +488,9 @@ class TechnicalAnalysis:
                     if duplicates_removed > 0:
                         logger.info(f"Usunięto {duplicates_removed} duplikatów dla {asset['asset']}/{asset['quote']}")
                     
+                    # Cache klines per interval — do post-processingu cross-TF S/R
+                    klines_cache: Dict[str, List[Dict]] = {}
+                    
                     # KROK 3: Pętla po interwałach
                     for interval, interval_timedelta in self.CHART_INTERVALS.items():
                         try:
@@ -483,6 +544,8 @@ class TechnicalAnalysis:
                                 logger.warning(f"Nie udało się pobrać klines dla assetu {asset['asset']}/{asset['quote']} i interwału {interval}")
                                 continue
                             
+                            klines_cache[interval] = klines
+                            
                             # KROK 6: Stwórz obiekty HarmonicPatterns
                             harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
                                 asset_id=asset['id'], 
@@ -534,6 +597,9 @@ class TechnicalAnalysis:
                     
                     # KROK 9: Post-processing — Higher TF Fib (cross-interval, po wszystkich interwałach)
                     await self._update_higher_tf_fib_confluences(asset['id'])
+                    
+                    # KROK 10: Post-processing — Higher TF S/R i Trendline (cross-interval, wymaga klines cache)
+                    await self._update_higher_tf_sr_confluences(asset['id'], klines_cache)
                     
                 except Exception as e:
                     error_count += 1
