@@ -8,6 +8,7 @@ Zbiera wyniki z detektorów:
 - OBV (divergence)
 - Stochastic (oversold/overbought)
 - Structural (support/resistance, trendline, round levels, pivot points)
+- Volume (spike, dry-up, volume profile POC/VAH/VAL)
 
 Zwraca zunifikowany dict gotowy do zapisu w kolumnie confluences_json.
 """
@@ -18,6 +19,7 @@ from typing import Dict, List, Optional, Union
 from .candlestick_patterns import CandlestickPatternDetector
 from .indicator_confluences import IndicatorConfluenceDetector
 from .structural_confluences import StructuralConfluenceDetector
+from .volume_confluences import VolumeConfluenceDetector
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,28 @@ class ConfluenceDetector:
                 )
         except Exception as e:
             logger.warning(f"Error in pivot point detector: {e}")
+
+        # --- Volume (spike, dry-up, volume profile) ---
+        volume_detectors = [
+            VolumeConfluenceDetector.detect_volume_spike,
+            VolumeConfluenceDetector.detect_volume_dryup,
+            VolumeConfluenceDetector.detect_volume_profile,
+        ]
+
+        for detector_fn in volume_detectors:
+            try:
+                result = detector_fn(
+                    klines, d_kline_index, is_bullish,
+                    pattern_points=pattern_points,
+                )
+                if result is not None:
+                    confluences.append(result)
+                    logger.debug(
+                        f"Confluence found: {result['type']} "
+                        f"(confidence={result['confidence']}) at candle {d_kline_index}"
+                    )
+            except Exception as e:
+                logger.warning(f"Error in volume detector {detector_fn.__name__}: {e}")
 
         total_score = len(confluences)
 
