@@ -58,6 +58,7 @@ class TechnicalAnalysisResponse(BaseModel):
     c_point_timestamp: Optional[int] = None
     d_point_timestamp: Optional[int] = None
     ta_object_json: Dict[str, Any]
+    confluences_json: Optional[Dict[str, Any]] = None
 
 
 class TechnicalAnalysisWithImagesResponse(BaseModel):
@@ -73,6 +74,7 @@ class TechnicalAnalysisWithImagesResponse(BaseModel):
     c_point_timestamp: Optional[int] = None
     d_point_timestamp: Optional[int] = None
     ta_object_json: Dict[str, Any]
+    confluences_json: Optional[Dict[str, Any]] = None
     chart_images: List[Dict[str, Any]] = []
 
 
@@ -401,7 +403,8 @@ async def list_technical_analyses(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -458,7 +461,8 @@ async def get_technical_analyses_by_asset(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -518,7 +522,8 @@ async def get_technical_analyses_by_asset_and_interval(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -569,7 +574,8 @@ async def get_latest_technical_analysis_by_asset(
             b_point_timestamp=analysis.get('b_point_timestamp'),
             c_point_timestamp=analysis.get('c_point_timestamp'),
             d_point_timestamp=analysis.get('d_point_timestamp'),
-            ta_object_json=analysis['ta_object_json']
+            ta_object_json=analysis['ta_object_json'],
+            confluences_json=analysis.get('confluences_json')
         )
         
     except HTTPException:
@@ -647,7 +653,8 @@ async def get_technical_analyses_by_timestamp_range(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -712,7 +719,8 @@ async def get_technical_analyses_by_timestamp_range_and_asset(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -781,7 +789,8 @@ async def get_technical_analyses_by_timestamp_range_asset_and_interval(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -838,7 +847,8 @@ async def get_complete_patterns(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -895,7 +905,8 @@ async def get_incomplete_patterns(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -959,7 +970,8 @@ async def get_technical_analyses_by_point(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -1024,7 +1036,8 @@ async def get_technical_analyses_by_point_range(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -1141,7 +1154,8 @@ async def find_technical_analysis_by_points(
             b_point_timestamp=pattern.get('b_point_timestamp'),
             c_point_timestamp=pattern.get('c_point_timestamp'),
             d_point_timestamp=pattern.get('d_point_timestamp'),
-            ta_object_json=pattern['ta_object_json']
+            ta_object_json=pattern['ta_object_json'],
+            confluences_json=pattern.get('confluences_json')
         )
         
     except HTTPException:
@@ -1192,6 +1206,7 @@ async def get_all_technical_analyses_with_images(
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
                 ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json'),
                 chart_images=a.get('chart_images', [])
             )
             for a in page_analyses
@@ -1280,7 +1295,8 @@ async def search_technical_analyses_by_json(
                 b_point_timestamp=a.get('b_point_timestamp'),
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json']
+                ta_object_json=a['ta_object_json'],
+                confluences_json=a.get('confluences_json')
             )
             for a in page_analyses
         ]
@@ -1469,7 +1485,8 @@ async def get_technical_analysis(
             b_point_timestamp=analysis.get('b_point_timestamp'),
             c_point_timestamp=analysis.get('c_point_timestamp'),
             d_point_timestamp=analysis.get('d_point_timestamp'),
-            ta_object_json=analysis['ta_object_json']
+            ta_object_json=analysis['ta_object_json'],
+            confluences_json=analysis.get('confluences_json')
         )
         
     except HTTPException:
@@ -1516,6 +1533,7 @@ async def get_technical_analysis_with_images(
             c_point_timestamp=analysis.get('c_point_timestamp'),
             d_point_timestamp=analysis.get('d_point_timestamp'),
             ta_object_json=analysis['ta_object_json'],
+            confluences_json=analysis.get('confluences_json'),
             chart_images=analysis.get('chart_images', [])
         )
         
