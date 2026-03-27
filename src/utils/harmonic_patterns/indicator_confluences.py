@@ -1,5 +1,5 @@
 """
-Wykrywanie konfluencji wskaźnikowych (RSI, MACD, OBV) na punkcie D wzorców harmonicznych.
+Wykrywanie konfluencji wskaźnikowych (RSI, MACD, OBV, Stochastic) na punkcie D wzorców harmonicznych.
 
 Wskaźniki są obliczane wewnętrznie — detektor nie wymaga zewnętrznych obliczeń.
 """
@@ -19,6 +19,11 @@ MACD_SLOW = 26
 MACD_SIGNAL = 9
 
 CROSSOVER_LOOKBACK = 3
+
+STOCH_K_PERIOD = 14
+STOCH_D_PERIOD = 3
+STOCH_OVERSOLD = 20
+STOCH_OVERBOUGHT = 80
 
 
 def _calculate_rsi(klines: List[Dict], period: int = RSI_PERIOD) -> List[Optional[float]]:
@@ -71,6 +76,41 @@ def _calculate_macd(
     signal_line = _calculate_ema(macd_line, signal)
     histogram = macd_line - signal_line
     return macd_line, signal_line, histogram
+
+
+def _calculate_stochastic(
+    klines: List[Dict], k_period: int = STOCH_K_PERIOD, d_period: int = STOCH_D_PERIOD,
+) -> Tuple[List[Optional[float]], List[Optional[float]]]:
+    """Oblicza Stochastic %K i %D. Zwraca (k_values, d_values) z None dla wczesnych świec."""
+    n = len(klines)
+    if n < k_period:
+        return [None] * n, [None] * n
+
+    highs = np.array([float(k['high']) for k in klines])
+    lows = np.array([float(k['low']) for k in klines])
+    closes = np.array([float(k['close']) for k in klines])
+
+    k_values: List[Optional[float]] = [None] * (k_period - 1)
+
+    for i in range(k_period - 1, n):
+        highest = np.max(highs[i - k_period + 1: i + 1])
+        lowest = np.min(lows[i - k_period + 1: i + 1])
+        if highest == lowest:
+            k_values.append(50.0)
+        else:
+            k_values.append(100.0 * (closes[i] - lowest) / (highest - lowest))
+
+    # %D = SMA(%K, d_period)
+    d_values: List[Optional[float]] = [None] * n
+    valid_k = [v for v in k_values if v is not None]
+    if len(valid_k) >= d_period:
+        start_idx = k_period - 1
+        for i in range(start_idx + d_period - 1, n):
+            window = k_values[i - d_period + 1: i + 1]
+            if all(v is not None for v in window):
+                d_values[i] = sum(window) / d_period
+
+    return k_values, d_values
 
 
 def _calculate_obv(klines: List[Dict]) -> np.ndarray:
@@ -513,3 +553,84 @@ class IndicatorConfluenceDetector:
                         best_divergence = candidate
 
         return best_divergence
+
+    # ──────────────────────────────────────────────
+    # Stochastic
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def detect_stochastic_oversold(
+        klines: List[Dict], d_index: int, is_bullish: bool,
+        pattern_points: Dict = None,
+    ) -> Optional[Dict]:
+        """
+        Stochastic %K < 20 na świecy D → potwierdza bullish reversal.
+        Dodatkowy bonus gdy %K przecina %D od dołu (bullish crossover).
+        """
+        if not is_bullish:
+            return None
+
+        k_values, d_values = _calculate_stochastic(klines)
+        k_d = k_values[d_index] if d_index < len(k_values) else None
+        if k_d is None or k_d >= STOCH_OVERSOLD:
+            return None
+
+        d_d = d_values[d_index] if d_index < len(d_values) else None
+
+        confidence = min(1.0, (STOCH_OVERSOLD - k_d) / STOCH_OVERSOLD)
+
+        # Bonus za %K > %D (bullish crossover w strefie oversold)
+        crossover = False
+        if d_d is not None and k_d > d_d:
+            crossover = True
+            confidence = min(1.0, confidence + 0.15)
+
+        return {
+            'type': 'stochastic_oversold',
+            'confidence': round(confidence, 3),
+            'candle_index': d_index,
+            'details': {
+                'k_value': round(k_d, 2),
+                'd_value': round(d_d, 2) if d_d is not None else None,
+                'threshold': STOCH_OVERSOLD,
+                'bullish_crossover': crossover,
+            },
+        }
+
+    @staticmethod
+    def detect_stochastic_overbought(
+        klines: List[Dict], d_index: int, is_bullish: bool,
+        pattern_points: Dict = None,
+    ) -> Optional[Dict]:
+        """
+        Stochastic %K > 80 na świecy D → potwierdza bearish reversal.
+        Dodatkowy bonus gdy %K przecina %D od góry (bearish crossover).
+        """
+        if is_bullish:
+            return None
+
+        k_values, d_values = _calculate_stochastic(klines)
+        k_d = k_values[d_index] if d_index < len(k_values) else None
+        if k_d is None or k_d <= STOCH_OVERBOUGHT:
+            return None
+
+        d_d = d_values[d_index] if d_index < len(d_values) else None
+
+        confidence = min(1.0, (k_d - STOCH_OVERBOUGHT) / (100 - STOCH_OVERBOUGHT))
+
+        crossover = False
+        if d_d is not None and k_d < d_d:
+            crossover = True
+            confidence = min(1.0, confidence + 0.15)
+
+        return {
+            'type': 'stochastic_overbought',
+            'confidence': round(confidence, 3),
+            'candle_index': d_index,
+            'details': {
+                'k_value': round(k_d, 2),
+                'd_value': round(d_d, 2) if d_d is not None else None,
+                'threshold': STOCH_OVERBOUGHT,
+                'bearish_crossover': crossover,
+            },
+        }
