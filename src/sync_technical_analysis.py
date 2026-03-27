@@ -156,9 +156,13 @@ class TechnicalAnalysis:
                         # Porównaj kluczowe pola (pomijamy niektóre dynamiczne pola)
                         if self._patterns_differ(existing_ta_json, new_ta_json):
                             # Aktualizuj istniejący wzorzec
+                            new_confluences = pattern_data.get('confluences_json')
+                            update_kwargs = {'ta_object_json': new_ta_json}
+                            if new_confluences:
+                                update_kwargs['confluences_json'] = new_confluences
                             update_success = await technical_analysis_harmonic_patterns_table.update(
                                 existing_pattern['id'],
-                                ta_object_json=new_ta_json
+                                **update_kwargs
                             )
                             if update_success:
                                 updated_count += 1
