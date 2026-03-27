@@ -490,6 +490,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                             pattern_points=pattern_points,
                                             is_bullish=bool(pattern.bullish),
                                             d_kline_index=d_kline_index,
+                                            interval=self.interval,
                                         )
                                     except Exception as e:
                                         logger.warning(f"Błąd wykrywania konfluencji dla wzorca {pattern_name}: {e}")
