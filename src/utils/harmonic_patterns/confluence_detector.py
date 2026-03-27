@@ -1,15 +1,19 @@
 """
 Orkiestrator wykrywania konfluencji dla wzorców harmonicznych.
 
-Zbiera wyniki z poszczególnych detektorów (candlestick patterns, w przyszłości
-RSI divergence, volume spike, S/R, Fib cluster itp.) i zwraca zunifikowany dict
-gotowy do zapisu w kolumnie confluences_json.
+Zbiera wyniki z detektorów:
+- Candlestick patterns (hammer, shooting star, morning/evening star)
+- RSI (oversold/overbought, divergence)
+- MACD (crossover, histogram reversal, divergence)
+
+Zwraca zunifikowany dict gotowy do zapisu w kolumnie confluences_json.
 """
 
 import logging
 from typing import Dict, List, Optional, Union
 
 from .candlestick_patterns import CandlestickPatternDetector
+from .indicator_confluences import IndicatorConfluenceDetector
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +46,14 @@ class ConfluenceDetector:
         confluences: List[Dict] = []
 
         # --- Candlestick patterns na świecy D ---
-        detectors = [
+        candlestick_detectors = [
             CandlestickPatternDetector.detect_hammer,
             CandlestickPatternDetector.detect_shooting_star,
             CandlestickPatternDetector.detect_morning_star,
             CandlestickPatternDetector.detect_evening_star,
         ]
 
-        for detector_fn in detectors:
+        for detector_fn in candlestick_detectors:
             try:
                 result = detector_fn(klines, d_kline_index, is_bullish)
                 if result is not None:
@@ -59,7 +63,32 @@ class ConfluenceDetector:
                         f"(confidence={result['confidence']}) at candle {d_kline_index}"
                     )
             except Exception as e:
-                logger.warning(f"Error in confluence detector {detector_fn.__name__}: {e}")
+                logger.warning(f"Error in candlestick detector {detector_fn.__name__}: {e}")
+
+        # --- RSI & MACD (wymagają pattern_points do divergence) ---
+        indicator_detectors = [
+            IndicatorConfluenceDetector.detect_rsi_oversold,
+            IndicatorConfluenceDetector.detect_rsi_overbought,
+            IndicatorConfluenceDetector.detect_rsi_divergence,
+            IndicatorConfluenceDetector.detect_macd_crossover,
+            IndicatorConfluenceDetector.detect_macd_histogram_reversal,
+            IndicatorConfluenceDetector.detect_macd_divergence,
+        ]
+
+        for detector_fn in indicator_detectors:
+            try:
+                result = detector_fn(
+                    klines, d_kline_index, is_bullish,
+                    pattern_points=pattern_points,
+                )
+                if result is not None:
+                    confluences.append(result)
+                    logger.debug(
+                        f"Confluence found: {result['type']} "
+                        f"(confidence={result['confidence']}) at candle {d_kline_index}"
+                    )
+            except Exception as e:
+                logger.warning(f"Error in indicator detector {detector_fn.__name__}: {e}")
 
         total_score = len(confluences)
 
