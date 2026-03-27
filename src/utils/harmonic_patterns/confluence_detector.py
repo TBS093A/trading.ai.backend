@@ -7,6 +7,7 @@ Zbiera wyniki z detektorów:
 - MACD (crossover, histogram reversal, divergence)
 - OBV (divergence)
 - Stochastic (oversold/overbought)
+- Structural (support/resistance, trendline, round levels, pivot points)
 
 Zwraca zunifikowany dict gotowy do zapisu w kolumnie confluences_json.
 """
@@ -16,6 +17,7 @@ from typing import Dict, List, Optional, Union
 
 from .candlestick_patterns import CandlestickPatternDetector
 from .indicator_confluences import IndicatorConfluenceDetector
+from .structural_confluences import StructuralConfluenceDetector
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ class ConfluenceDetector:
         pattern_points: Dict[str, Dict],
         is_bullish: bool,
         d_kline_index: int,
+        interval: str = None,
     ) -> Dict:
         """
         Uruchamia wszystkie detektory konfluencji na punkcie D.
@@ -38,6 +41,7 @@ class ConfluenceDetector:
             pattern_points: Słownik punktów patternu {'X': {'index': ..., 'price': ...}, ...}.
             is_bullish: Czy pattern jest bullish.
             d_kline_index: Indeks świecy D w klines.
+            interval: Interwał (potrzebny do pivot points).
 
         Returns:
             {
@@ -99,6 +103,44 @@ class ConfluenceDetector:
                     )
             except Exception as e:
                 logger.warning(f"Error in indicator detector {detector_fn.__name__}: {e}")
+
+        # --- Structural (S/R, trendline, round levels, pivot points) ---
+        structural_detectors = [
+            StructuralConfluenceDetector.detect_support_resistance,
+            StructuralConfluenceDetector.detect_trendline,
+            StructuralConfluenceDetector.detect_round_level,
+        ]
+
+        for detector_fn in structural_detectors:
+            try:
+                result = detector_fn(
+                    klines, d_kline_index, is_bullish,
+                    pattern_points=pattern_points,
+                )
+                if result is not None:
+                    confluences.append(result)
+                    logger.debug(
+                        f"Confluence found: {result['type']} "
+                        f"(confidence={result['confidence']}) at candle {d_kline_index}"
+                    )
+            except Exception as e:
+                logger.warning(f"Error in structural detector {detector_fn.__name__}: {e}")
+
+        # Pivot Points — wymaga interval
+        try:
+            pivot_result = StructuralConfluenceDetector.detect_pivot_point(
+                klines, d_kline_index, is_bullish,
+                pattern_points=pattern_points,
+                interval=interval,
+            )
+            if pivot_result is not None:
+                confluences.append(pivot_result)
+                logger.debug(
+                    f"Confluence found: {pivot_result['type']} "
+                    f"(confidence={pivot_result['confidence']}) at candle {d_kline_index}"
+                )
+        except Exception as e:
+            logger.warning(f"Error in pivot point detector: {e}")
 
         total_score = len(confluences)
 
