@@ -2,9 +2,10 @@
 Orkiestrator wykrywania konfluencji dla wzorców harmonicznych.
 
 Zbiera wyniki z detektorów:
-- Candlestick patterns (hammer, shooting star, morning/evening star)
+- Candlestick patterns (hammer, shooting star, morning/evening star, engulfing, doji, pin bar)
 - RSI (oversold/overbought, divergence)
 - MACD (crossover, histogram reversal, divergence)
+- OBV (divergence)
 
 Zwraca zunifikowany dict gotowy do zapisu w kolumnie confluences_json.
 """
@@ -51,6 +52,11 @@ class ConfluenceDetector:
             CandlestickPatternDetector.detect_shooting_star,
             CandlestickPatternDetector.detect_morning_star,
             CandlestickPatternDetector.detect_evening_star,
+            CandlestickPatternDetector.detect_bullish_engulfing,
+            CandlestickPatternDetector.detect_bearish_engulfing,
+            CandlestickPatternDetector.detect_doji,
+            CandlestickPatternDetector.detect_bullish_pin_bar,
+            CandlestickPatternDetector.detect_bearish_pin_bar,
         ]
 
         for detector_fn in candlestick_detectors:
@@ -65,7 +71,7 @@ class ConfluenceDetector:
             except Exception as e:
                 logger.warning(f"Error in candlestick detector {detector_fn.__name__}: {e}")
 
-        # --- RSI & MACD (wymagają pattern_points do divergence) ---
+        # --- RSI, MACD, OBV (wymagają pattern_points do divergence) ---
         indicator_detectors = [
             IndicatorConfluenceDetector.detect_rsi_oversold,
             IndicatorConfluenceDetector.detect_rsi_overbought,
@@ -73,6 +79,7 @@ class ConfluenceDetector:
             IndicatorConfluenceDetector.detect_macd_crossover,
             IndicatorConfluenceDetector.detect_macd_histogram_reversal,
             IndicatorConfluenceDetector.detect_macd_divergence,
+            IndicatorConfluenceDetector.detect_obv_divergence,
         ]
 
         for detector_fn in indicator_detectors:
