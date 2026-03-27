@@ -1,5 +1,5 @@
 """
-Wykrywanie konfluencji wskaźnikowych (RSI, MACD) na punkcie D wzorców harmonicznych.
+Wykrywanie konfluencji wskaźnikowych (RSI, MACD, OBV) na punkcie D wzorców harmonicznych.
 
 Wskaźniki są obliczane wewnętrznie — detektor nie wymaga zewnętrznych obliczeń.
 """
@@ -73,8 +73,25 @@ def _calculate_macd(
     return macd_line, signal_line, histogram
 
 
+def _calculate_obv(klines: List[Dict]) -> np.ndarray:
+    """Oblicza On Balance Volume z klines."""
+    closes = np.array([float(k['close']) for k in klines])
+    volumes = np.array([float(k.get('volume', 0)) for k in klines])
+
+    obv = np.zeros(len(klines), dtype=float)
+    obv[0] = volumes[0]
+    for i in range(1, len(klines)):
+        if closes[i] > closes[i - 1]:
+            obv[i] = obv[i - 1] + volumes[i]
+        elif closes[i] < closes[i - 1]:
+            obv[i] = obv[i - 1] - volumes[i]
+        else:
+            obv[i] = obv[i - 1]
+    return obv
+
+
 class IndicatorConfluenceDetector:
-    """Detektory konfluencji oparte na RSI i MACD."""
+    """Detektory konfluencji oparte na RSI, MACD i OBV."""
 
     # ──────────────────────────────────────────────
     # RSI
@@ -403,6 +420,91 @@ class IndicatorConfluenceDetector:
                             'reference_point': ref_name,
                             'macd_d': round(macd_d, 6),
                             'macd_ref': round(macd_ref, 6),
+                            'price_d': round(d_price, 6),
+                            'price_ref': round(ref_price, 6),
+                        },
+                    }
+                    if best_divergence is None or confidence > best_divergence['confidence']:
+                        best_divergence = candidate
+
+        return best_divergence
+
+    # ──────────────────────────────────────────────
+    # OBV
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def detect_obv_divergence(
+        klines: List[Dict], d_index: int, is_bullish: bool,
+        pattern_points: Dict = None,
+    ) -> Optional[Dict]:
+        """
+        OBV divergence między punktami patternu a D.
+
+        Bullish: cena D <= cena ref ale OBV(D) > OBV(ref) → akumulacja (smart money kupuje).
+        Bearish: cena D >= cena ref ale OBV(D) < OBV(ref) → dystrybucja (smart money sprzedaje).
+        """
+        if pattern_points is None:
+            return None
+        if d_index >= len(klines):
+            return None
+
+        obv = _calculate_obv(klines)
+
+        ref_points = ['X', 'B']
+        best_divergence = None
+
+        obv_d = float(obv[d_index])
+
+        for ref_name in ref_points:
+            if ref_name not in pattern_points:
+                continue
+            ref = pattern_points[ref_name]
+            ref_idx = ref['index']
+            ref_price = ref['price']
+
+            if ref_idx >= len(obv):
+                continue
+            obv_ref = float(obv[ref_idx])
+
+            d_price = float(klines[d_index]['close'])
+
+            if is_bullish:
+                price_lower = d_price <= ref_price
+                obv_higher = obv_d > obv_ref
+                if price_lower and obv_higher:
+                    obv_range = max(1e-10, abs(obv_ref))
+                    strength = abs(obv_d - obv_ref) / obv_range
+                    confidence = min(1.0, strength)
+                    candidate = {
+                        'type': 'obv_bullish_divergence',
+                        'confidence': round(confidence, 3),
+                        'candle_index': d_index,
+                        'details': {
+                            'reference_point': ref_name,
+                            'obv_d': round(obv_d, 2),
+                            'obv_ref': round(obv_ref, 2),
+                            'price_d': round(d_price, 6),
+                            'price_ref': round(ref_price, 6),
+                        },
+                    }
+                    if best_divergence is None or confidence > best_divergence['confidence']:
+                        best_divergence = candidate
+            else:
+                price_higher = d_price >= ref_price
+                obv_lower = obv_d < obv_ref
+                if price_higher and obv_lower:
+                    obv_range = max(1e-10, abs(obv_ref))
+                    strength = abs(obv_ref - obv_d) / obv_range
+                    confidence = min(1.0, strength)
+                    candidate = {
+                        'type': 'obv_bearish_divergence',
+                        'confidence': round(confidence, 3),
+                        'candle_index': d_index,
+                        'details': {
+                            'reference_point': ref_name,
+                            'obv_d': round(obv_d, 2),
+                            'obv_ref': round(obv_ref, 2),
                             'price_d': round(d_price, 6),
                             'price_ref': round(ref_price, 6),
                         },
