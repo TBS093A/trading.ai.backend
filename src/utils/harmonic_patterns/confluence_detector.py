@@ -6,6 +6,7 @@ Zbiera wyniki z detektorów:
 - RSI (oversold/overbought, divergence)
 - MACD (crossover, histogram reversal, divergence)
 - OBV (divergence)
+- Stochastic (oversold/overbought)
 
 Zwraca zunifikowany dict gotowy do zapisu w kolumnie confluences_json.
 """
@@ -80,6 +81,8 @@ class ConfluenceDetector:
             IndicatorConfluenceDetector.detect_macd_histogram_reversal,
             IndicatorConfluenceDetector.detect_macd_divergence,
             IndicatorConfluenceDetector.detect_obv_divergence,
+            IndicatorConfluenceDetector.detect_stochastic_oversold,
+            IndicatorConfluenceDetector.detect_stochastic_overbought,
         ]
 
         for detector_fn in indicator_detectors:
