@@ -56,6 +56,7 @@ from .abstract_technical_analysis_object import TechnicalAnalysisObject, Harmoni
 from .tao_fibonacci import Fibonacci
 from .tao_fibonacci_all_harmonic_pattern_points_levels import FibonacciAllHarmonicPatternPointsLevels
 from .tao_fibonacci_targets import FibonacciTargets
+from ...utils.harmonic_patterns import ConfluenceDetector
 
 
 class HarmonicPatterns(TechnicalAnalysisObject):
@@ -479,12 +480,28 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                                 # Zarejestruj wzorzec jako dodany
                                 added_patterns[pattern_key] = patterns_count
                                 
+                                # Wykryj konfluencje na punkcie D
+                                confluences = {}
+                                if 'D' in pattern_points:
+                                    d_kline_index = pattern_points['D']['index']
+                                    try:
+                                        confluences = ConfluenceDetector.detect(
+                                            klines=klines,
+                                            pattern_points=pattern_points,
+                                            is_bullish=bool(pattern.bullish),
+                                            d_kline_index=d_kline_index,
+                                            interval=self.interval,
+                                        )
+                                    except Exception as e:
+                                        logger.warning(f"Błąd wykrywania konfluencji dla wzorca {pattern_name}: {e}")
+                                
                                 # Parsuj wzorzec i dodaj do listy obliczonych wzorców
                                 parsed_pattern = self.__parse_harmonic_pattern(
                                     pattern_name, pattern, x_points, y_points, 
                                     pattern_points, fibonacci_levels,
                                     fib_tolerance_strategy_name, fib_tolerance,
-                                    peak_spacing_strategy_name, peak_spacing
+                                    peak_spacing_strategy_name, peak_spacing,
+                                    confluences=confluences
                                 )
                                 
                                 if parsed_pattern:
@@ -512,7 +529,8 @@ class HarmonicPatterns(TechnicalAnalysisObject):
     def __parse_harmonic_pattern(self, pattern_name: str, pattern, x_points, y_points,
                                   pattern_points: dict, fibonacci_levels: dict,
                                   fib_tolerance_strategy_name: str, fib_tolerance: float,
-                                  peak_spacing_strategy_name: str, peak_spacing: int) -> Dict[str, any]:
+                                  peak_spacing_strategy_name: str, peak_spacing: int,
+                                  confluences: dict = None) -> Dict[str, any]:
         """
         Parsuje wzorzec harmoniczny do formatu gotowego do zapisu w bazie danych.
         
@@ -594,6 +612,7 @@ class HarmonicPatterns(TechnicalAnalysisObject):
                     'points': pattern_points,
                     'fibonacci_levels': fibonacci_levels
                 },
+                'confluences_json': confluences if confluences else None,
                 **timestamp_points
             }
             
