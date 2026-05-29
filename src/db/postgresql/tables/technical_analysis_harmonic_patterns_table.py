@@ -35,24 +35,26 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             b_point_timestamp BIGINT,
             c_point_timestamp BIGINT,
             d_point_timestamp BIGINT,
-            ta_object_json JSONB NOT NULL
+            ta_object_json JSONB NOT NULL,
+            confluences_json JSONB
         );
         """
     
     async def create(self, asset_id: int, ta_object_json: Dict[str, Any], 
                     interval: str = None, x_point_timestamp: int = None, a_point_timestamp: int = None, 
                     b_point_timestamp: int = None, c_point_timestamp: int = None, 
-                    d_point_timestamp: int = None) -> Optional[int]:
+                    d_point_timestamp: int = None, confluences_json: Dict[str, Any] = None) -> Optional[int]:
         """Tworzy nową analizę techniczną i zwraca jej ID."""
         try:
             # Konwertuj NumPy typy przed serializacją JSON
             converted_ta_object_json = convert_numpy_types(ta_object_json)
+            converted_confluences_json = convert_numpy_types(confluences_json) if confluences_json else None
             
             analysis_id = await self.fetch_val(
                 """INSERT INTO technical_analysis_harmonic_patterns 
-                (asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id""",
-                asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json)
+                (asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, ta_object_json, confluences_json) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id""",
+                asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp, d_point_timestamp, json.dumps(converted_ta_object_json), json.dumps(converted_confluences_json) if converted_confluences_json else None
             )
             logger.info(f"Utworzono analizę techniczną z ID: {analysis_id}")
             return analysis_id
@@ -64,7 +66,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizę techniczną po ID."""
         result = await self.fetch_one("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -73,6 +75,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return result
     
@@ -120,9 +124,14 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             
             if 'ta_object_json' in kwargs:
                 update_fields.append(f"ta_object_json = ${param_count}")
-                # Konwertuj NumPy typy przed serializacją JSON
                 converted_ta_object_json = convert_numpy_types(kwargs['ta_object_json'])
                 values.append(json.dumps(converted_ta_object_json))
+                param_count += 1
+            
+            if 'confluences_json' in kwargs:
+                update_fields.append(f"confluences_json = ${param_count}")
+                converted_confluences = convert_numpy_types(kwargs['confluences_json']) if kwargs['confluences_json'] else None
+                values.append(json.dumps(converted_confluences) if converted_confluences else None)
                 param_count += 1
             
             if not update_fields:
@@ -180,7 +189,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera wszystkie analizy techniczne z limitem i offsetem."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -189,6 +198,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -196,7 +207,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizy techniczne dla asset."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -206,6 +217,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -213,7 +226,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizy techniczne dla asset i interwału."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -223,6 +236,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -230,7 +245,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizy techniczne z określonego zakresu czasowego (używa x_point_timestamp)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -240,6 +255,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -247,7 +264,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera najnowszą analizę techniczną dla asset."""
         result = await self.fetch_one("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -258,6 +275,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return result
     
@@ -265,7 +284,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Wyszukuje analizy techniczne po wzorcu w JSON."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -275,6 +294,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -286,7 +307,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -296,6 +317,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -307,7 +330,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         column_name = f"{point_type}_point_timestamp"
         results = await self.fetch_all(f"""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -317,6 +340,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
 
@@ -324,7 +349,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera kompletne wzorce harmoniczne (wszystkie punkty wypełnione)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -339,6 +364,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
     
@@ -346,7 +373,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera niekompletne wzorce harmoniczne (przynajmniej jeden punkt jest NULL)."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -361,6 +388,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results 
 
@@ -368,7 +397,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizy techniczne z określonego zakresu czasowego i asset."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -378,6 +407,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results 
     
@@ -385,7 +416,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera analizy techniczne z określonego zakresu czasowego, asset i interwału."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -395,6 +426,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results
 
@@ -402,7 +435,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera wzorce harmoniczne bez powiązanych chart images dla określonego zakresu czasowego, asset i interwału."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote
         FROM technical_analysis_harmonic_patterns ta
         JOIN assets a ON ta.asset_id = a.id
@@ -417,6 +450,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return results 
      
@@ -467,7 +502,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         if interval:
             result = await self.fetch_one("""
             SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                    a.asset, a.quote
             FROM technical_analysis_harmonic_patterns ta
             JOIN assets a ON ta.asset_id = a.id
@@ -483,7 +518,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         else:
             result = await self.fetch_one("""
             SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                   ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                    a.asset, a.quote
             FROM technical_analysis_harmonic_patterns ta
             JOIN assets a ON ta.asset_id = a.id
@@ -498,6 +533,8 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
         
         return result
     
@@ -505,7 +542,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera wzorzec harmoniczny wraz z powiązanymi obrazami wykresów."""
         result = await self.fetch_one("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote,
                ARRAY_AGG(
                    CASE WHEN ci.id IS NOT NULL THEN 
@@ -525,12 +562,14 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
         WHERE ta.id = $1
         GROUP BY ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                  a.asset, a.quote
         """, record_id)
         
         if result:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
             # Konwertuj chart_images z listy na listę słowników
             if result['chart_images']:
                 result['chart_images'] = [img for img in result['chart_images'] if img is not None]
@@ -543,7 +582,7 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         """Pobiera wszystkie wzorce harmoniczne wraz z powiązanymi obrazami wykresów."""
         results = await self.fetch_all("""
         SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                a.asset, a.quote,
                ARRAY_AGG(
                    CASE WHEN ci.id IS NOT NULL THEN 
@@ -562,13 +601,15 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         LEFT JOIN chart_images_harmonic_patterns cihp ON ta.id = cihp.harmonic_pattern_id
         LEFT JOIN chart_images ci ON cihp.chart_image_id = ci.id
         GROUP BY ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp, 
-                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json,
+                 ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
                  a.asset, a.quote
         ORDER BY ta.id DESC LIMIT $1 OFFSET $2
         """, limit, offset)
         
         for result in results:
             result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
             # Konwertuj chart_images z listy na listę słowników
             if result['chart_images']:
                 result['chart_images'] = [img for img in result['chart_images'] if img is not None]
