@@ -88,8 +88,8 @@ def generateK8sConfigFromTemplate() {
             ),
         ]
     ) {
-        def backendRepoUrl = escSql("https://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_BACKEND}")
-        def frontendRepoUrl = escSql("https://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_FRONTEND}")
+        def backendRepoUrl = escSql("http://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_BACKEND}")
+        def frontendRepoUrl = escSql("http://${env.GIT_USERNAME}:${env.GIT_TOKEN}@${params.GIT_REPO_PATH_FRONTEND}")
 
         sh """
             chmod +x ./set.envs.sh
@@ -248,13 +248,13 @@ pipeline {
                                 name: 'FRONTEND_REPO_BRANCH'
                             ),
                             string(
-                                defaultValue: 'git.00x097.com/tbs093a/trading.ai.backend.git',
-                                description: 'Ścieżka Git backendu <b>bez</b> https:// (token dokleja Jenkins z git-gitea-tbs093a)',
+                                defaultValue: 'gitea.default.svc.cluster.local/tbs093a/trading.ai.backend.git',
+                                description: 'Ścieżka Git backendu <b>bez</b> http:// (token dokleja Jenkins z git-gitea-tbs093a)',
                                 name: 'GIT_REPO_PATH_BACKEND'
                             ),
                             string(
-                                defaultValue: 'git.00x097.com/tbs093a/trading.ai.frontend.git',
-                                description: 'Ścieżka Git frontendu <b>bez</b> https://',
+                                defaultValue: 'gitea.default.svc.cluster.local/tbs093a/trading.ai.frontend.git',
+                                description: 'Ścieżka Git frontendu <b>bez</b> http://',
                                 name: 'GIT_REPO_PATH_FRONTEND'
                             ),
                             string(
