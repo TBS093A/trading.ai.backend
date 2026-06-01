@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Import auth
 from src.auth import require_auth, require_admin, AuthUser, get_current_user, get_app_database
@@ -121,6 +122,16 @@ app.add_middleware(RateLimitMiddleware)
 # UWAGA: Tymczasowo wyłączone dla łatwiejszego developmentu
 # W produkcji należy odkomentować:
 # app.add_middleware(CSRFMiddleware)
+
+# =============================================================================
+# Prometheus Metrics
+# =============================================================================
+Instrumentator(
+    should_group_status_codes=False,
+    should_ignore_untemplated=True,
+    should_group_untemplated=True,
+    excluded_handlers=["/metrics", "/live", "/ready"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
 def load_rest_controllers() -> List[str]:
