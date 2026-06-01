@@ -18,6 +18,10 @@ spec:
       labels:
         app: trading-ai-backend-rest-api-controller
         component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
     spec:
       securityContext:
         fsGroup: 1000
@@ -119,6 +123,10 @@ spec:
           env:
             - name: PYTHONPATH
               value: "/app/python-packages"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
             
             # Database configuration
             - name: DATABASE_HOST
