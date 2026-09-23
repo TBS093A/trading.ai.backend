@@ -76,6 +76,35 @@ app = FastAPI(
 )
 
 # =============================================================================
+# Catch-all dla nieobsłużonych wyjątków
+# =============================================================================
+# WAŻNE: rejestrowane PRZED CORSMiddleware, żeby w stosie Starlette wylądować
+# WEWNĄTRZ niego (Starlette owija middleware w kolejności odwrotnej do
+# add_middleware). Wyjątek, który przeleci przez cały stos nieobsłużony,
+# trafia do ServerErrorMiddleware — a ten siedzi POZA CORSMiddleware, więc
+# odpowiedź 500 nigdy nie dostaje nagłówka Access-Control-Allow-Origin i
+# przeglądarka pokazuje mylący błąd CORS zamiast prawdziwego 500
+# (@app.exception_handler(500)/Exception ma dokładnie ten sam problem —
+# Starlette kieruje go też do ServerErrorMiddleware). Łapiąc tutaj, response
+# wraca normalnie przez CORSMiddleware i dostaje właściwe nagłówki.
+@app.middleware("http")
+async def catch_unhandled_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        logger.error(f"Nieobsłużony wyjątek dla {request.url.path}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Internal Server Error",
+                "message": "Wystąpił błąd serwera. Sprawdź logi dla szczegółów."
+            }
+        )
+
+
+# =============================================================================
 # Konfiguracja CORS
 # =============================================================================
 # Pobierz dozwolone originy z konfiguracji
