@@ -346,6 +346,9 @@ if __name__ == "__main__":
             host="0.0.0.0",
             port=9090,
             reload=True,
+            # Brak endpointów WebSocket; pyharmonics -> alpaca-trade-api wymusza websockets<11,
+            # z którym nowy uvicorn (ws="auto") crashuje przy imporcie ServerProtocol
+            ws="none",
             log_level="info"
         )
     except KeyboardInterrupt:
