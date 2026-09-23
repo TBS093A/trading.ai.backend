@@ -1,0 +1,17 @@
+.git
+.tox
+__pycache__
+local_storage
+.env
+.env.example
+config-env.yml
+config-env.template.yml
+*.session
+*.session-journal
+*.log
+*.png
+tests/
+test_data/
+test_charts/
+k8s.manifests/
+.claude

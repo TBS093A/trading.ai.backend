@@ -10,7 +10,7 @@ Autor: AI Assistant
 import logging
 from celery import Celery
 from typing import Dict, Any
-from .config import config
+from .config import config, _redact_url
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ def create_celery_app() -> Celery:
         }
     )
     
-    logger.info(f"🔧 Celery configured with broker: {broker_url}")
-    logger.info(f"📊 Result backend: {result_backend}")
+    logger.info(f"🔧 Celery configured with broker: {_redact_url(broker_url)}")
+    logger.info(f"📊 Result backend: {_redact_url(result_backend)}")
     
     return celery_app
 
