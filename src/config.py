@@ -2,12 +2,24 @@ import os
 from dotenv import load_dotenv
 import logging
 from typing import Optional, List
+from urllib.parse import urlparse
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+def _redact_url(url: Optional[str]) -> Optional[str]:
+    """Zwraca URL bez userinfo (user:password@), bezpieczny do logowania."""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc += f":{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
 
 class Config:
     """Klasa konfiguracyjna dla telegram.pump.bot"""
@@ -184,7 +196,7 @@ class Config:
         # Usunięto sprawdzanie admin users
         
         # Informacje o konfiguracji Celery
-        logger.info(f"Konfiguracja Celery: broker={self.celery_broker_url}, backend={self.celery_result_backend}")
+        logger.info(f"Konfiguracja Celery: broker={_redact_url(self.celery_broker_url)}, backend={_redact_url(self.celery_result_backend)}")
             
         logger.info(f"Konfiguracja Telegram Controller: error_responses={self.enable_error_responses}, handler_logging={self.enable_handler_logging}")
     
