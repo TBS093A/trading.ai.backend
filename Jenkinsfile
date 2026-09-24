@@ -10,6 +10,8 @@
  *   trading-ai-rabbitmq-credentials (Username with password)
  *   trading-ai-redis-password
  *   trading-ai-admin-credentials (Username with password)
+ *   registry-credentials (Username with password) - login do registry.00x097.com,
+ *     ten sam co registry-admin w kubernetes/apps/registry/SEALED-SECRET.md w cloud.config
  * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
  */
 
@@ -143,6 +145,65 @@ def generateK8sConfigFromTemplate() {
         }
     } catch (Throwable e) {
         echo "generateK8sConfigFromTemplate failed: ${e.message}"
+        throw e
+    }
+}
+
+def buildAndPushDockerImage() {
+    try {
+        withCredentials(
+            [
+            usernamePassword(
+                credentialsId: 'registry-credentials',
+                usernameVariable: 'REGISTRY_USER',
+                passwordVariable: 'REGISTRY_PASS'
+            ),
+        ]
+    ) {
+        sh """
+            docker build \\
+                -t registry.00x097.com/trading-ai-backend:latest \\
+                -t registry.00x097.com/trading-ai-backend:${env.BUILD_NUMBER} \\
+                .
+            echo "\$REGISTRY_PASS" | docker login registry.00x097.com -u "\$REGISTRY_USER" --password-stdin
+            docker push registry.00x097.com/trading-ai-backend:latest
+            docker push registry.00x097.com/trading-ai-backend:${env.BUILD_NUMBER}
+            docker logout registry.00x097.com
+        """
+        }
+    } catch (Exception e) {
+        echo "buildAndPushDockerImage failed: ${e.message}"
+        throw e
+    }
+}
+
+def restartTradingAiBackendRollout() {
+    /* cloud.config/kubernetes/apps/trading-ai-backend/ (ArgoCD, namespace backend-apps) - osobna
+     * ścieżka deployu od k8s.manifests/deploy.sh w tym repo (namespace default, stare
+     * ręczne apply). Obrazy tam mają tag :latest + imagePullPolicy: Always, więc sam push
+     * nie wystarczy - k8s nie widzi zmiany tagu, trzeba wymusić rollout restart żeby pody
+     * faktycznie pociągnęły nowy obraz. */
+    try {
+        sh '''
+            export KUBECONFIG="/home/jenkins/.kube/config"
+            NS=backend-apps
+
+            exists_deploy() {
+                kubectl -n "$NS" get deployment "$1" -o name 2>/dev/null | grep -q .
+            }
+            exists_ds() {
+                kubectl -n "$NS" get daemonset "$1" -o name 2>/dev/null | grep -q .
+            }
+
+            exists_deploy trading-ai-backend-rest-api-controller && \\
+                kubectl -n "$NS" rollout restart deployment/trading-ai-backend-rest-api-controller
+            exists_deploy trading-ai-backend-sync-controller && \\
+                kubectl -n "$NS" rollout restart deployment/trading-ai-backend-sync-controller
+            exists_ds trading-ai-backend-celery-workers && \\
+                kubectl -n "$NS" rollout restart daemonset/trading-ai-backend-celery-workers
+        '''
+    } catch (Exception e) {
+        echo "restartTradingAiBackendRollout failed: ${e.message}"
         throw e
     }
 }
@@ -336,6 +397,11 @@ pipeline {
                                 description: '<b>Teardown:</b> <code>./deploy.sh cleanup --yes</code> (wszystkie *.yml/*.yaml bez template, kolejność jak w skrypcie) — przed generowaniem configu',
                                 name: 'K8S_DELETE_MANIFESTS'
                             ),
+                            booleanParam(
+                                defaultValue: true,
+                                description: '<b>Build &amp; push obrazu Dockera</b> do <code>registry.00x097.com/trading-ai-backend</code> (tagi <code>latest</code> + numer builda), potem <code>kubectl rollout restart</code> na Deployment/DaemonSet w namespace <code>backend-apps</code> (ArgoCD, cloud.config) — niezależne od reszty tego pipeline'u (k8s.manifests/deploy.sh, namespace default)',
+                                name: 'BUILD_AND_PUSH_IMAGE'
+                            ),
                         ])
                     ])
                 }
@@ -345,6 +411,23 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Build & Push Docker Image') {
+            when {
+                expression {
+                    params.BUILD_AND_PUSH_IMAGE == true || params.BUILD_AND_PUSH_IMAGE?.toString() == 'true'
+                }
+            }
+            steps {
+                echo 'Build + push registry.00x097.com/trading-ai-backend:latest, potem rollout restart w backend-apps'
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        buildAndPushDockerImage()
+                        restartTradingAiBackendRollout()
+                    }
+                }
             }
         }
 
