@@ -309,12 +309,12 @@ pipeline {
                                 name: 'FRONTEND_REPO_BRANCH'
                             ),
                             string(
-                                defaultValue: 'gitea.default.svc.cluster.local/tbs093a/trading.ai.backend.git',
+                                defaultValue: 'gitea.development.svc.cluster.local/tbs093a/trading.ai.backend.git',
                                 description: 'Ścieżka Git backendu <b>bez</b> http:// (token dokleja Jenkins z git-gitea-tbs093a)',
                                 name: 'GIT_REPO_PATH_BACKEND'
                             ),
                             string(
-                                defaultValue: 'gitea.default.svc.cluster.local/tbs093a/trading.ai.frontend.git',
+                                defaultValue: 'gitea.development.svc.cluster.local/tbs093a/trading.ai.frontend.git',
                                 description: 'Ścieżka Git frontendu <b>bez</b> http://',
                                 name: 'GIT_REPO_PATH_FRONTEND'
                             ),

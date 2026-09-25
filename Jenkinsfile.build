@@ -1,0 +1,96 @@
+/*
+ * Dedicated build+push+deploy pipeline for trading-ai-backend - separate from the existing
+ * `Jenkinsfile` (which still handles the legacy deploy.sh path, config-env.yml generation, and
+ * everything else). This one only does: build image, tag with commit SHA (immutable, not
+ * :latest), push to the self-hosted registry, then bump that tag into all three cloud.config
+ * workloads that reference it and push - ArgoCD (selfHeal: true) rolls it out on its own.
+ *
+ * Credentials needed in Jenkins (already exist, shared with other pipelines):
+ *   registry-credentials   (Username with password) - registry.00x097.com login
+ *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
+ */
+pipeline {
+    agent {
+        node {
+            label 'docker-builder && linux'
+        }
+    }
+
+    triggers {
+        GenericTrigger(
+            genericVariables: [],
+            token: 'trading-ai-backend-build'
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build & push image') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'registry-credentials',
+                        usernameVariable: 'REGISTRY_USER',
+                        passwordVariable: 'REGISTRY_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set -euo pipefail
+                        docker build -t registry.00x097.com/trading-ai-backend:${GIT_COMMIT} .
+                        echo "$REGISTRY_PASS" | docker login registry.00x097.com -u "$REGISTRY_USER" --password-stdin
+                        docker push registry.00x097.com/trading-ai-backend:${GIT_COMMIT}
+                        docker logout registry.00x097.com
+                    '''
+                }
+            }
+        }
+
+        stage('Bump cloud.config manifests') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'git-gitea-tbs093a',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -euo pipefail
+                        rm -rf .cloud-config-bump
+                        git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
+                        cd .cloud-config-bump
+
+                        # Same image reference appears in all three workloads (rest-api, sync,
+                        # celery daemonset) - recursive find-and-replace by value, not by path, so
+                        # this doesn't care which of the three files or which container index it's
+                        # in.
+                        for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \
+                                 kubernetes/apps/trading-ai-backend/deployment-sync.yml \
+                                 kubernetes/apps/trading-ai-backend/daemonset-celery-workers.yml; do
+                            yq eval -i '
+                              (.. | select(tag == "!!str" and test("registry.development.svc.cluster.local:5000/trading-ai-backend:")))
+                              |= sub("registry.development.svc.cluster.local:5000/trading-ai-backend:.*",
+                                     "registry.development.svc.cluster.local:5000/trading-ai-backend:'"${GIT_COMMIT}"'")
+                            ' "$f"
+                        done
+
+                        git config user.email "jenkins@00x097.com"
+                        git config user.name "Jenkins (trading-ai-backend)"
+                        if git diff --quiet kubernetes/apps/trading-ai-backend/; then
+                            echo "image tag unchanged, nothing to commit"
+                        else
+                            git commit -am "chore(trading-ai-backend): deploy trading-ai-backend@${GIT_COMMIT}"
+                            git push origin master
+                        fi
+                    '''
+                }
+                sh 'rm -rf .cloud-config-bump'
+            }
+        }
+    }
+}
