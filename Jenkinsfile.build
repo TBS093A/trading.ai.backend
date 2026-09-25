@@ -1,19 +1,31 @@
 /*
  * Dedicated build+push+deploy pipeline for trading-ai-backend - separate from the existing
  * `Jenkinsfile` (which still handles the legacy deploy.sh path, config-env.yml generation, and
- * everything else). This one: runs security scans, builds+pushes the image tagged with the
- * commit SHA (immutable, not :latest), then bumps that tag into all three cloud.config workloads
- * that reference it and pushes - ArgoCD (selfHeal: true) rolls it out on its own.
+ * everything else). Build, tag with commit SHA (immutable, not :latest), push to the self-hosted
+ * registry, then bump that tag into all three cloud.config workloads and push - ArgoCD
+ * (selfHeal: true) rolls it out on its own.
  *
- * Security scans (SAST/SCA/DAST) all run in `catchError(stageResult: 'UNSTABLE')` - they report
- * and archive findings but do NOT fail the build yet. This is the first pass at scanning this
- * repo; flip a stage to hard-fail (remove the catchError wrapper) once you've reviewed a baseline
- * and picked a severity threshold you actually want to gate on. Reports land as build artifacts
- * (Jenkins > this build > Artifacts) - nothing is uploaded anywhere external.
+ * Trigger: Gitea webhook on push + pull_request (see repo hook settings). Gitea's API can't filter
+ * pull_request sub-events at the webhook level - it's all-or-nothing (opened, comments, labels,
+ * reviews all fire the same webhook). Filtered here instead via regexpFilterExpression: only
+ * "opened"/"synchronize"/"reopened" pull_request actions or plain pushes (no "action" field at
+ * all, hence the empty alternative in the regex) actually start a build.
+ *
+ * Test & Coverage stage runs in catchError(stageResult: 'UNSTABLE') like the security scans -
+ * tests/tests/technical_analysis_tests/technical_analysis_integration.py needs a real
+ * TEST_DATABASE_URL and exchange credentials that aren't wired into Jenkins yet (deliberately -
+ * a misconfigured TEST_DATABASE_URL pointing at production would be catastrophic, since the
+ * db-integration tests call drop_all_tables()). Without real credentials configured this stage
+ * will fail cleanly (connection error) rather than deploy or touch anything - safe by
+ * construction, not just by convention. Wire real test-DB credentials in before relying on this.
+ *
+ * PR comment stage posts a results summary back to the PR via Gitea's issue-comment API when this
+ * build was triggered by a pull_request event (pr_number extracted from the webhook payload) -
+ * skipped entirely for plain push builds.
  *
  * Credentials needed in Jenkins (already exist, shared with other pipelines):
  *   registry-credentials   (Username with password) - registry.00x097.com login
- *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
+ *   git-gitea-tbs093a      (Username with password) - push access to cloud.config + PR comments
  */
 pipeline {
     agent {
@@ -24,8 +36,13 @@ pipeline {
 
     triggers {
         GenericTrigger(
-            genericVariables: [],
-            token: 'trading-ai-backend-build'
+            genericVariables: [
+                [key: 'action', value: '$.action'],
+                [key: 'pr_number', value: '$.number']
+            ],
+            token: 'trading-ai-backend-build',
+            regexpFilterText: '$action',
+            regexpFilterExpression: '^(opened|synchronize|reopened|)$'
         )
     }
 
@@ -33,6 +50,23 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Test & Coverage') {
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh '''
+                        set -euo pipefail
+                        docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13.1-slim \
+                            bash -c "pip install --quiet tox && tox -e technical-analysis-tests"
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
+                }
             }
         }
 
@@ -123,6 +157,9 @@ pipeline {
         }
 
         stage('Bump cloud.config manifests') {
+            when {
+                expression { return !env.pr_number?.trim() }
+            }
             steps {
                 withCredentials([
                     usernamePassword(
@@ -137,10 +174,6 @@ pipeline {
                         git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
                         cd .cloud-config-bump
 
-                        # Same image reference appears in all three workloads (rest-api, sync,
-                        # celery daemonset) - recursive find-and-replace by value, not by path, so
-                        # this doesn't care which of the three files or which container index it's
-                        # in.
                         for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \
                                  kubernetes/apps/trading-ai-backend/deployment-sync.yml \
                                  kubernetes/apps/trading-ai-backend/daemonset-celery-workers.yml; do
@@ -166,6 +199,9 @@ pipeline {
         }
 
         stage('DAST - OWASP ZAP baseline') {
+            when {
+                expression { return !env.pr_number?.trim() }
+            }
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     sh '''
@@ -185,6 +221,31 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'zap-out/**', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('PR comment') {
+            when {
+                expression { return env.pr_number?.trim() }
+            }
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'git-gitea-tbs093a',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -euo pipefail
+                        python3 build-pr-comment.py > pr-comment-body.json
+                        curl -s -X POST \
+                            -H "Authorization: token ${GIT_TOKEN}" \
+                            -H "Content-Type: application/json" \
+                            -d @pr-comment-body.json \
+                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/${pr_number}/comments"
+                    '''
                 }
             }
         }
