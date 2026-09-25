@@ -50,6 +50,13 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                // Report files from a previous build in this reused workspace must not leak into
+                // this run's PR comment (found live: a skipped-on-PR DAST stage still showed a
+                // stale "6 warnings" from an earlier build's leftover zap-report.json).
+                sh '''
+                    rm -f semgrep-report.json trivy-fs-report.json trivy-image-report.json coverage.xml pr-comment-body.json
+                    rm -rf zap-out coverage
+                '''
             }
         }
 
