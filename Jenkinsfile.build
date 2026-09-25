@@ -25,7 +25,8 @@
  *
  * Credentials needed in Jenkins (already exist, shared with other pipelines):
  *   registry-credentials   (Username with password) - registry.00x097.com login
- *   git-gitea-tbs093a      (Username with password) - push access to cloud.config + PR comments
+ *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
+ *   git-gitea-jenkins-bot  (Username with password) - posts PR comments as a bot, not tbs093a
  */
 pipeline {
     agent {
@@ -239,7 +240,7 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'git-gitea-tbs093a',
+                        credentialsId: 'git-gitea-jenkins-bot',
                         usernameVariable: 'GIT_USERNAME',
                         passwordVariable: 'GIT_TOKEN'
                     )
