@@ -8,7 +8,7 @@
  * Trigger: Gitea webhook on push + pull_request (see repo hook settings). Gitea's API can't filter
  * pull_request sub-events at the webhook level - it's all-or-nothing (opened, comments, labels,
  * reviews all fire the same webhook). Filtered here instead via regexpFilterExpression: only
- * "opened"/"synchronize"/"reopened" pull_request actions or plain pushes (no "action" field at
+ * "opened"/"synchronized"/"reopened" pull_request actions or plain pushes (no "action" field at
  * all, hence the empty alternative in the regex) actually start a build.
  *
  * Test & Coverage stage runs in catchError(stageResult: 'UNSTABLE') like the security scans -
@@ -43,7 +43,7 @@ pipeline {
             ],
             token: 'trading-ai-backend-build',
             regexpFilterText: '$action',
-            regexpFilterExpression: '^(opened|synchronize|reopened|)$'
+            regexpFilterExpression: '^(opened|synchronized|reopened|)$'
         )
     }
 
@@ -55,9 +55,35 @@ pipeline {
                 // this run's PR comment (found live: a skipped-on-PR DAST stage still showed a
                 // stale "6 warnings" from an earlier build's leftover zap-report.json).
                 sh '''
-                    rm -f semgrep-report.json trivy-fs-report.json trivy-image-report.json coverage.xml pr-comment-body.json
+                    rm -f semgrep-report.json trivy-fs-report.json trivy-image-report.json coverage.xml pr-comment-body.json start-comment-body.json pr-comment-id.txt
                     rm -rf zap-out coverage
                 '''
+            }
+        }
+
+        stage('PR comment (started)') {
+            when {
+                expression { return env.pr_number?.trim() }
+            }
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'git-gitea-jenkins-bot',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -euo pipefail
+                        python3 start-pr-comment.py > start-comment-body.json
+                        curl -s -X POST \
+                            -H "Authorization: token ${GIT_TOKEN}" \
+                            -H "Content-Type: application/json" \
+                            -d @start-comment-body.json \
+                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/${pr_number}/comments" \
+                            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" > pr-comment-id.txt
+                    '''
+                }
             }
         }
 
@@ -233,7 +259,7 @@ pipeline {
             }
         }
 
-        stage('PR comment') {
+        stage('PR comment (results)') {
             when {
                 expression { return env.pr_number?.trim() }
             }
@@ -248,11 +274,12 @@ pipeline {
                     sh '''
                         set -euo pipefail
                         python3 build-pr-comment.py > pr-comment-body.json
-                        curl -s -X POST \
+                        COMMENT_ID=$(cat pr-comment-id.txt)
+                        curl -s -X PATCH \
                             -H "Authorization: token ${GIT_TOKEN}" \
                             -H "Content-Type: application/json" \
                             -d @pr-comment-body.json \
-                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/${pr_number}/comments"
+                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/comments/${COMMENT_ID}"
                     '''
                 }
             }
