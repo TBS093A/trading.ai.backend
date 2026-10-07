@@ -28,7 +28,21 @@
  *     of this pipeline - integration tests (tox -e technical-analysis-tests) need a dedicated
  *     test database; they call drop_all_tables() and must never point at production.
  *
- * Trigger: Gitea webhook on push + pull_request. Gitea's API can't filter pull_request sub-events
+ * Same model as cloud.config's terraform pipelines (jenkins/scripts/maintenance/terraform-ci/):
+ *   - Trust boundary: ci-gate.py, build-pr-comment.py, start-pr-comment.py and gitea.py are copied
+ *     out of the job's own master checkout BEFORE the PR head replaces the workspace, so a PR
+ *     can change the code being checked but not the checks or their verdicts.
+ *   - PR builds check out the exact head SHA from the webhook payload and only gate open PRs
+ *     against master; disableConcurrentBuilds() + "already passed" short-circuit absorbs the
+ *     opened+synchronized pair Gitea sends for a new PR.
+ *   - Post-merge delivery refuses unless the master commit is the merge of a PR whose head has
+ *     jenkins/pre-merge = success (defence in depth on top of branch protection).
+ *   - PR comments as git-gitea-jenkins-bot via gitea.py: "CI running" right away, edited into the
+ *     results table at the end; after the merge the same on the merged PR ("Delivery running" ->
+ *     gate + push/SBOM/sign/deploy/rollout/DAST table, with any rollback called out).
+ *   - Webhooks like terraform's: one Gitea hook with only pull_request events, one with only push.
+ *
+ * Trigger: Gitea webhooks on push + pull_request. Gitea's API can't filter pull_request sub-events
  * at the webhook level, so filtered here via regexpFilterExpression: only
  * "opened"/"synchronized"/"reopened" pull_request actions or pushes to refs/heads/master (no
  * "action" field, hence defaultValue '' on the variables) start a build; tag pushes and pushes to
@@ -46,44 +60,95 @@
  *                          the matching public key is cosign.pub in the repo root
  */
 
-def IMAGE = 'registry.00x097.com/trading-ai-backend'
-def CLUSTER_IMAGE = 'registry.development.svc.cluster.local:5000/trading-ai-backend'
+import groovy.transform.Field
+
+@Field def IMAGE = 'registry.00x097.com/trading-ai-backend'
+@Field def CLUSTER_IMAGE = 'registry.development.svc.cluster.local:5000/trading-ai-backend'
+
+@Field def GITEA_API = 'https://git.00x097.com/api/v1'
+@Field def GITEA_REPO = 'tbs093a/trading.ai.backend'
+@Field def GITEA_REMOTE = 'http://gitea.development.svc.cluster.local/tbs093a/trading.ai.backend.git'
+@Field def DEFAULT_BRANCH = 'master'
+@Field def PRE_MERGE_CONTEXT = 'jenkins/pre-merge'
+@Field def RELEVANT_ACTIONS = ['opened', 'reopened', 'synchronized']
+@Field def CI_SCRIPTS = ['ci-gate.py', 'build-pr-comment.py', 'start-pr-comment.py', 'gitea.py']
+
+// Trusted copies of the CI scripts, taken from master before a PR head is checked out.
+def ciDir() {
+    return "${env.WORKSPACE}@tmp/ci"
+}
 
 def isPullRequest() {
-    return env.pr_number?.trim() as boolean
+    return env.PR_NUMBER?.trim() as boolean
 }
 
-// Pushes to branches other than master must not deploy; manual runs (no ref) are master runs.
+// False for a webhook delivery that turned out to be nothing to build (closed PR, other base
+// branch, head already gated) - every stage and post action checks it.
+def active() {
+    return env.SKIP_BUILD != 'true'
+}
+
+def skipBuild(String why) {
+    echo why
+    env.SKIP_BUILD = 'true'
+    currentBuild.result = 'NOT_BUILT'
+}
+
+// Webhook pushes only reach this job for master (trigger filter); manual runs have no ref.
 def isPostMerge() {
-    return !isPullRequest() && (!env.push_ref?.trim() || env.push_ref == 'refs/heads/master')
+    return active() && !isPullRequest() && (!env.GITEA_REF?.trim() || env.GITEA_REF == "refs/heads/${DEFAULT_BRANCH}")
 }
 
-def setCommitStatus(String state, String description) {
+def gitea(String args) {
+    withCredentials([usernamePassword(credentialsId: 'git-gitea-jenkins-bot',
+                                      usernameVariable: 'GITEA_USER', passwordVariable: 'GITEA_TOKEN')]) {
+        withEnv(["GITEA_API=${GITEA_API}", "GITEA_REPO=${GITEA_REPO}"]) {
+            return sh(script: "python3 '${ciDir()}/gitea.py' ${args}", returnStdout: true).trim()
+        }
+    }
+}
+
+def jsonField(String json, String field) {
+    return sh(script: "printf '%s' '${json}' | python3 -c 'import json, sys; print(json.load(sys.stdin)[\"${field}\"])'",
+              returnStdout: true).trim()
+}
+
+// A status that can't be posted is reported in the log, never fails the build.
+def setStatus(String state, String description) {
     if (!env.BUILD_SHA) {
         return
     }
-    withCredentials([
-        usernamePassword(
-            credentialsId: 'git-gitea-jenkins-bot',
-            usernameVariable: 'GIT_USERNAME',
-            passwordVariable: 'GIT_TOKEN'
-        )
-    ]) {
-        withEnv([
-            "STATUS_STATE=${state}",
-            "STATUS_DESCRIPTION=${description}",
-            "STATUS_CONTEXT=${isPullRequest() ? 'jenkins/pre-merge' : 'jenkins/post-merge'}",
-        ]) {
-            // Never fails the build - a status that can't be posted is reported, not fatal.
-            sh '''
-                python3 -c 'import json, os; print(json.dumps({"state": os.environ["STATUS_STATE"], "context": os.environ["STATUS_CONTEXT"], "description": os.environ["STATUS_DESCRIPTION"], "target_url": os.environ.get("BUILD_URL", "")}))' > commit-status.json
-                curl -s -o /dev/null -w "Gitea commit status ${STATUS_STATE}: HTTP %{http_code}\\n" -X POST \
-                    -H "Authorization: token ${GIT_TOKEN}" \
-                    -H "Content-Type: application/json" \
-                    -d @commit-status.json \
-                    "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/statuses/${BUILD_SHA}" || true
-            '''
+    def context = isPullRequest() ? PRE_MERGE_CONTEXT : 'jenkins/post-merge'
+    try {
+        gitea("status ${env.BUILD_SHA} ${state} ${context} '${description}'")
+    } catch (err) {
+        echo "Could not set commit status ${context}=${state}: ${err}"
+    }
+}
+
+def postStartComment(String pr, String title) {
+    try {
+        withEnv(["COMMIT_SHA=${env.BUILD_SHA}", "CI_TITLE=${title}"]) {
+            sh "python3 '${ciDir()}/start-pr-comment.py' > pr-comment-body.json"
         }
+        env.PR_COMMENT_ID = gitea("comment-post ${pr} pr-comment-body.json")
+    } catch (err) {
+        echo "Could not post the PR comment: ${err}"
+    }
+}
+
+def updateResultsComment() {
+    if (!env.PR_COMMENT_ID) {
+        return
+    }
+    try {
+        withEnv(["COMMIT_SHA=${env.BUILD_SHA}", "CI_MODE=${isPullRequest() ? 'gate' : 'delivery'}",
+                 "BUILD_RESULT=${currentBuild.currentResult}"]) {
+            sh "python3 '${ciDir()}/build-pr-comment.py' > pr-comment-body.json"
+        }
+        gitea("comment-patch ${env.PR_COMMENT_ID} pr-comment-body.json")
+    } catch (err) {
+        echo "Could not update the PR comment: ${err}"
     }
 }
 
@@ -92,6 +157,13 @@ pipeline {
         node {
             label 'docker-builder && linux'
         }
+    }
+
+    options {
+        // One build at a time: deploys must not interleave, and the second of Gitea's
+        // opened+synchronized pair then sees the first one's verdict and stops.
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '50'))
     }
 
     parameters {
@@ -121,17 +193,22 @@ pipeline {
         GenericTrigger(
             genericVariables: [
                 // defaultValue '' matters: a push payload has no "action" field, and without a default
-                // the variable stays unresolved, regexpFilterText is the literal "$action" and the
-                // filter silently drops every push - merges never started a POST-MERGE build.
-                [key: 'action', value: '$.action', defaultValue: ''],
-                [key: 'pr_number', value: '$.number', defaultValue: ''],
-                [key: 'push_ref', value: '$.ref', defaultValue: '']
+                // the variable stays unresolved, regexpFilterText is the literal "$PR_ACTION" and the
+                // filter silently drops every push.
+                [key: 'PR_ACTION', value: '$.action', defaultValue: ''],
+                [key: 'PR_NUMBER', value: '$.number', defaultValue: ''],
+                [key: 'PR_HEAD_SHA', value: '$.pull_request.head.sha', defaultValue: ''],
+                [key: 'PR_BASE_REF', value: '$.pull_request.base.ref', defaultValue: ''],
+                [key: 'PR_STATE', value: '$.pull_request.state', defaultValue: ''],
+                [key: 'GITEA_REF', value: '$.ref', defaultValue: ''],
+                [key: 'GITEA_AFTER', value: '$.after', defaultValue: '']
             ],
             tokenCredentialId: 'trading-ai-backend-build-webhook-token',
             // Builds only PR opened/synchronized/reopened and pushes to master. Tag pushes and pushes to
             // other branches used to start a full build each (a history rewrite pushing master + 2
             // tags queued three) - feature branches are covered by their PR build anyway.
-            regexpFilterText: '$action|$push_ref',
+            causeString: 'Gitea $PR_ACTION$GITEA_REF #$PR_NUMBER$GITEA_AFTER',
+            regexpFilterText: '$PR_ACTION|$GITEA_REF',
             regexpFilterExpression: '^((opened|synchronized|reopened)\\|.*|\\|refs/heads/master)$'
         )
     }
@@ -139,62 +216,84 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                // The job's own SCM checkout is master: take the trusted CI scripts from it before a
+                // PR head replaces the workspace.
                 checkout scm
                 script {
+                    env.CI_DIR = ciDir()
+                    sh "rm -rf '${ciDir()}' && mkdir -p '${ciDir()}' && cp ${CI_SCRIPTS.join(' ')} '${ciDir()}/'"
                     if (isPullRequest()) {
-                        def remote = scm.userRemoteConfigs[0]
+                        if (!(env.PR_ACTION in RELEVANT_ACTIONS) || !env.PR_HEAD_SHA || env.PR_STATE != 'open' ||
+                            env.PR_BASE_REF != DEFAULT_BRANCH) {
+                            skipBuild("Not an open PR against ${DEFAULT_BRANCH} (action=${env.PR_ACTION}, state=${env.PR_STATE}, base=${env.PR_BASE_REF}) - nothing to gate.")
+                            return
+                        }
+                        // Only a passed gate short-circuits: reopening a PR re-runs a failed one.
+                        if (gitea("context-state ${env.PR_HEAD_SHA} ${PRE_MERGE_CONTEXT}") == 'success') {
+                            skipBuild("${env.PR_HEAD_SHA} already passed ${PRE_MERGE_CONTEXT} - nothing to do.")
+                            return
+                        }
                         checkout([
                             $class: 'GitSCM',
-                            branches: [[name: "refs/remotes/origin/pr/${env.pr_number}"]],
+                            branches: [[name: env.PR_HEAD_SHA]],
                             userRemoteConfigs: [[
-                                url: remote.url,
-                                credentialsId: remote.credentialsId,
-                                refspec: "+refs/pull/${env.pr_number}/head:refs/remotes/origin/pr/${env.pr_number}"
+                                url: GITEA_REMOTE,
+                                credentialsId: 'git-gitea-tbs093a',
+                                refspec: "+refs/pull/${env.PR_NUMBER}/head:refs/remotes/origin/pr/${env.PR_NUMBER}"
                             ]]
                         ])
                     }
                     env.BUILD_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    if (isPullRequest() && env.BUILD_SHA != env.PR_HEAD_SHA) {
+                        error "Checked out ${env.BUILD_SHA}, expected PR head ${env.PR_HEAD_SHA}"
+                    }
                     env.FAIL_SEVERITIES = params.FAIL_ON_HIGH ? 'CRITICAL,HIGH' : 'CRITICAL'
                     env.MIN_COVERAGE = params.MIN_COVERAGE ?: '15'
-                    currentBuild.description = "${isPullRequest() ? "PR #${env.pr_number}" : 'master'} @ ${env.BUILD_SHA.take(8)}"
+                    currentBuild.description = "${isPullRequest() ? "PR #${env.PR_NUMBER}" : DEFAULT_BRANCH} @ ${env.BUILD_SHA.take(8)}"
                 }
                 // Report files from a previous build in this reused workspace must not leak into
                 // this run's gates or PR comment.
                 sh '''
                     rm -f gate-results.json semgrep-report.json trivy-fs-report.json trivy-image-report.json \
-                          gitleaks-report.json coverage.xml sbom.cdx.json image.tar \
-                          pr-comment-body.json start-comment-body.json pr-comment-id.txt commit-status.json \
+                          gitleaks-report.json coverage.xml sbom.cdx.json image.tar pr-comment-body.json \
                           cloud-config-bump-sha.txt
                     rm -rf zap-out coverage sca-deps .gitleaks-src
                 '''
                 script {
-                    setCommitStatus('pending', 'PRE-MERGE gate running')
+                    if (active() && isPullRequest()) {
+                        setStatus('pending', 'PRE-MERGE gate running')
+                        postStartComment(env.PR_NUMBER, 'CI running')
+                    }
                 }
             }
         }
 
-        stage('PR comment (started)') {
+        stage('POST-MERGE: Verify origin (merged PR with passing gate)') {
             when {
-                expression { return isPullRequest() }
+                expression { return isPostMerge() }
             }
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'git-gitea-jenkins-bot',
-                        usernameVariable: 'GIT_USERNAME',
-                        passwordVariable: 'GIT_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        set -euo pipefail
-                        python3 start-pr-comment.py > start-comment-body.json
-                        curl -s -X POST \
-                            -H "Authorization: token ${GIT_TOKEN}" \
-                            -H "Content-Type: application/json" \
-                            -d @start-comment-body.json \
-                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/${pr_number}/comments" \
-                            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" > pr-comment-id.txt
-                    '''
+                script {
+                    // Same check as terraform.post-merge.apply, on top of branch protection: deliver
+                    // only a master commit that is the merge of a PR whose head passed the gate.
+                    def pr = null
+                    try {
+                        pr = gitea("pr-for-merge ${env.BUILD_SHA}")
+                    } catch (err) {
+                        error "${env.BUILD_SHA} is not the merge commit of a PR - refusing to deliver"
+                    }
+                    env.MERGED_PR = jsonField(pr, 'number')
+                    env.MERGED_PR_HEAD = jsonField(pr, 'head_sha')
+                    def gate = gitea("context-state ${env.MERGED_PR_HEAD} ${PRE_MERGE_CONTEXT}")
+                    if (gate != 'success') {
+                        error "PR #${env.MERGED_PR} head ${env.MERGED_PR_HEAD.take(8)} has ${PRE_MERGE_CONTEXT}=${gate} - refusing to deliver"
+                    }
+                    currentBuild.description = "${DEFAULT_BRANCH} @ ${env.BUILD_SHA.take(8)} (PR #${env.MERGED_PR})"
+                    setStatus('pending', 'Delivery running')
+                    postStartComment(env.MERGED_PR, 'Delivery running')
+                    if (!params.SIGN_IMAGE) {
+                        sh 'python3 "$CI_DIR/ci-gate.py" result sign 0 "skipped (SIGN_IMAGE off)"'
+                    }
                 }
             }
         }
@@ -202,6 +301,9 @@ pipeline {
         // ============================== PRE-MERGE GATE ==============================
 
         stage('PRE-MERGE: Secret scan (gitleaks)') {
+            when {
+                expression { return active() }
+            }
             steps {
                 // Scans exactly the tracked files of the commit under test (git archive), not the
                 // workspace - .tox/ and other build leftovers would only add noise.
@@ -224,7 +326,7 @@ pipeline {
                         rc=1
                         detail="$detail; tracked *.session files: $sessions"
                     fi
-                    python3 ci-gate.py result secrets "$rc" "$detail"
+                    python3 "$CI_DIR/ci-gate.py" result secrets "$rc" "$detail"
                 '''
             }
             post {
@@ -235,6 +337,9 @@ pipeline {
         }
 
         stage('PRE-MERGE: Lint (ruff)') {
+            when {
+                expression { return active() }
+            }
             steps {
                 // Fatal-error rule set (syntax errors, undefined names, invalid comparisons) - the
                 // class of bug that crashes at runtime. Widen --select as the codebase gets cleaned up.
@@ -244,12 +349,15 @@ pipeline {
                     docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13-slim bash -c \
                         "pip install --quiet --root-user-action=ignore ruff==0.16.10 && ruff check --no-cache --output-format concise --select E9,F63,F7,F82 ." \
                         || rc=$?
-                    python3 ci-gate.py result lint "$rc" "ruff E9,F63,F7,F82"
+                    python3 "$CI_DIR/ci-gate.py" result lint "$rc" "ruff E9,F63,F7,F82"
                 '''
             }
         }
 
         stage('PRE-MERGE: Unit tests & coverage') {
+            when {
+                expression { return active() }
+            }
             steps {
                 // tests/unit only - no DB, network or credentials, so this is safe to be blocking.
                 // pip freeze of the test venv gives Trivy a resolved dependency list: tox.ini deps
@@ -261,8 +369,8 @@ pipeline {
                     docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13-slim bash -c \
                         "pip install --quiet --root-user-action=ignore tox && tox -e unit-tests && mkdir -p sca-deps && .tox/unit-tests/bin/python -m pip freeze > sca-deps/requirements.txt" \
                         || rc=$?
-                    python3 ci-gate.py result tests "$rc" "tox -e unit-tests"
-                    python3 ci-gate.py coverage coverage.xml --min "$MIN_COVERAGE"
+                    python3 "$CI_DIR/ci-gate.py" result tests "$rc" "tox -e unit-tests"
+                    python3 "$CI_DIR/ci-gate.py" coverage coverage.xml --min "$MIN_COVERAGE"
                 '''
             }
             post {
@@ -273,12 +381,15 @@ pipeline {
         }
 
         stage('PRE-MERGE: SAST (Semgrep)') {
+            when {
+                expression { return active() }
+            }
             steps {
                 sh '''
                     set -euo pipefail
                     docker run --rm -v "$WORKSPACE:/src" semgrep/semgrep \
                         semgrep scan --config=auto --json --output=/src/semgrep-report.json /src
-                    python3 ci-gate.py semgrep semgrep-report.json --fail-on ERROR
+                    python3 "$CI_DIR/ci-gate.py" semgrep semgrep-report.json --fail-on ERROR
                 '''
             }
             post {
@@ -289,6 +400,9 @@ pipeline {
         }
 
         stage('PRE-MERGE: SCA dependencies (Trivy fs)') {
+            when {
+                expression { return active() }
+            }
             steps {
                 sh '''
                     set -euo pipefail
@@ -296,7 +410,7 @@ pipeline {
                         --skip-dirs /src/.tox \
                         --format json --output /src/trivy-fs-report.json \
                         --severity HIGH,CRITICAL /src
-                    python3 ci-gate.py trivy trivy-fs-report.json --name sca-fs \
+                    python3 "$CI_DIR/ci-gate.py" trivy trivy-fs-report.json --name sca-fs \
                         --fail-on "$FAIL_SEVERITIES" --ignore-unfixed
                 '''
             }
@@ -308,6 +422,9 @@ pipeline {
         }
 
         stage('PRE-MERGE: Image build & scan (Trivy image)') {
+            when {
+                expression { return active() }
+            }
             steps {
                 // Scanned from a local tarball before anything is pushed - an image that fails
                 // this gate never reaches the registry.
@@ -320,7 +437,7 @@ pipeline {
                         --format json --output /out/trivy-image-report.json \
                         --severity HIGH,CRITICAL
                     rm -f image.tar
-                    python3 ci-gate.py trivy trivy-image-report.json --name sca-image \
+                    python3 "\$CI_DIR/ci-gate.py" trivy trivy-image-report.json --name sca-image \
                         --fail-on "\$FAIL_SEVERITIES" --ignore-unfixed
                 """
             }
@@ -359,6 +476,7 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     echo "Pushed ${env.IMAGE_DIGEST}"
+                    sh "python3 \"\$CI_DIR/ci-gate.py\" result push 0 '${env.IMAGE_DIGEST.replaceAll('.*@', '')}'"
                 }
             }
         }
@@ -384,6 +502,7 @@ pipeline {
                             aquasec/trivy:0.75.0 image \
                             --format cyclonedx --output /out/sbom.cdx.json \
                             "$IMAGE_DIGEST"
+                        python3 "$CI_DIR/ci-gate.py" result sbom 0 "CycloneDX, archived as sbom.cdx.json"
                     '''
                 }
             }
@@ -425,6 +544,7 @@ pipeline {
                             --registry-username "$REGISTRY_USER" --registry-password "$REGISTRY_PASS" \
                             "$IMAGE_DIGEST" > /dev/null
                         echo "cosign: signed and verified $IMAGE_DIGEST"
+                        python3 "$CI_DIR/ci-gate.py" result sign 0 "signed + verified against cosign.pub"
                     '''
                 }
             }
@@ -482,6 +602,10 @@ pipeline {
                     """
                 }
                 sh 'rm -rf .cloud-config-bump'
+                sh '''
+                    if [ -s cloud-config-bump-sha.txt ]; then detail="cloud.config $(cut -c1-8 cloud-config-bump-sha.txt)"; else detail="image tag unchanged"; fi
+                    python3 "$CI_DIR/ci-gate.py" result deploy 0 "$detail"
+                '''
             }
         }
 
@@ -522,8 +646,10 @@ pipeline {
                                 echo
                             done
                         """
+                        sh 'python3 "$CI_DIR/ci-gate.py" result rollout 0 "rollout complete, smoke test OK"'
                     } catch (err) {
                         echo "Rollout verification failed: ${err} - rolling back"
+                        sh 'python3 "$CI_DIR/ci-gate.py" result rollout 1 "rollout / smoke test failed" || true'
                         withCredentials([
                             usernamePassword(
                                 credentialsId: 'git-gitea-tbs093a',
@@ -547,6 +673,7 @@ pipeline {
                                 git revert --no-edit "$(cat ../cloud-config-bump-sha.txt)"
                                 git push origin master
                                 cd .. && rm -rf .cloud-config-rollback
+                                python3 "$CI_DIR/ci-gate.py" result rollback 0 "cloud.config $(cut -c1-8 cloud-config-bump-sha.txt) reverted - ArgoCD rolls back to the previous image"
                             '''
                         }
                         error("Release of ${env.BUILD_SHA} rolled back - rollout/smoke test failed")
@@ -572,7 +699,7 @@ pipeline {
                     docker run --rm -v "$WORKSPACE/zap-out:/zap/wrk:rw" zaproxy/zap-stable \
                         zap-baseline.py -t https://api.00x097.com \
                         -r zap-report.html -J zap-report.json || true
-                    python3 ci-gate.py zap zap-out/zap-report.json --fail-on-risk 3
+                    python3 "$CI_DIR/ci-gate.py" zap zap-out/zap-report.json --fail-on-risk 3
                 '''
             }
             post {
@@ -584,43 +711,28 @@ pipeline {
     }
 
     post {
+        // Declarative order: always -> success/unsuccessful -> cleanup. The comment is rendered in
+        // always (currentResult is final by then), the CI scripts are removed only in cleanup.
+        always {
+            script {
+                if (active()) {
+                    updateResultsComment()
+                }
+            }
+            archiveArtifacts artifacts: 'gate-results.json', allowEmptyArchive: true
+        }
         success {
             script {
-                setCommitStatus('success', isPullRequest() ? 'PRE-MERGE gate passed' : 'Delivered')
+                if (active()) {
+                    setStatus('success', isPullRequest() ? 'PRE-MERGE gate passed' : 'Delivered')
+                }
             }
         }
         unsuccessful {
             script {
-                setCommitStatus('failure', isPullRequest() ? 'PRE-MERGE gate failed' : 'Delivery failed')
-            }
-        }
-        always {
-            script {
-                if (isPullRequest()) {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'git-gitea-jenkins-bot',
-                            usernameVariable: 'GIT_USERNAME',
-                            passwordVariable: 'GIT_TOKEN'
-                        )
-                    ]) {
-                        sh '''
-                            set -euo pipefail
-                            if [ ! -s pr-comment-id.txt ]; then
-                                echo "No started-comment id - skipping PR results comment"
-                                exit 0
-                            fi
-                            python3 build-pr-comment.py > pr-comment-body.json
-                            COMMENT_ID=$(cat pr-comment-id.txt)
-                            curl -s -X PATCH \
-                                -H "Authorization: token ${GIT_TOKEN}" \
-                                -H "Content-Type: application/json" \
-                                -d @pr-comment-body.json \
-                                "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/comments/${COMMENT_ID}"
-                        '''
-                    }
+                if (active()) {
+                    setStatus('failure', isPullRequest() ? 'PRE-MERGE gate failed' : 'Delivery failed')
                 }
-                archiveArtifacts artifacts: 'gate-results.json', allowEmptyArchive: true
             }
         }
         // docker-builder-000 has one shared disk across every job here. Each run pulls
@@ -636,7 +748,9 @@ pipeline {
                 [ -n "${BUILD_SHA:-}" ] && docker rmi "registry.00x097.com/trading-ai-backend:${BUILD_SHA}" || true
                 docker image prune -f || true
                 docker builder prune -f --filter "until=24h" || true
+                rm -f pr-comment-body.json
             '''
+            sh "rm -rf '${ciDir()}' || true"
         }
     }
 }
