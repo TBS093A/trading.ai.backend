@@ -156,6 +156,19 @@ class TechnicalAnalysis:
         Wołane przez zadanie Celery analysis_tasks.scan_harmonic_windows dla brakujących fragmentów
         zakresu z GET /harmonics/{asset_id}/{interval}.
         """
+        # Każda instancja TechnicalAnalysis ma własne DatabasePostgreSQL - pula powstaje dopiero w
+        # init_db() i należy do pętli zdarzeń tego zadania, więc ją też tu zamykamy.
+        opened_here = getattr(self.db, 'factory', None) is None
+        if opened_here:
+            await self.db.init_db()
+        try:
+            return await self._scan_harmonic_windows(asset_id, interval, windows)
+        finally:
+            if opened_here:
+                await self.db.close_db()
+
+    async def _scan_harmonic_windows(self, asset_id: int, interval: str,
+                                     windows: List[Tuple[int, int]]) -> List[Dict[str, Any]]:
         factory = self.db.get_factory()
         asset = await factory.get_assets_table().get_by_id(asset_id)
         if not asset:

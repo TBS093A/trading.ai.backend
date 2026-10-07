@@ -76,12 +76,30 @@ class TestRangesAndHelpers(unittest.TestCase):
 
     def test_default_range_is_last_500_closed_candles(self):
         start, end = hs.resolve_range("1h", None, None, self.now)
-        self.assertEqual(end, self.now - H)
+        self.assertEqual(end, 9999 * H)  # open_time of the last closed candle
         self.assertEqual(end - start, 499 * H)
+
+    def test_range_is_stable_within_a_candle(self):
+        # Regression: the end used to move every millisecond, so every request found a tiny
+        # uncovered tail and started a new scan.
+        a = hs.resolve_range("4h", None, None, 10_000 * H + 1)
+        b = hs.resolve_range("4h", None, None, 10_000 * H + 3 * H)
+        self.assertEqual(a, b)
+        self.assertEqual(a[1] % (4 * H), 0)
+
+    def test_weekly_and_monthly_alignment(self):
+        from datetime import datetime, timezone
+        ms = lambda *d: int(datetime(*d, tzinfo=timezone.utc).timestamp() * 1000)
+        wed = ms(2026, 10, 7, 13, 30)
+        self.assertEqual(hs.align_down("1w", wed), ms(2026, 10, 5))  # Monday
+        self.assertEqual(hs.last_closed_open_time("1w", wed), ms(2026, 9, 28))
+        self.assertEqual(hs.last_closed_open_time("1M", wed), ms(2026, 9, 1))
+        self.assertEqual(hs.last_closed_open_time("1M", ms(2026, 3, 31, 23)), ms(2026, 2, 1))
+        self.assertEqual(hs.last_closed_open_time("1d", wed), ms(2026, 10, 6))
 
     def test_end_is_clipped_to_the_last_closed_candle(self):
         _, end = hs.resolve_range("1h", 9000 * H, self.now + 10 * H, self.now)
-        self.assertEqual(end, self.now - H)
+        self.assertEqual(end, 9999 * H)
 
     def test_invalid_ranges(self):
         for args in [("1h", 9000 * H, 8000 * H), ("1h", 1000 * H, 9000 * H), ("7h", None, None)]:
@@ -222,6 +240,32 @@ class TestWorkerScan(unittest.TestCase):
         opens = [k["open_time"] for k in first_call["klines"]]
         self.assertLess(opens[0], 1000 * H - hs.PAD_CANDLES * H)  # zapas świec przed oknem
         self.assertGreater(opens[-1], 1500 * H + hs.PAD_CANDLES * H)  # i po oknie
+
+
+class TestWorkerDatabaseLifecycle(unittest.TestCase):
+    def test_initialises_and_closes_its_own_pool(self):
+        # Regression: the first production run failed with "Fabryka nie została zainicjalizowana".
+        db = mock.MagicMock(factory=None)
+        db.init_db = mock.AsyncMock()
+        db.close_db = mock.AsyncMock()
+        ta = TechnicalAnalysis.__new__(TechnicalAnalysis)
+        ta.db = db
+        ta._scan_harmonic_windows = mock.AsyncMock(side_effect=RuntimeError("boom"))
+        with self.assertRaises(RuntimeError):
+            asyncio.run(ta.scan_harmonic_windows(1, "1h", [(0, H)]))
+        db.init_db.assert_awaited_once()
+        db.close_db.assert_awaited_once()
+
+    def test_reuses_an_already_open_database(self):
+        db = mock.MagicMock()
+        db.init_db = mock.AsyncMock()
+        db.close_db = mock.AsyncMock()
+        ta = TechnicalAnalysis.__new__(TechnicalAnalysis)
+        ta.db = db
+        ta._scan_harmonic_windows = mock.AsyncMock(return_value=[])
+        self.assertEqual(asyncio.run(ta.scan_harmonic_windows(1, "1h", [(0, H)])), [])
+        db.init_db.assert_not_awaited()
+        db.close_db.assert_not_awaited()
 
 
 class TestHarmonicsEndpoints(unittest.TestCase):
