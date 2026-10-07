@@ -41,7 +41,8 @@
  *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
  *   git-gitea-jenkins-bot  (Username with password) - PR comments + commit statuses (needs write
  *                          access to the repo for statuses)
- *   cosign-private-key     (Secret file) + cosign-password (Secret text) - only when SIGN_IMAGE
+ *   cosign-private-key     (Secret file) + cosign-password (Secret text) - SIGN_IMAGE (default on);
+ *                          the matching public key is cosign.pub in the repo root
  */
 
 def IMAGE = 'registry.00x097.com/trading-ai-backend'
@@ -105,8 +106,8 @@ pipeline {
         )
         booleanParam(
             name: 'SIGN_IMAGE',
-            defaultValue: false,
-            description: 'Sign the pushed image with cosign (needs cosign-private-key + cosign-password credentials).'
+            defaultValue: true,
+            description: 'Sign the pushed image with cosign and verify the signature against cosign.pub in this repo (cosign-private-key + cosign-password credentials).'
         )
         booleanParam(
             name: 'REQUIRE_RELEASE_APPROVAL',
@@ -118,9 +119,12 @@ pipeline {
     triggers {
         GenericTrigger(
             genericVariables: [
-                [key: 'action', value: '$.action'],
-                [key: 'pr_number', value: '$.number'],
-                [key: 'push_ref', value: '$.ref']
+                // defaultValue '' matters: a push payload has no "action" field, and without a default
+                // the variable stays unresolved, regexpFilterText is the literal "$action" and the
+                // filter silently drops every push - merges never started a POST-MERGE build.
+                [key: 'action', value: '$.action', defaultValue: ''],
+                [key: 'pr_number', value: '$.number', defaultValue: ''],
+                [key: 'push_ref', value: '$.ref', defaultValue: '']
             ],
             tokenCredentialId: 'trading-ai-backend-build-webhook-token',
             regexpFilterText: '$action',
@@ -401,16 +405,22 @@ pipeline {
                     )
                 ]) {
                     // Signed by digest, not tag. --tlog-upload=false: private registry, nothing is
-                    // published to the public Rekor transparency log.
+                    // published to the public Rekor transparency log (hence --insecure-ignore-tlog on
+                    // verify). Verified right away against the committed cosign.pub, so a signature
+                    // that anyone can check with that file is part of the gate, not just a side effect.
+                    // Run as the agent user: the credential file is 0600 and owned by it.
                     sh '''
                         set -euo pipefail
-                        docker run --rm \
-                            --env COSIGN_PASSWORD \
-                            -v "$COSIGN_KEY_FILE:/cosign.key:ro" \
-                            gcr.io/projectsigstore/cosign:v2.4.1 sign --yes \
-                            --key /cosign.key --tlog-upload=false \
+                        COSIGN="docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp --env COSIGN_PASSWORD \
+                            -v $COSIGN_KEY_FILE:/cosign.key:ro -v $WORKSPACE/cosign.pub:/cosign.pub:ro \
+                            gcr.io/projectsigstore/cosign:v2.4.1"
+                        $COSIGN sign --yes --key /cosign.key --tlog-upload=false \
                             --registry-username "$REGISTRY_USER" --registry-password "$REGISTRY_PASS" \
                             "$IMAGE_DIGEST"
+                        $COSIGN verify --key /cosign.pub --insecure-ignore-tlog=true \
+                            --registry-username "$REGISTRY_USER" --registry-password "$REGISTRY_PASS" \
+                            "$IMAGE_DIGEST" > /dev/null
+                        echo "cosign: signed and verified $IMAGE_DIGEST"
                     '''
                 }
             }
