@@ -190,3 +190,29 @@ def sync_bulk_assets_technical_analysis_task(
             'error': str(exc),
             'message': f'Technical analysis sync failed for assets {asset_ids}: {exc}'
         }
+
+@celery.task(bind=True, name='analysis_tasks.scan_harmonic_windows')
+def scan_harmonic_windows_task(self, asset_id: int, interval: str, windows: List[List[int]]) -> Dict[str, Any]:
+    """
+    Liczy formacje harmoniczne w brakujących oknach zakresu z GET /harmonics/{asset_id}/{interval}
+    i zapisuje wyniki oraz okna do bazy (trwały cache - src/harmonic_scan.py).
+
+    Bez wait_for_dependencies: to odpowiedź na request użytkownika, nie część nocnego łańcucha.
+    """
+    logger.info(f"🔎 scan_harmonic_windows asset={asset_id} interval={interval} windows={windows} (ID: {self.request.id})")
+    start = datetime.now()
+    technical_analysis = TechnicalAnalysis()
+    results = run_async_task_safely(
+        technical_analysis.scan_harmonic_windows,
+        asset_id=asset_id,
+        interval=interval,
+        windows=[tuple(w) for w in windows],
+    )
+    return {
+        'success': True,
+        'task_id': self.request.id,
+        'asset_id': asset_id,
+        'interval': interval,
+        'windows': results,
+        'duration': str(datetime.now() - start),
+    }

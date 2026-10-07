@@ -431,6 +431,32 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
         
         return results
 
+    async def get_within_range(self, asset_id: int, interval: str, start_timestamp: int, end_timestamp: int,
+                               limit: int = 2000) -> List[Dict[str, Any]]:
+        """Formacje, których WSZYSTKIE punkty leżą w [start_timestamp, end_timestamp] (skan zakresu).
+
+        Pierwszy punkt to X (albo A dla ABCD), ostatni D (albo C dla ABC).
+        """
+        results = await self.fetch_all("""
+        SELECT ta.id, ta.asset_id, ta.interval, ta.x_point_timestamp, ta.a_point_timestamp, ta.b_point_timestamp,
+               ta.c_point_timestamp, ta.d_point_timestamp, ta.ta_object_json, ta.confluences_json,
+               a.asset, a.quote
+        FROM technical_analysis_harmonic_patterns ta
+        JOIN assets a ON ta.asset_id = a.id
+        WHERE ta.asset_id = $1 AND ta.interval = $2
+          AND COALESCE(ta.x_point_timestamp, ta.a_point_timestamp) >= $3
+          AND COALESCE(ta.d_point_timestamp, ta.c_point_timestamp) <= $4
+        ORDER BY COALESCE(ta.d_point_timestamp, ta.c_point_timestamp) DESC, ta.id DESC
+        LIMIT $5
+        """, asset_id, interval, start_timestamp, end_timestamp, limit)
+
+        for result in results:
+            result['ta_object_json'] = json.loads(result['ta_object_json'])
+            if result.get('confluences_json'):
+                result['confluences_json'] = json.loads(result['confluences_json'])
+
+        return results
+
     async def get_without_chart_images_by_timestamp_range_asset_interval(self, start_timestamp: int, end_timestamp: int, asset_id: int, interval: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Pobiera wzorce harmoniczne bez powiązanych chart images dla określonego zakresu czasowego, asset i interwału."""
         results = await self.fetch_all("""

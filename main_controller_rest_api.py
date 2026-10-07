@@ -148,8 +148,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 2. Rate Limiting - ogranicza liczbę requestów
 app.add_middleware(RateLimitMiddleware)
 
-# GZip tylko dla świec (lazy-loading historii wykresu) - patrz KlinesGZipMiddleware (BREACH).
-app.add_middleware(KlinesGZipMiddleware, path_prefix="/exchanges/klines/", minimum_size=1000)
+# GZip tylko dla danych rynkowych (świece, formacje harmoniczne) - patrz KlinesGZipMiddleware (BREACH).
+app.add_middleware(KlinesGZipMiddleware, path_prefix=("/exchanges/klines/", "/harmonics/"), minimum_size=1000)
 
 # 3. CSRF Protection - waliduje tokeny CSRF dla modyfikujących requestów
 # UWAGA: Tymczasowo wyłączone dla łatwiejszego developmentu

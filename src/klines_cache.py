@@ -177,22 +177,22 @@ klines_cache = KlinesPageCache()
 
 
 class KlinesGZipMiddleware:
-    """GZip tylko dla /exchanges/klines/ (świece to ~70% mniej bajtów po kompresji).
+    """GZip tylko dla wybranych ścieżek z danymi rynkowymi (świece, formacje harmoniczne).
 
     Celowo nie dla całego API: kompresja odpowiedzi, które niosą sekrety (token CSRF, dane
-    sesji) obok danych zależnych od requestu, otwiera atak BREACH. Klines to publiczne dane
-    rynkowe - kompresja ich nic nie zdradza.
+    sesji) obok danych zależnych od requestu, otwiera atak BREACH. Świece i formacje to publiczne
+    dane rynkowe - kompresja ich nic nie zdradza.
     """
 
-    def __init__(self, app, path_prefix: str = "/exchanges/klines/", minimum_size: int = 1000):
+    def __init__(self, app, path_prefix=("/exchanges/klines/",), minimum_size: int = 1000):
         from starlette.middleware.gzip import GZipMiddleware
 
         self.app = app
         self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
-        self.path_prefix = path_prefix
+        self.path_prefixes = (path_prefix,) if isinstance(path_prefix, str) else tuple(path_prefix)
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope.get("path", "").startswith(self.path_prefix):
+        if scope["type"] == "http" and scope.get("path", "").startswith(self.path_prefixes):
             await self.gzip(scope, receive, send)
         else:
             await self.app(scope, receive, send)
