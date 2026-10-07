@@ -5,9 +5,9 @@
 #
 # Alpine (musl) zamiast Debian slim: obraz bazowy ma rzad wielkosci mniej pakietow systemowych,
 # wiec znika wiekszosc HIGH w Trivy image, ktore w Debianie nie mialy poprawki.
-# Multi-stage: kompilator i naglowki (build-base) tylko w etapie build - 7 zaleznosci nie ma
-# wheeli musllinux (msgpack, PyYAML, websockets maja rozszerzenia C; pyaes, pymexc, ta, Telethon
-# to czysty Python bez wheela) i buduja sie tutaj.
+# Multi-stage: kompilator i naglowki (build-base) tylko w etapie build - sdisty bez wheeli
+# musllinux (dzis pyaes, pymexc, ta, Telethon - czysty Python) buduja sie tutaj, a gdyby ktoras
+# zaleznosc z rozszerzeniem C stracila wheel, kompilator nie trafi do runtime.
 #
 # Jeden venv zamiast trzech tox envs: deps rest-api-controller sa nadzbiorem pozostalych dwoch,
 # a tox w runtime tylko uruchamial jedna komende. Lista paczek dalej pochodzi z tox.ini
@@ -17,10 +17,14 @@ FROM python:3.13-alpine AS build
 RUN apk add --no-cache build-base libffi-dev
 
 COPY tox.ini /tmp/tox.ini
+# no_deps_packages: paczki instalowane bez zaleznosci (pyharmonics -> alpaca-trade-api), patrz tox.ini.
 RUN python -c 'import configparser; c = configparser.ConfigParser(interpolation=None); c.read("/tmp/tox.ini"); print(c["testenv:rest-api-controller"]["deps"].strip())' \
-    > /tmp/requirements.txt
+    > /tmp/requirements.txt \
+    && python -c 'import configparser; c = configparser.ConfigParser(interpolation=None); c.read("/tmp/tox.ini"); print(c["testenv"]["no_deps_packages"].strip())' \
+    > /tmp/requirements-no-deps.txt
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps -r /tmp/requirements-no-deps.txt \
     && /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel \
     && find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} +
 

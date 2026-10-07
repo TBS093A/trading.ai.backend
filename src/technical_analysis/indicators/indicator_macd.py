@@ -11,7 +11,6 @@ import traceback
 from abc import ABC, abstractmethod
 
 # Import pyharmonics
-from pyharmonics.marketdata import BinanceCandleData
 from pyharmonics.technicals import Technicals
 from pyharmonics.search import HarmonicSearch
 
