@@ -53,8 +53,9 @@
  *   trading-ai-backend-build-webhook-token (Secret text) - Generic Webhook Trigger token; the Gitea
  *                          webhook URL must use the same value (.../generic-webhook-trigger/invoke?token=...)
  *   registry-credentials   (Username with password) - registry.00x097.com login
- *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
- *   git-gitea-jenkins-bot  (Username with password) - PR comments + commit statuses (needs write
+ *   git-gitea-tbs093a      (Username with password) - checkout of PR heads
+ *   git-gitea-jenkins-bot  (Username with password) - PR comments, commit statuses and the
+ *                          cloud.config image-tag bump / rollback commits (needs write
  *                          access to the repo for statuses)
  *   cosign-private-key     (Secret file) + cosign-password (Secret text) - SIGN_IMAGE (default on);
  *                          the matching public key is cosign.pub in the repo root
@@ -106,6 +107,14 @@ def gitea(String args) {
             return sh(script: "python3 '${ciDir()}/gitea.py' ${args}", returnStdout: true).trim()
         }
     }
+}
+
+// cloud.config image-tag bumps (and their rollback reverts) are committed and pushed as
+// git-gitea-jenkins-bot - env vars, because the agent's own git identity ("jenkins") overrides
+// a repo-level git config.
+def gitBotEnv() {
+    return ['GIT_AUTHOR_NAME=jenkins-bot', 'GIT_AUTHOR_EMAIL=jenkins-bot@00x097.com',
+            'GIT_COMMITTER_NAME=jenkins-bot', 'GIT_COMMITTER_EMAIL=jenkins-bot@00x097.com']
 }
 
 def jsonField(String json, String field) {
@@ -570,36 +579,38 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'git-gitea-tbs093a',
+                        credentialsId: 'git-gitea-jenkins-bot',
                         usernameVariable: 'GIT_USERNAME',
                         passwordVariable: 'GIT_TOKEN'
                     )
                 ]) {
-                    sh """
-                        set -euo pipefail
-                        rm -rf .cloud-config-bump
-                        git clone "https://\${GIT_USERNAME}:\${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
-                        cd .cloud-config-bump
+                    withEnv(gitBotEnv()) {
+                        sh """
+                            set -euo pipefail
+                            rm -rf .cloud-config-bump
+                            git clone "https://\${GIT_USERNAME}:\${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
+                            cd .cloud-config-bump
 
-                        for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \\
-                                 kubernetes/apps/trading-ai-backend/deployment-sync.yml \\
-                                 kubernetes/apps/trading-ai-backend/daemonset-celery-workers.yml; do
-                            yq eval -i '
-                              (.. | select(tag == "!!str" and test("${CLUSTER_IMAGE}:")))
-                              |= sub("${CLUSTER_IMAGE}:.*", "${CLUSTER_IMAGE}:'"\${BUILD_SHA}"'")
-                            ' "\$f"
-                        done
+                            for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \\
+                                     kubernetes/apps/trading-ai-backend/deployment-sync.yml \\
+                                     kubernetes/apps/trading-ai-backend/daemonset-celery-workers.yml; do
+                                yq eval -i '
+                                  (.. | select(tag == "!!str" and test("${CLUSTER_IMAGE}:")))
+                                  |= sub("${CLUSTER_IMAGE}:.*", "${CLUSTER_IMAGE}:'"\${BUILD_SHA}"'")
+                                ' "\$f"
+                            done
 
-                        git config user.email "jenkins@00x097.com"
-                        git config user.name "Jenkins (trading-ai-backend)"
-                        if git diff --quiet kubernetes/apps/trading-ai-backend/; then
-                            echo "image tag unchanged, nothing to commit"
-                        else
-                            git commit -am "chore(trading-ai-backend): deploy trading-ai-backend@\${BUILD_SHA}"
-                            git push origin master
-                            git rev-parse HEAD > ../cloud-config-bump-sha.txt
-                        fi
-                    """
+                            # GIT_AUTHOR_*/GIT_COMMITTER_* (gitBotEnv) win over git config and over the agent's own
+                            # "jenkins" identity - the bump shows up in cloud.config as jenkins-bot.
+                            if git diff --quiet kubernetes/apps/trading-ai-backend/; then
+                                echo "image tag unchanged, nothing to commit"
+                            else
+                                git commit -am "chore(trading-ai-backend): deploy trading-ai-backend@\${BUILD_SHA}"
+                                git push origin master
+                                git rev-parse HEAD > ../cloud-config-bump-sha.txt
+                            fi
+                        """
+                    }
                 }
                 sh 'rm -rf .cloud-config-bump'
                 sh '''
@@ -652,29 +663,29 @@ pipeline {
                         sh 'python3 "$CI_DIR/ci-gate.py" result rollout 1 "rollout / smoke test failed" || true'
                         withCredentials([
                             usernamePassword(
-                                credentialsId: 'git-gitea-tbs093a',
+                                credentialsId: 'git-gitea-jenkins-bot',
                                 usernameVariable: 'GIT_USERNAME',
                                 passwordVariable: 'GIT_TOKEN'
                             )
                         ]) {
-                            // Reverting the bump commit puts the previous image tag back in
-                            // cloud.config; ArgoCD (selfHeal) rolls the workloads back to it.
-                            sh '''
-                                set -euo pipefail
-                                if [ ! -s cloud-config-bump-sha.txt ]; then
-                                    echo "No bump commit recorded - nothing to revert"
-                                    exit 0
-                                fi
-                                rm -rf .cloud-config-rollback
-                                git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-rollback
-                                cd .cloud-config-rollback
-                                git config user.email "jenkins@00x097.com"
-                                git config user.name "Jenkins (trading-ai-backend)"
-                                git revert --no-edit "$(cat ../cloud-config-bump-sha.txt)"
-                                git push origin master
-                                cd .. && rm -rf .cloud-config-rollback
-                                python3 "$CI_DIR/ci-gate.py" result rollback 0 "cloud.config $(cut -c1-8 cloud-config-bump-sha.txt) reverted - ArgoCD rolls back to the previous image"
-                            '''
+                            withEnv(gitBotEnv()) {
+                                // Reverting the bump commit puts the previous image tag back in
+                                // cloud.config; ArgoCD (selfHeal) rolls the workloads back to it.
+                                sh '''
+                                    set -euo pipefail
+                                    if [ ! -s cloud-config-bump-sha.txt ]; then
+                                        echo "No bump commit recorded - nothing to revert"
+                                        exit 0
+                                    fi
+                                    rm -rf .cloud-config-rollback
+                                    git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-rollback
+                                    cd .cloud-config-rollback
+                                    git revert --no-edit "$(cat ../cloud-config-bump-sha.txt)"
+                                    git push origin master
+                                    cd .. && rm -rf .cloud-config-rollback
+                                    python3 "$CI_DIR/ci-gate.py" result rollback 0 "cloud.config $(cut -c1-8 cloud-config-bump-sha.txt) reverted - ArgoCD rolls back to the previous image"
+                                '''
+                            }
                         }
                         error("Release of ${env.BUILD_SHA} rolled back - rollout/smoke test failed")
                     }
