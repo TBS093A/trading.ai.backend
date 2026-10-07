@@ -17,7 +17,7 @@ Autor: AI Assistant
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List, Union
-from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends
+from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends, Response
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -33,6 +33,12 @@ from .celery_tasks.sync_tasks import sync_exchanges_task
 
 # Import Auth
 from .auth import require_auth, require_admin, AuthUser
+
+# Cache stron klines (lazy-loading historii wykresu)
+from .klines_cache import (
+    klines_cache, to_objects, to_compact, COMPACT_FIELDS,
+    CACHE_CONTROL_HISTORY, CACHE_CONTROL_HEAD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -462,14 +468,26 @@ EXCHANGE_API_GETTER = {
 
 @router.get("/klines/{asset_id}/{interval}")
 async def get_klines(
+    response: Response,
     asset_id: int = Path(..., ge=1),
     interval: str = Path(...),
     start_time: Optional[int] = Query(default=None),
     end_time: Optional[int] = Query(default=None),
     limit: int = Query(default=500, ge=1, le=1000),
     exchange: Optional[str] = Query(default=None, description="Wymuszenie giełdy (np. BINANCE, YAHOO)"),
+    compact: bool = Query(
+        default=False,
+        description="true: klines jako [[open_time, open, high, low, close, volume], ...] (pola w `fields`)",
+    ),
 ):
-    """Pobiera klines dla assetu. Automatycznie wybiera giełdę wg priorytetu lub wymuszaną przez parametr exchange."""
+    """Pobiera klines dla assetu. Automatycznie wybiera giełdę wg priorytetu lub wymuszaną przez parametr exchange.
+
+    Doładowywanie historii: end_time = najstarszy open_time - 1, limit do 1000; strona krótsza
+    niż limit oznacza koniec historii. Strony z przypiętym end_time, w których każda świeca jest
+    zamknięta, są niezmienne (Cache-Control: private, max-age=31536000, immutable); strona bez
+    end_time (najnowsze świece) - max-age kilka sekund. Odpowiedzi są cache'owane po stronie
+    serwera (patrz src/klines_cache.py), więc powtarzane strony nie idą do giełdy.
+    """
     db = await get_db()
     assets_table = db.get_factory().get_assets_table()
     asset_exchanges_table = db.get_factory().get_asset_exchanges_table()
@@ -511,16 +529,24 @@ async def get_klines(
                 detail=f"Brak obsługiwanej giełdy dla assetu {asset_name}. Dostępne: {exchange_names_upper}",
             )
 
-    klines_data = exchange_api._get_klines(
-        base_currency=asset_name,
-        quote_currency=quote_name,
-        interval=interval,
-        start_time=start_time,
+    # Klienty giełd są synchroniczne (requests / yfinance) - klines_cache uruchamia je w wątku,
+    # żeby nie blokować pętli zdarzeń, i robi jedno zapytanie upstream na stronę naraz.
+    page = await klines_cache.get_page(
+        key=(chosen_exchange, asset_name, quote_name, interval, start_time, end_time, limit),
+        exchange=chosen_exchange,
+        fetch=lambda: exchange_api._get_klines(
+            base_currency=asset_name,
+            quote_currency=quote_name,
+            interval=interval,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        ),
         end_time=end_time,
-        limit=limit,
     )
+    response.headers["Cache-Control"] = CACHE_CONTROL_HISTORY if page.immutable else CACHE_CONTROL_HEAD
 
-    return {
+    body = {
         "asset": asset_name,
         "quote": quote_name,
         "full_name": asset.get('full_name'),
@@ -528,8 +554,11 @@ async def get_klines(
         "country": asset.get('country'),
         "interval": interval,
         "exchange": chosen_exchange,
-        "klines": klines_data,
+        "klines": to_compact(page.rows) if compact else to_objects(page.rows),
     }
+    if compact:
+        body["fields"] = list(COMPACT_FIELDS)
+    return body
 
 
 # ===================
