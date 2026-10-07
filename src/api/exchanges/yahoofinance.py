@@ -1,8 +1,9 @@
 import logging
 import time
 from typing import List, Dict, Union, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
+import pandas as pd
 import yfinance as yf
 
 from .abstract import AbstractAPI
@@ -824,8 +825,12 @@ class YahooFinanceAPI(AbstractAPI):
                     start_time / 1000, tz=timezone.utc
                 ).strftime("%Y-%m-%d")
             if end_time:
-                kwargs["end"] = datetime.fromtimestamp(
-                    end_time / 1000, tz=timezone.utc
+                # yfinance: `end` to data i jest WYŁĄCZNA - dzień zapasu, a dokładne cięcie do
+                # end_time w milisekundach niżej. Bez tego strony doładowywane z
+                # end_time = najstarszy open_time - 1 gubiły świecę na łączeniu (zależnie od
+                # strefy czasowej giełdy).
+                kwargs["end"] = (
+                    datetime.fromtimestamp(end_time / 1000, tz=timezone.utc) + timedelta(days=1)
                 ).strftime("%Y-%m-%d")
 
             if not start_time and not end_time:
@@ -837,8 +842,14 @@ class YahooFinanceAPI(AbstractAPI):
                 logger.warning(f"Yahoo Finance: brak danych dla {symbol} ({interval})")
                 return []
 
-            if len(history) > limit:
-                history = history.tail(limit)
+            # Dokładny zakres w ms (yfinance operuje datami), potem limit od strony najnowszych -
+            # jak Binance przy podanym end_time. Przed iterrows: bez start_time historia dzienna
+            # to nawet kilkadziesiąt lat wierszy.
+            if start_time:
+                history = history[history.index >= pd.Timestamp(start_time, unit="ms", tz="UTC")]
+            if end_time:
+                history = history[history.index <= pd.Timestamp(end_time, unit="ms", tz="UTC")]
+            history = history.tail(limit)
 
             formatted_klines: list = []
             for idx, row in history.iterrows():
