@@ -1,56 +1,61 @@
-# Trading AI Backend - obraz z zapietymi wersjami (tox.ini deps sa juz pinned).
-# Zastepuje runtime git-clone + pip install tox robione w initContainerach przy
-# kazdym restarcie poda (patrz kubernetes/apps/trading-ai-backend/README.md w cloud.config,
-# punkt 4 listy bezpieczenstwa po incydencie 503 - unpinned uvicorn/websockets).
+# Trading AI Backend - obraz z zapietymi wersjami (tox.ini deps sa pinned).
 #
 # Jeden obraz, trzy tryby uruchomienia wybierane przez SERVICE_MODE w runtime
-# (sync-controller / rest-api-controller / rest-api-celery-worker) - wszystkie
-# trzy tox environments maja identyczny zestaw `deps`, wiec nie ma sensu budowac
-# trzech osobnych obrazow.
-
-# 3.13-slim (nie 3.13.1-slim): tag przypiety do patcha nigdy nie dostaje poprawek Debiana -
-# 3.13.1-slim mial 9 CRITICAL w Trivy. Niezmienny jest obraz wynikowy (tag = commit SHA),
-# nie obraz bazowy. apt-get upgrade dociaga poprawki wydane po zbudowaniu obrazu bazowego.
+# (sync-controller / rest-api-controller / rest-api-celery-worker, docker-entrypoint.sh).
 #
-# Multi-stage: build-essential (gcc, linux-libc-dev, ...) jest potrzebny tylko do skompilowania
-# paczek bez wheeli. W obrazie wynikowym go nie ma - to bylo zrodlo CRITICAL bez poprawki
-# (linux-libc-dev) i ~100 HIGH z pakietow systemowych w Trivy image. Oba etapy uzywaja tego
-# samego obrazu bazowego, wiec skopiowane venvy (/app/.tox) wskazuja na ten sam interpreter.
-FROM python:3.13-slim AS build
+# Alpine (musl) zamiast Debian slim: obraz bazowy ma rzad wielkosci mniej pakietow systemowych,
+# wiec znika wiekszosc HIGH w Trivy image, ktore w Debianie nie mialy poprawki.
+# Multi-stage: kompilator i naglowki (build-base) tylko w etapie build - sdisty bez wheeli
+# musllinux (dzis pyaes, pymexc, ta, Telethon - czysty Python) buduja sie tutaj, a gdyby ktoras
+# zaleznosc z rozszerzeniem C stracila wheel, kompilator nie trafi do runtime.
+#
+# Jeden venv zamiast trzech tox envs: deps rest-api-controller sa nadzbiorem pozostalych dwoch,
+# a tox w runtime tylko uruchamial jedna komende. Lista paczek dalej pochodzi z tox.ini
+# (jedno zrodlo prawdy), tox nie trafia do obrazu.
+FROM python:3.13-alpine AS build
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base libffi-dev
 
-RUN pip install --no-cache-dir tox==4.30.3
+COPY tox.ini /tmp/tox.ini
+# no_deps_packages: paczki instalowane bez zaleznosci (pyharmonics -> alpaca-trade-api), patrz tox.ini.
+RUN python -c 'import configparser; c = configparser.ConfigParser(interpolation=None); c.read("/tmp/tox.ini"); print(c["testenv:rest-api-controller"]["deps"].strip())' \
+    > /tmp/requirements.txt \
+    && python -c 'import configparser; c = configparser.ConfigParser(interpolation=None); c.read("/tmp/tox.ini"); print(c["testenv"]["no_deps_packages"].strip())' \
+    > /tmp/requirements-no-deps.txt
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps -r /tmp/requirements-no-deps.txt \
+    && /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel \
+    && find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} +
 
-WORKDIR /app
-COPY . /app
 
-# Buduje wszystkie trzy tox venvy PODCZAS builda obrazu (deps pinned w tox.ini
-# `deps =`), nie przy starcie poda.
-RUN tox --notest -e sync-controller,rest-api-controller,rest-api-celery-worker
+# Ten sam obraz bazowy co build, wiec /opt/venv wskazuje na ten sam interpreter.
+FROM python:3.13-alpine
 
+# apk upgrade dociaga poprawki wydane po zbudowaniu obrazu bazowego; libstdc++/libgcc to
+# runtime skompilowanych rozszerzen C++ (numpy, pandas, matplotlib, tiktoken, ...).
+# pip z obrazu bazowego nie jest potrzebny w runtime - mniej paczek do skanowania.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libstdc++ libgcc \
+    && python -m pip uninstall -y pip \
+    && addgroup -g 1000 -S appgroup \
+    && adduser -u 1000 -S -G appgroup -h /app appuser
 
-FROM python:3.13-slim
+COPY --from=build /opt/venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir tox==4.30.3
-
-COPY --from=build --chown=1000:1000 /app /app
-WORKDIR /app
-
-# Rozszerzenia skompilowane w etapie build moga linkowac biblioteki, ktorych slim nie ma -
-# lepiej, zeby wywalil sie build niz pod na produkcji.
-RUN missing=$(find /app/.tox -name '*.so*' -type f -exec ldd {} + 2>/dev/null | grep 'not found' | sort -u); \
+# Rozszerzenia skompilowane w etapie build moga linkowac biblioteki, ktorych runtime nie ma -
+# lepiej, zeby wywalil sie build niz pod na produkcji (ldd z musl: "Error loading shared library").
+RUN missing=$(find /opt/venv -name '*.so*' -type f -exec ldd {} + 2>&1 | grep -i 'error loading shared library' | sort -u); \
     if [ -n "$missing" ]; then echo "brakujace biblioteki w runtime:"; echo "$missing"; exit 1; fi
 
+WORKDIR /app
+# /app zapisywalne dla uid 1000: Telethon trzyma tu pliki *.session.
+COPY --chown=1000:1000 . /app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && groupadd -g 1000 appgroup \
-    && useradd -u 1000 -g 1000 -m appuser
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 USER 1000:1000
 
