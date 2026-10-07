@@ -30,8 +30,9 @@
  *
  * Trigger: Gitea webhook on push + pull_request. Gitea's API can't filter pull_request sub-events
  * at the webhook level, so filtered here via regexpFilterExpression: only
- * "opened"/"synchronized"/"reopened" pull_request actions or plain pushes (no "action" field at
- * all, hence the empty alternative in the regex) actually start a build. PR builds check out the
+ * "opened"/"synchronized"/"reopened" pull_request actions or pushes to refs/heads/master (no
+ * "action" field, hence defaultValue '' on the variables) start a build; tag pushes and pushes to
+ * other branches are dropped. PR builds check out the
  * PR head (refs/pull/<n>/head), not master - otherwise the gate would be testing the wrong code.
  *
  * Credentials needed in Jenkins:
@@ -127,8 +128,11 @@ pipeline {
                 [key: 'push_ref', value: '$.ref', defaultValue: '']
             ],
             tokenCredentialId: 'trading-ai-backend-build-webhook-token',
-            regexpFilterText: '$action',
-            regexpFilterExpression: '^(opened|synchronized|reopened|)$'
+            // Builds only PR opened/synchronized/reopened and pushes to master. Tag pushes and pushes to
+            // other branches used to start a full build each (a history rewrite pushing master + 2
+            // tags queued three) - feature branches are covered by their PR build anyway.
+            regexpFilterText: '$action|$push_ref',
+            regexpFilterExpression: '^((opened|synchronized|reopened)\\|.*|\\|refs/heads/master)$'
         )
     }
 
