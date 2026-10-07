@@ -26,8 +26,12 @@ DELIVERY = [
     ("sign", "Signature (cosign sign + verify)"),
     ("deploy", "Deploy (cloud.config bump, ArgoCD)"),
     ("rollout", "Rollout + smoke test"),
+    ("egress", "External egress (pods -> internet APIs)"),
     ("dast", "DAST (ZAP baseline)"),
 ]
+# Rows only some pipelines record (the frontend's nginx needs no internet egress): shown when
+# present, never counted as missing.
+OPTIONAL = {"egress"}
 
 mode = os.environ.get("CI_MODE", "gate")
 build_result = os.environ.get("BUILD_RESULT", "")
@@ -45,6 +49,8 @@ def rows(checks):
     out = []
     for key, label in checks:
         gate = results.get(key)
+        if gate is None and key in OPTIONAL:
+            continue
         if gate is None:
             out.append(f"| {label} | ⏭️ _not run_ | |")
         else:
@@ -55,7 +61,7 @@ def rows(checks):
 
 checks = GATES + (DELIVERY if mode == "delivery" else [])
 failed = any(not results[k]["passed"] for k, _ in checks if k in results) or build_result in ("FAILURE", "ABORTED")
-complete = all(k in results for k, _ in checks)
+complete = all(k in results for k, _ in checks if k not in OPTIONAL)
 what = "Delivery" if mode == "delivery" else "PRE-MERGE gate"
 if failed:
     verdict = f"❌ {what} failed" + (" - do not merge" if mode == "gate" else "")
