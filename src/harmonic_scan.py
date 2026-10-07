@@ -70,14 +70,41 @@ def max_pattern_span_ms(interval: str) -> int:
     return MAX_PATTERN_CANDLES * interval_ms(interval)
 
 
+WEEK_OFFSET_MS = 4 * 86_400_000  # 1970-01-01 to czwartek; tygodnie Binance zaczynają się w poniedziałek
+
+
+def align_down(interval: str, t_ms: int) -> int:
+    """open_time świecy, w której leży t_ms (świece Binance: UTC, tydzień od poniedziałku,
+    miesiąc/kwartał/rok od pierwszego dnia)."""
+    from datetime import datetime, timezone
+
+    if interval in ("1M", "3M", "1Y"):
+        d = datetime.fromtimestamp(t_ms / 1000, tz=timezone.utc)
+        if interval == "1Y":
+            d = d.replace(month=1)
+        elif interval == "3M":
+            d = d.replace(month=(d.month - 1) // 3 * 3 + 1)
+        d = d.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return int(d.timestamp() * 1000)
+    step = interval_ms(interval)
+    offset = WEEK_OFFSET_MS if interval == "1w" else 0
+    return (t_ms - offset) // step * step + offset
+
+
+def last_closed_open_time(interval: str, now_ms: int) -> int:
+    return align_down(interval, align_down(interval, now_ms) - 1)
+
+
 def resolve_range(interval: str, start_time: Optional[int], end_time: Optional[int], now_ms: int) -> Window:
     """Zakres [start, end] (open_time świec) ograniczony do zamkniętych świec.
 
     Domyślnie ostatnie DEFAULT_RANGE_CANDLES zamkniętych świec; sam start_time = od startu do
     ostatniej zamkniętej; sam end_time = DEFAULT_RANGE_CANDLES świec kończących się na end_time.
+    Koniec jest wyrównany do open_time ostatniej zamkniętej świecy - zakres (a więc i klucz
+    pokrycia) zmienia się dopiero, gdy zamknie się nowa świeca, a nie co milisekundę.
     """
     step = interval_ms(interval)
-    last_closed = now_ms - step  # każda świeca z open_time <= tego jest już zamknięta
+    last_closed = last_closed_open_time(interval, now_ms)
     end = min(end_time, last_closed) if end_time is not None else last_closed
     start = start_time if start_time is not None else end - (DEFAULT_RANGE_CANDLES - 1) * step
     if start >= end:
