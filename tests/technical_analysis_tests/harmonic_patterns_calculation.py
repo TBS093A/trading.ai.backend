@@ -218,8 +218,10 @@ class TestHarmonicPatternsCalculation(unittest.TestCase):
                             # Sprawdź cenę punktu
                             self.assertIsInstance(kline[key], (int, float))
                             print(f"Cena punktu: {kline[key]}")
+
+            return pattern_keys
         
-        self.loop.run_until_complete(run_test())
+        pattern_keys = self.loop.run_until_complete(run_test())
         print(f"Znaleziono {len(pattern_keys)} punktów wzorców harmonicznych - basic")
 
     def test_calculate_harmonic_patterns_no_show(self):

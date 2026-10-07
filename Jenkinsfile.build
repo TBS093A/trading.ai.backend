@@ -1,33 +1,90 @@
 /*
  * Dedicated build+push+deploy pipeline for trading-ai-backend - separate from the existing
  * `Jenkinsfile` (which still handles the legacy deploy.sh path, config-env.yml generation, and
- * everything else). Build, tag with commit SHA (immutable, not :latest), push to the self-hosted
- * registry, then bump that tag into all three cloud.config workloads and push - ArgoCD
- * (selfHeal: true) rolls it out on its own.
+ * everything else). Three levels, each one a hard gate - a failing stage fails the build and
+ * nothing after it runs:
  *
- * Trigger: Gitea webhook on push + pull_request (see repo hook settings). Gitea's API can't filter
- * pull_request sub-events at the webhook level - it's all-or-nothing (opened, comments, labels,
- * reviews all fire the same webhook). Filtered here instead via regexpFilterExpression: only
+ *   CODE -> PRE-MERGE GATE -> MERGE -> POST-MERGE GATE -> RELEASE GATE -> PRODUCTION
+ *
+ *   PRE-MERGE  (every PR build and every master build)
+ *     secret scan -> lint -> unit tests -> coverage threshold -> SAST -> SCA -> image build -> image scan
+ *     CRITICAL vulnerability (with a fix available) -> FAIL, always
+ *     HIGH vulnerability                            -> FAIL when FAIL_ON_HIGH
+ *     Semgrep ERROR finding                         -> FAIL
+ *     line coverage < MIN_COVERAGE                  -> FAIL
+ *     Verdicts go to gate-results.json (ci-gate.py) -> PR comment + Gitea commit status
+ *     "jenkins/pre-merge". Make that status required in Gitea branch protection for master,
+ *     otherwise a red build is only advisory and not a merge gate.
+ *
+ *   POST-MERGE (master only - never on PR builds)
+ *     push the exact image that passed the scan (immutable commit SHA tag) -> SBOM (CycloneDX)
+ *     -> cosign signature (SIGN_IMAGE)
+ *
+ *   RELEASE
+ *     optional manual approval (REQUIRE_RELEASE_APPROVAL) -> bump cloud.config (ArgoCD
+ *     selfHeal rolls it out) -> wait for rollout + smoke test /live /ready -> automatic
+ *     rollback (git revert of the bump commit) when that fails -> DAST baseline.
+ *     There is no staging environment yet, so "deploy staging -> integration tests" is not part
+ *     of this pipeline - integration tests (tox -e technical-analysis-tests) need a dedicated
+ *     test database; they call drop_all_tables() and must never point at production.
+ *
+ * Trigger: Gitea webhook on push + pull_request. Gitea's API can't filter pull_request sub-events
+ * at the webhook level, so filtered here via regexpFilterExpression: only
  * "opened"/"synchronized"/"reopened" pull_request actions or plain pushes (no "action" field at
- * all, hence the empty alternative in the regex) actually start a build.
+ * all, hence the empty alternative in the regex) actually start a build. PR builds check out the
+ * PR head (refs/pull/<n>/head), not master - otherwise the gate would be testing the wrong code.
  *
- * Test & Coverage stage runs in catchError(stageResult: 'UNSTABLE') like the security scans -
- * tests/tests/technical_analysis_tests/technical_analysis_integration.py needs a real
- * TEST_DATABASE_URL and exchange credentials that aren't wired into Jenkins yet (deliberately -
- * a misconfigured TEST_DATABASE_URL pointing at production would be catastrophic, since the
- * db-integration tests call drop_all_tables()). Without real credentials configured this stage
- * will fail cleanly (connection error) rather than deploy or touch anything - safe by
- * construction, not just by convention. Wire real test-DB credentials in before relying on this.
- *
- * PR comment stage posts a results summary back to the PR via Gitea's issue-comment API when this
- * build was triggered by a pull_request event (pr_number extracted from the webhook payload) -
- * skipped entirely for plain push builds.
- *
- * Credentials needed in Jenkins (already exist, shared with other pipelines):
+ * Credentials needed in Jenkins:
+ *   trading-ai-backend-build-webhook-token (Secret text) - Generic Webhook Trigger token; the Gitea
+ *                          webhook URL must use the same value (.../generic-webhook-trigger/invoke?token=...)
  *   registry-credentials   (Username with password) - registry.00x097.com login
  *   git-gitea-tbs093a      (Username with password) - push access to cloud.config
- *   git-gitea-jenkins-bot  (Username with password) - posts PR comments as a bot, not tbs093a
+ *   git-gitea-jenkins-bot  (Username with password) - PR comments + commit statuses (needs write
+ *                          access to the repo for statuses)
+ *   cosign-private-key     (Secret file) + cosign-password (Secret text) - only when SIGN_IMAGE
  */
+
+def IMAGE = 'registry.00x097.com/trading-ai-backend'
+def CLUSTER_IMAGE = 'registry.development.svc.cluster.local:5000/trading-ai-backend'
+
+def isPullRequest() {
+    return env.pr_number?.trim() as boolean
+}
+
+// Pushes to branches other than master must not deploy; manual runs (no ref) are master runs.
+def isPostMerge() {
+    return !isPullRequest() && (!env.push_ref?.trim() || env.push_ref == 'refs/heads/master')
+}
+
+def setCommitStatus(String state, String description) {
+    if (!env.BUILD_SHA) {
+        return
+    }
+    withCredentials([
+        usernamePassword(
+            credentialsId: 'git-gitea-jenkins-bot',
+            usernameVariable: 'GIT_USERNAME',
+            passwordVariable: 'GIT_TOKEN'
+        )
+    ]) {
+        withEnv([
+            "STATUS_STATE=${state}",
+            "STATUS_DESCRIPTION=${description}",
+            "STATUS_CONTEXT=${isPullRequest() ? 'jenkins/pre-merge' : 'jenkins/post-merge'}",
+        ]) {
+            // Never fails the build - a status that can't be posted is reported, not fatal.
+            sh '''
+                python3 -c 'import json, os; print(json.dumps({"state": os.environ["STATUS_STATE"], "context": os.environ["STATUS_CONTEXT"], "description": os.environ["STATUS_DESCRIPTION"], "target_url": os.environ.get("BUILD_URL", "")}))' > commit-status.json
+                curl -s -o /dev/null -w "Gitea commit status ${STATUS_STATE}: HTTP %{http_code}\\n" -X POST \
+                    -H "Authorization: token ${GIT_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    -d @commit-status.json \
+                    "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/statuses/${BUILD_SHA}" || true
+            '''
+        }
+    }
+}
+
 pipeline {
     agent {
         node {
@@ -35,13 +92,37 @@ pipeline {
         }
     }
 
+    parameters {
+        booleanParam(
+            name: 'FAIL_ON_HIGH',
+            defaultValue: false,
+            description: 'Fail PRE-MERGE on HIGH vulnerabilities with a fix available (CRITICAL always fails). Off until urllib3 1.26 / msgpack 1.0.3 (pinned by exchange SDKs) and curl_cffi<0.14 are upgraded.'
+        )
+        string(
+            name: 'MIN_COVERAGE',
+            defaultValue: '15',
+            description: 'Minimum line coverage (%) of src/ from tests/unit - raise it as unit tests are added, never lower it.'
+        )
+        booleanParam(
+            name: 'SIGN_IMAGE',
+            defaultValue: false,
+            description: 'Sign the pushed image with cosign (needs cosign-private-key + cosign-password credentials).'
+        )
+        booleanParam(
+            name: 'REQUIRE_RELEASE_APPROVAL',
+            defaultValue: false,
+            description: 'Wait for manual approval before deploying to production.'
+        )
+    }
+
     triggers {
         GenericTrigger(
             genericVariables: [
                 [key: 'action', value: '$.action'],
-                [key: 'pr_number', value: '$.number']
+                [key: 'pr_number', value: '$.number'],
+                [key: 'push_ref', value: '$.ref']
             ],
-            token: 'trading-ai-backend-build',
+            tokenCredentialId: 'trading-ai-backend-build-webhook-token',
             regexpFilterText: '$action',
             regexpFilterExpression: '^(opened|synchronized|reopened|)$'
         )
@@ -51,19 +132,42 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                script {
+                    if (isPullRequest()) {
+                        def remote = scm.userRemoteConfigs[0]
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "refs/remotes/origin/pr/${env.pr_number}"]],
+                            userRemoteConfigs: [[
+                                url: remote.url,
+                                credentialsId: remote.credentialsId,
+                                refspec: "+refs/pull/${env.pr_number}/head:refs/remotes/origin/pr/${env.pr_number}"
+                            ]]
+                        ])
+                    }
+                    env.BUILD_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.FAIL_SEVERITIES = params.FAIL_ON_HIGH ? 'CRITICAL,HIGH' : 'CRITICAL'
+                    env.MIN_COVERAGE = params.MIN_COVERAGE ?: '15'
+                    currentBuild.description = "${isPullRequest() ? "PR #${env.pr_number}" : 'master'} @ ${env.BUILD_SHA.take(8)}"
+                }
                 // Report files from a previous build in this reused workspace must not leak into
-                // this run's PR comment (found live: a skipped-on-PR DAST stage still showed a
-                // stale "6 warnings" from an earlier build's leftover zap-report.json).
+                // this run's gates or PR comment.
                 sh '''
-                    rm -f semgrep-report.json trivy-fs-report.json trivy-image-report.json coverage.xml pr-comment-body.json start-comment-body.json pr-comment-id.txt
-                    rm -rf zap-out coverage
+                    rm -f gate-results.json semgrep-report.json trivy-fs-report.json trivy-image-report.json \
+                          gitleaks-report.json coverage.xml sbom.cdx.json image.tar \
+                          pr-comment-body.json start-comment-body.json pr-comment-id.txt commit-status.json \
+                          cloud-config-bump-sha.txt
+                    rm -rf zap-out coverage sca-deps .gitleaks-src
                 '''
+                script {
+                    setCommitStatus('pending', 'PRE-MERGE gate running')
+                }
             }
         }
 
         stage('PR comment (started)') {
             when {
-                expression { return env.pr_number?.trim() }
+                expression { return isPullRequest() }
             }
             steps {
                 withCredentials([
@@ -87,32 +191,87 @@ pipeline {
             }
         }
 
-        stage('Test & Coverage') {
+        // ============================== PRE-MERGE GATE ==============================
+
+        stage('PRE-MERGE: Secret scan (gitleaks)') {
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh '''
-                        set -euo pipefail
-                        docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13.1-slim \
-                            bash -c "pip install --quiet tox && tox -e technical-analysis-tests"
-                    '''
-                }
+                // Scans exactly the tracked files of the commit under test (git archive), not the
+                // workspace - .tox/ and other build leftovers would only add noise.
+                sh '''
+                    set -euo pipefail
+                    mkdir .gitleaks-src
+                    git archive HEAD | tar -x -C .gitleaks-src
+                    rc=0
+                    docker run --rm -v "$WORKSPACE:/src" zricethezav/gitleaks:v8.30.1 \
+                        dir /src/.gitleaks-src --redact --no-banner \
+                        --report-format json --report-path /src/gitleaks-report.json || rc=$?
+                    rm -rf .gitleaks-src
+                    leaks=$(python3 -c "import json; print(len(json.load(open('gitleaks-report.json'))))" 2>/dev/null || echo "?")
+                    detail="$leaks leaks in tracked files"
+                    # Telethon *.session files are binary SQLite (live Telegram auth_key) - gitleaks
+                    # skips binary files, so they need an explicit check.
+                    sessions=$(git ls-files -- '*.session' | tr '\n' ' ')
+                    if [ -n "$sessions" ]; then
+                        echo "Tracked Telethon session files: $sessions"
+                        rc=1
+                        detail="$detail; tracked *.session files: $sessions"
+                    fi
+                    python3 ci-gate.py result secrets "$rc" "$detail"
+                '''
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
                 }
             }
         }
 
-        stage('SAST - Semgrep') {
+        stage('PRE-MERGE: Lint (ruff)') {
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh '''
-                        set -euo pipefail
-                        docker run --rm -v "$WORKSPACE:/src" semgrep/semgrep \
-                            semgrep scan --config=auto --json --output=/src/semgrep-report.json /src
-                    '''
+                // Fatal-error rule set (syntax errors, undefined names, invalid comparisons) - the
+                // class of bug that crashes at runtime. Widen --select as the codebase gets cleaned up.
+                sh '''
+                    set -euo pipefail
+                    rc=0
+                    docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13-slim bash -c \
+                        "pip install --quiet --root-user-action=ignore ruff==0.16.10 && ruff check --no-cache --output-format concise --select E9,F63,F7,F82 ." \
+                        || rc=$?
+                    python3 ci-gate.py result lint "$rc" "ruff E9,F63,F7,F82"
+                '''
+            }
+        }
+
+        stage('PRE-MERGE: Unit tests & coverage') {
+            steps {
+                // tests/unit only - no DB, network or credentials, so this is safe to be blocking.
+                // pip freeze of the test venv gives Trivy a resolved dependency list: tox.ini deps
+                // are not a format Trivy understands, so without it SCA-fs would scan nothing.
+                // Trivy only recognises the exact file name requirements.txt, hence the subdirectory.
+                sh '''
+                    set -euo pipefail
+                    rc=0
+                    docker run --rm -v "$WORKSPACE:/src" -w /src python:3.13-slim bash -c \
+                        "pip install --quiet --root-user-action=ignore tox && tox -e unit-tests && mkdir -p sca-deps && .tox/unit-tests/bin/python -m pip freeze > sca-deps/requirements.txt" \
+                        || rc=$?
+                    python3 ci-gate.py result tests "$rc" "tox -e unit-tests"
+                    python3 ci-gate.py coverage coverage.xml --min "$MIN_COVERAGE"
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'coverage.xml, sca-deps/requirements.txt', allowEmptyArchive: true
                 }
+            }
+        }
+
+        stage('PRE-MERGE: SAST (Semgrep)') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    docker run --rm -v "$WORKSPACE:/src" semgrep/semgrep \
+                        semgrep scan --config=auto --json --output=/src/semgrep-report.json /src
+                    python3 ci-gate.py semgrep semgrep-report.json --fail-on ERROR
+                '''
             }
             post {
                 always {
@@ -121,16 +280,17 @@ pipeline {
             }
         }
 
-        stage('SCA - dependencies (Trivy fs)') {
+        stage('PRE-MERGE: SCA dependencies (Trivy fs)') {
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh '''
-                        set -euo pipefail
-                        docker run --rm -v "$WORKSPACE:/src" aquasec/trivy fs \
-                            --format json --output /src/trivy-fs-report.json \
-                            --severity HIGH,CRITICAL /src
-                    '''
-                }
+                sh '''
+                    set -euo pipefail
+                    docker run --rm -v "$WORKSPACE:/src" aquasec/trivy:0.75.0 fs \
+                        --skip-dirs /src/.tox \
+                        --format json --output /src/trivy-fs-report.json \
+                        --severity HIGH,CRITICAL /src
+                    python3 ci-gate.py trivy trivy-fs-report.json --name sca-fs \
+                        --fail-on "$FAIL_SEVERITIES" --ignore-unfixed
+                '''
             }
             post {
                 always {
@@ -139,7 +299,66 @@ pipeline {
             }
         }
 
-        stage('Build & push image') {
+        stage('PRE-MERGE: Image build & scan (Trivy image)') {
+            steps {
+                // Scanned from a local tarball before anything is pushed - an image that fails
+                // this gate never reaches the registry.
+                sh """
+                    set -euo pipefail
+                    docker build -t ${IMAGE}:\${BUILD_SHA} .
+                    docker save -o image.tar ${IMAGE}:\${BUILD_SHA}
+                    docker run --rm -v "\$WORKSPACE:/out" aquasec/trivy:0.75.0 image \
+                        --input /out/image.tar \
+                        --format json --output /out/trivy-image-report.json \
+                        --severity HIGH,CRITICAL
+                    rm -f image.tar
+                    python3 ci-gate.py trivy trivy-image-report.json --name sca-image \
+                        --fail-on "\$FAIL_SEVERITIES" --ignore-unfixed
+                """
+            }
+            post {
+                always {
+                    sh 'rm -f image.tar'
+                    archiveArtifacts artifacts: 'trivy-image-report.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ============================== POST-MERGE GATE ==============================
+
+        stage('POST-MERGE: Push immutable image') {
+            when {
+                expression { return isPostMerge() }
+            }
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'registry-credentials',
+                        usernameVariable: 'REGISTRY_USER',
+                        passwordVariable: 'REGISTRY_PASS'
+                    )
+                ]) {
+                    sh """
+                        set -euo pipefail
+                        echo "\$REGISTRY_PASS" | docker login registry.00x097.com -u "\$REGISTRY_USER" --password-stdin
+                        docker push ${IMAGE}:\${BUILD_SHA}
+                        docker logout registry.00x097.com
+                    """
+                }
+                script {
+                    env.IMAGE_DIGEST = sh(
+                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${env.BUILD_SHA}",
+                        returnStdout: true
+                    ).trim()
+                    echo "Pushed ${env.IMAGE_DIGEST}"
+                }
+            }
+        }
+
+        stage('POST-MERGE: SBOM (CycloneDX)') {
+            when {
+                expression { return isPostMerge() }
+            }
             steps {
                 withCredentials([
                     usernamePassword(
@@ -150,49 +369,69 @@ pipeline {
                 ]) {
                     sh '''
                         set -euo pipefail
-                        docker build -t registry.00x097.com/trading-ai-backend:${GIT_COMMIT} .
-                        echo "$REGISTRY_PASS" | docker login registry.00x097.com -u "$REGISTRY_USER" --password-stdin
-                        docker push registry.00x097.com/trading-ai-backend:${GIT_COMMIT}
-                        docker logout registry.00x097.com
+                        docker run --rm \
+                            --env TRIVY_USERNAME="$REGISTRY_USER" \
+                            --env TRIVY_PASSWORD="$REGISTRY_PASS" \
+                            -v "$WORKSPACE:/out" \
+                            aquasec/trivy:0.75.0 image \
+                            --format cyclonedx --output /out/sbom.cdx.json \
+                            "$IMAGE_DIGEST"
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'sbom.cdx.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('POST-MERGE: Sign image (cosign)') {
+            when {
+                expression { return isPostMerge() && params.SIGN_IMAGE }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY_FILE'),
+                    string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD'),
+                    usernamePassword(
+                        credentialsId: 'registry-credentials',
+                        usernameVariable: 'REGISTRY_USER',
+                        passwordVariable: 'REGISTRY_PASS'
+                    )
+                ]) {
+                    // Signed by digest, not tag. --tlog-upload=false: private registry, nothing is
+                    // published to the public Rekor transparency log.
+                    sh '''
+                        set -euo pipefail
+                        docker run --rm \
+                            --env COSIGN_PASSWORD \
+                            -v "$COSIGN_KEY_FILE:/cosign.key:ro" \
+                            gcr.io/projectsigstore/cosign:v2.4.1 sign --yes \
+                            --key /cosign.key --tlog-upload=false \
+                            --registry-username "$REGISTRY_USER" --registry-password "$REGISTRY_PASS" \
+                            "$IMAGE_DIGEST"
                     '''
                 }
             }
         }
 
-        stage('SCA - image (Trivy image)') {
-            steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'registry-credentials',
-                            usernameVariable: 'REGISTRY_USER',
-                            passwordVariable: 'REGISTRY_PASS'
-                        )
-                    ]) {
-                        sh '''
-                            set -euo pipefail
-                            docker run --rm \
-                                --env TRIVY_USERNAME="$REGISTRY_USER" \
-                                --env TRIVY_PASSWORD="$REGISTRY_PASS" \
-                                -v "$WORKSPACE:/out" \
-                                aquasec/trivy image \
-                                --format json --output /out/trivy-image-report.json \
-                                --severity HIGH,CRITICAL \
-                                registry.00x097.com/trading-ai-backend:${GIT_COMMIT}
-                        '''
-                    }
-                }
+        // ============================== RELEASE GATE ==============================
+
+        stage('RELEASE: Approval') {
+            when {
+                expression { return isPostMerge() && params.REQUIRE_RELEASE_APPROVAL }
             }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-image-report.json', allowEmptyArchive: true
+            steps {
+                timeout(time: 30, unit: 'MINUTES') {
+                    input message: "Deploy trading-ai-backend@${env.BUILD_SHA.take(8)} to production?", ok: 'Deploy'
                 }
             }
         }
 
-        stage('Bump cloud.config manifests') {
+        stage('RELEASE: Deploy (bump cloud.config)') {
             when {
-                expression { return !env.pr_number?.trim() }
+                expression { return isPostMerge() }
             }
             steps {
                 withCredentials([
@@ -202,20 +441,19 @@ pipeline {
                         passwordVariable: 'GIT_TOKEN'
                     )
                 ]) {
-                    sh '''
+                    sh """
                         set -euo pipefail
                         rm -rf .cloud-config-bump
-                        git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
+                        git clone "https://\${GIT_USERNAME}:\${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-bump
                         cd .cloud-config-bump
 
-                        for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \
-                                 kubernetes/apps/trading-ai-backend/deployment-sync.yml \
+                        for f in kubernetes/apps/trading-ai-backend/deployment-rest-api.yml \\
+                                 kubernetes/apps/trading-ai-backend/deployment-sync.yml \\
                                  kubernetes/apps/trading-ai-backend/daemonset-celery-workers.yml; do
                             yq eval -i '
-                              (.. | select(tag == "!!str" and test("registry.development.svc.cluster.local:5000/trading-ai-backend:")))
-                              |= sub("registry.development.svc.cluster.local:5000/trading-ai-backend:.*",
-                                     "registry.development.svc.cluster.local:5000/trading-ai-backend:'"${GIT_COMMIT}"'")
-                            ' "$f"
+                              (.. | select(tag == "!!str" and test("${CLUSTER_IMAGE}:")))
+                              |= sub("${CLUSTER_IMAGE}:.*", "${CLUSTER_IMAGE}:'"\${BUILD_SHA}"'")
+                            ' "\$f"
                         done
 
                         git config user.email "jenkins@00x097.com"
@@ -223,34 +461,105 @@ pipeline {
                         if git diff --quiet kubernetes/apps/trading-ai-backend/; then
                             echo "image tag unchanged, nothing to commit"
                         else
-                            git commit -am "chore(trading-ai-backend): deploy trading-ai-backend@${GIT_COMMIT}"
+                            git commit -am "chore(trading-ai-backend): deploy trading-ai-backend@\${BUILD_SHA}"
                             git push origin master
+                            git rev-parse HEAD > ../cloud-config-bump-sha.txt
                         fi
-                    '''
+                    """
                 }
                 sh 'rm -rf .cloud-config-bump'
             }
         }
 
-        stage('DAST - OWASP ZAP baseline') {
+        stage('RELEASE: Verify rollout (smoke + health, auto-rollback)') {
             when {
-                expression { return !env.pr_number?.trim() }
+                expression { return isPostMerge() }
             }
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh '''
-                        set -euo pipefail
-                        mkdir -p zap-out
-                        chmod 777 zap-out
-                        # Baseline = passive spider + passive scan only, no active attack payloads -
-                        # safe to run against the live production API. Do NOT swap this for
-                        # zap-full-scan.py against api.00x097.com - that actively attacks the target,
-                        # only ever run that against a non-production/staging environment.
-                        docker run --rm -v "$WORKSPACE/zap-out:/zap/wrk:rw" zaproxy/zap-stable \
-                            zap-baseline.py -t https://api.00x097.com \
-                            -r zap-report.html -J zap-report.json || true
-                    '''
+                script {
+                    try {
+                        sh """
+                            set -euo pipefail
+                            export KUBECONFIG="/home/jenkins/.kube/config"
+                            NS=backend-apps
+                            WANT="${CLUSTER_IMAGE}:\${BUILD_SHA}"
+
+                            # ArgoCD applies the cloud.config commit asynchronously - wait until the
+                            # Deployment spec actually carries the new tag before checking rollout.
+                            current=""
+                            for i in \$(seq 1 60); do
+                                current=\$(kubectl -n "\$NS" get deployment trading-ai-backend-rest-api-controller \\
+                                    -o jsonpath='{.spec.template.spec.containers[?(@.name=="trading-ai-backend-rest-api-controller")].image}')
+                                [ "\$current" = "\$WANT" ] && break
+                                sleep 10
+                            done
+                            if [ "\$current" != "\$WANT" ]; then
+                                echo "ArgoCD did not apply \$WANT within 10 minutes (current: \$current)"
+                                exit 1
+                            fi
+
+                            kubectl -n "\$NS" rollout status deployment/trading-ai-backend-rest-api-controller --timeout=10m
+                            kubectl -n "\$NS" rollout status deployment/trading-ai-backend-sync-controller --timeout=10m
+                            kubectl -n "\$NS" rollout status daemonset/trading-ai-backend-celery-workers --timeout=10m
+
+                            # Smoke test through the public ingress: process up (/live) and DB reachable (/ready).
+                            for path in /live /ready; do
+                                curl -fsS --retry 5 --retry-delay 6 --retry-all-errors --max-time 10 "https://api.00x097.com\$path"
+                                echo
+                            done
+                        """
+                    } catch (err) {
+                        echo "Rollout verification failed: ${err} - rolling back"
+                        withCredentials([
+                            usernamePassword(
+                                credentialsId: 'git-gitea-tbs093a',
+                                usernameVariable: 'GIT_USERNAME',
+                                passwordVariable: 'GIT_TOKEN'
+                            )
+                        ]) {
+                            // Reverting the bump commit puts the previous image tag back in
+                            // cloud.config; ArgoCD (selfHeal) rolls the workloads back to it.
+                            sh '''
+                                set -euo pipefail
+                                if [ ! -s cloud-config-bump-sha.txt ]; then
+                                    echo "No bump commit recorded - nothing to revert"
+                                    exit 0
+                                fi
+                                rm -rf .cloud-config-rollback
+                                git clone "https://${GIT_USERNAME}:${GIT_TOKEN}@git.00x097.com/tbs093a/cloud.config.git" .cloud-config-rollback
+                                cd .cloud-config-rollback
+                                git config user.email "jenkins@00x097.com"
+                                git config user.name "Jenkins (trading-ai-backend)"
+                                git revert --no-edit "$(cat ../cloud-config-bump-sha.txt)"
+                                git push origin master
+                                cd .. && rm -rf .cloud-config-rollback
+                            '''
+                        }
+                        error("Release of ${env.BUILD_SHA} rolled back - rollout/smoke test failed")
+                    }
                 }
+            }
+        }
+
+        stage('RELEASE: DAST (OWASP ZAP baseline)') {
+            when {
+                expression { return isPostMerge() }
+            }
+            steps {
+                sh '''
+                    set -euo pipefail
+                    mkdir -p zap-out
+                    chmod 777 zap-out
+                    # Baseline = passive spider + passive scan only, no active attack payloads -
+                    # safe to run against the live production API. Do NOT swap this for
+                    # zap-full-scan.py against api.00x097.com - that actively attacks the target,
+                    # only ever run that against a non-production/staging environment.
+                    # zap-baseline.py exits non-zero on any warning; the gate below decides instead.
+                    docker run --rm -v "$WORKSPACE/zap-out:/zap/wrk:rw" zaproxy/zap-stable \
+                        zap-baseline.py -t https://api.00x097.com \
+                        -r zap-report.html -J zap-report.json || true
+                    python3 ci-gate.py zap zap-out/zap-report.json --fail-on-risk 3
+                '''
             }
             post {
                 always {
@@ -258,30 +567,46 @@ pipeline {
                 }
             }
         }
+    }
 
-        stage('PR comment (results)') {
-            when {
-                expression { return env.pr_number?.trim() }
+    post {
+        success {
+            script {
+                setCommitStatus('success', isPullRequest() ? 'PRE-MERGE gate passed' : 'Delivered')
             }
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'git-gitea-jenkins-bot',
-                        usernameVariable: 'GIT_USERNAME',
-                        passwordVariable: 'GIT_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        set -euo pipefail
-                        python3 build-pr-comment.py > pr-comment-body.json
-                        COMMENT_ID=$(cat pr-comment-id.txt)
-                        curl -s -X PATCH \
-                            -H "Authorization: token ${GIT_TOKEN}" \
-                            -H "Content-Type: application/json" \
-                            -d @pr-comment-body.json \
-                            "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/comments/${COMMENT_ID}"
-                    '''
+        }
+        unsuccessful {
+            script {
+                setCommitStatus('failure', isPullRequest() ? 'PRE-MERGE gate failed' : 'Delivery failed')
+            }
+        }
+        always {
+            script {
+                if (isPullRequest()) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'git-gitea-jenkins-bot',
+                            usernameVariable: 'GIT_USERNAME',
+                            passwordVariable: 'GIT_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                            set -euo pipefail
+                            if [ ! -s pr-comment-id.txt ]; then
+                                echo "No started-comment id - skipping PR results comment"
+                                exit 0
+                            fi
+                            python3 build-pr-comment.py > pr-comment-body.json
+                            COMMENT_ID=$(cat pr-comment-id.txt)
+                            curl -s -X PATCH \
+                                -H "Authorization: token ${GIT_TOKEN}" \
+                                -H "Content-Type: application/json" \
+                                -d @pr-comment-body.json \
+                                "https://git.00x097.com/api/v1/repos/tbs093a/trading.ai.backend/issues/comments/${COMMENT_ID}"
+                        '''
+                    }
                 }
+                archiveArtifacts artifacts: 'gate-results.json', allowEmptyArchive: true
             }
         }
     }
