@@ -7,6 +7,7 @@ from .countries_table import CountriesTable
 from .asset_kind_map_table import AssetKindMapTable
 from .asset_country_map_table import AssetCountryMapTable
 from .technical_analysis_harmonic_patterns_table import TechnicalAnalysisHarmonicPatternsTable
+from .technical_analysis_harmonic_scan_windows_table import TechnicalAnalysisHarmonicScanWindowsTable
 from .system_sync_job_table import SystemSyncJobTable
 from .cron_system_sync_job_table import CronSystemSyncJobTable
 from .users_table import UsersTable
@@ -23,6 +24,7 @@ __all__ = [
     'AssetKindMapTable',
     'AssetCountryMapTable',
     'TechnicalAnalysisHarmonicPatternsTable',
+    'TechnicalAnalysisHarmonicScanWindowsTable',
     'SystemSyncJobTable',
     'CronSystemSyncJobTable',
     'UsersTable',

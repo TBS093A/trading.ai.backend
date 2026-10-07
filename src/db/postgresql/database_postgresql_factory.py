@@ -17,6 +17,7 @@ class DatabasePostgreSQLFactory:
         'asset_kind_map': AssetKindMapTable,
         'asset_country_map': AssetCountryMapTable,
         'technical_analysis_harmonic_patterns': TechnicalAnalysisHarmonicPatternsTable,
+        'technical_analysis_harmonic_scan_windows': TechnicalAnalysisHarmonicScanWindowsTable,
         'system_sync_job': SystemSyncJobTable,
         'cron_system_sync_job': CronSystemSyncJobTable,
         'users': UsersTable,
@@ -55,6 +56,10 @@ class DatabasePostgreSQLFactory:
     def get_technical_analysis_harmonic_patterns_table(self) -> TechnicalAnalysisHarmonicPatternsTable:
         """Zwraca tabelę TechnicalAnalysisHarmonicPatterns."""
         return self.get_table('technical_analysis_harmonic_patterns')
+
+    def get_technical_analysis_harmonic_scan_windows_table(self) -> TechnicalAnalysisHarmonicScanWindowsTable:
+        """Zwraca tabelę okien skanów formacji harmonicznych (trwały cache skanów)."""
+        return self.get_table('technical_analysis_harmonic_scan_windows')
     
     def get_system_sync_job_table(self) -> SystemSyncJobTable:
         """Zwraca tabelę SystemSyncJob."""

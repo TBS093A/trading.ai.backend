@@ -1,9 +1,10 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from .api import ApiFacade
 from .db.database_facade import DatabaseFacade
 from .technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade
+from . import harmonic_scan
 from .utils.harmonic_patterns import (
     FibClusterDetector, HigherTFFibDetector, merge_confluences,
     HigherTFSRDetector, HigherTFTrendlineDetector,
@@ -119,6 +120,100 @@ class TechnicalAnalysis:
         """
         return int(datetime.now().timestamp() * 1000)
     
+    def _harmonic_indicators(self) -> Dict[str, Any]:
+        return {
+            'IndicatorRSI': self.technical_analysis_factory.get_indicator_rsi_class(),
+            'IndicatorMACD': self.technical_analysis_factory.get_indicator_macd_class(),
+            'IndicatorOBV': self.technical_analysis_factory.get_indicator_obv_class()
+        }
+
+    async def record_harmonic_scan_window(self, asset_id: int, interval: str, klines: List[Dict[str, Any]],
+                                          patterns_found: int, source: str = 'sync') -> None:
+        """Zapisuje okno, które nocny sync przeszukał, jako pokrycie (patrz src/harmonic_scan.py).
+
+        Sync liczy na ostatnich CANDLES_COUNT świecach bez zapasu po lewej, więc pokrycie zaczyna się
+        PAD_CANDLES świec później; kończy się na ostatniej zamkniętej świecy.
+        """
+        try:
+            step = harmonic_scan.interval_ms(interval)
+        except ValueError:
+            return
+        now_ms = int(datetime.now().timestamp() * 1000)
+        closed = [k['open_time'] for k in klines if k['open_time'] <= now_ms - step]
+        if len(closed) <= harmonic_scan.PAD_CANDLES + 1:
+            return
+        windows_table = self.db.get_factory().get_technical_analysis_harmonic_scan_windows_table()
+        await windows_table.create(
+            asset_id=asset_id, interval=interval, params_hash=harmonic_scan.params_hash(),
+            start_time=closed[harmonic_scan.PAD_CANDLES], end_time=closed[-1],
+            patterns_found=patterns_found, source=source,
+        )
+
+    async def scan_harmonic_windows(self, asset_id: int, interval: str,
+                                    windows: List[Tuple[int, int]]) -> List[Dict[str, Any]]:
+        """Liczy formacje w zadanych oknach (z zapasem świec), zapisuje je i zapisuje okna jako pokryte.
+
+        Wołane przez zadanie Celery analysis_tasks.scan_harmonic_windows dla brakujących fragmentów
+        zakresu z GET /harmonics/{asset_id}/{interval}.
+        """
+        factory = self.db.get_factory()
+        asset = await factory.get_assets_table().get_by_id(asset_id)
+        if not asset:
+            raise ValueError(f"Asset {asset_id} not found")
+        asset_exchanges = await factory.get_asset_exchanges_table().get_by_asset_id(asset_id)
+        exchange = harmonic_scan.pick_exchange(e.get('exchange_name', '') for e in asset_exchanges)
+        fabric = self.api_facade.get_fabric()
+        getters = {'BINANCE': fabric.get_binance_api, 'YAHOO': fabric.get_yahoofinance_api}
+        if exchange not in getters:
+            raise ValueError(f"Brak obsługiwanej giełdy dla assetu {asset['asset']}")
+        api = getters[exchange]()
+        windows_table = factory.get_technical_analysis_harmonic_scan_windows_table()
+        phash = harmonic_scan.params_hash()
+        symbol = f"{asset['asset']}/{asset['quote']}"
+
+        results = []
+        for window_start, window_end in windows:
+            now_ms = int(datetime.now().timestamp() * 1000)
+            fetch_start, fetch_end = harmonic_scan.padded_window(interval, (window_start, window_end), now_ms)
+            klines = harmonic_scan.fetch_klines_range(
+                api._get_klines, asset['asset'], asset['quote'], interval, fetch_start, fetch_end
+            )
+            found: List[Dict[str, Any]] = []
+            if klines:
+                harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
+                    asset_id=asset_id, interval=interval
+                )
+                self.technical_analysis_facade.calculate(
+                    klines=klines,
+                    enabled_indicators=self._harmonic_indicators(),
+                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
+                    symbol=symbol,
+                    interval=interval,
+                    find_xabcd=True,
+                    find_abcd=True,
+                    find_abc=False
+                )
+                found = harmonic_scan.patterns_inside(
+                    harmonic_patterns.get_calculated_objects(), (window_start, window_end)
+                )
+                if found:
+                    await self.save_harmonic_patterns_to_database(found)
+            # "Pusto" też jest wynikiem - okno zapisujemy zawsze, żeby nie liczyć go drugi raz.
+            await windows_table.create(
+                asset_id=asset_id, interval=interval, params_hash=phash,
+                start_time=window_start, end_time=window_end, patterns_found=len(found), source='range',
+            )
+            results.append({'window': [window_start, window_end], 'klines': len(klines), 'patterns': len(found)})
+            logger.info(f"Skan formacji {symbol} [{interval}] {window_start}..{window_end}: "
+                        f"{len(klines)} świec, {len(found)} formacji")
+
+        if any(r['patterns'] for r in results):
+            try:
+                await self._update_fib_cluster_confluences(asset_id, interval)
+            except Exception as e:
+                logger.warning(f"Fib cluster confluences po skanie zakresu nie powiodły się: {e}")
+        return results
+
     async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> Dict[str, int]:
         """
         Zapisuje lub aktualizuje wzorce harmoniczne w bazie danych.
@@ -584,6 +679,11 @@ class TechnicalAnalysis:
                                 
                                 # KROK 8.1: Post-processing — Fib Cluster (same interval)
                                 await self._update_fib_cluster_confluences(asset['id'], interval)
+
+                                # KROK 8.2: Okno przeszukane przez sync jako pokrycie dla GET /harmonics
+                                await self.record_harmonic_scan_window(
+                                    asset['id'], interval, klines, len(calculated_harmonic_patterns)
+                                )
                                  
                             except Exception as e:
                                 error_count += 1
