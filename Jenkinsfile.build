@@ -609,18 +609,17 @@ pipeline {
                 archiveArtifacts artifacts: 'gate-results.json', allowEmptyArchive: true
             }
         }
-    }
-
-    post {
-        // docker-builder-000 has one shared disk across every job here. Each run here alone pulls
-        // python:3.13.1-slim, semgrep/semgrep, aquasec/trivy (twice) and zaproxy/zap-stable on top
-        // of the per-commit-tagged app image it builds (never :latest, never reused) - left
-        // unmanaged this fills the disk in short order. The app image's tag is already in the
-        // registry by this point, so removing the local copy loses nothing; `|| true` throughout
-        // because a build that failed early may not have reached later stages.
-        always {
+        // docker-builder-000 has one shared disk across every job here. Each run pulls
+        // python:3.13-slim, semgrep/semgrep, aquasec/trivy, gitleaks and zaproxy/zap-stable on top of the
+        // per-commit-tagged app image it builds (never :latest, never reused) - left unmanaged this
+        // fills the disk in short order. On master the tag is in the registry by now, on PR builds
+        // it was never pushed, so removing the local copy loses nothing. cleanup runs after every
+        // other post condition; `|| true` throughout because a build that failed early may not
+        // have reached later stages. (Only one post section is allowed in declarative pipelines.)
+        cleanup {
             sh '''
-                docker rmi "registry.00x097.com/trading-ai-backend:${GIT_COMMIT}" || true
+                rm -f image.tar
+                [ -n "${BUILD_SHA:-}" ] && docker rmi "registry.00x097.com/trading-ai-backend:${BUILD_SHA}" || true
                 docker image prune -f || true
                 docker builder prune -f --filter "until=24h" || true
             '''
