@@ -12,6 +12,8 @@
  *   trading-ai-admin-credentials (Username with password)
  *   registry-credentials (Username with password) - login do registry.00x097.com,
  *     ten sam co registry-admin w kubernetes/apps/registry/SEALED-SECRET.md w cloud.config
+ *   trading-ai-backend-deploy-webhook-token (Secret text) - token Generic Webhook Trigger dla tego joba
+ *     (URL webhooka: .../generic-webhook-trigger/invoke?token=<ta sama wartość>)
  * (Istniejące: git-gitea-tbs093a, telegram-*, kucoin-*, mexc-* — jak w withCredentials.)
  */
 
@@ -287,7 +289,7 @@ pipeline {
                 [key: 'DEPLOY', value: '$.DEPLOY'],
                 [key: 'CORS_ALLOWED_ORIGINS', value: '$.CORS_ALLOWED_ORIGINS'],
             ],
-            token: 'REDACTED-ROTATED-WEBHOOK-TOKEN'
+            tokenCredentialId: 'trading-ai-backend-deploy-webhook-token'
         )
     }
 
@@ -399,7 +401,7 @@ pipeline {
                             ),
                             booleanParam(
                                 defaultValue: true,
-                                description: '<b>Build &amp; push obrazu Dockera</b> do <code>registry.00x097.com/trading-ai-backend</code> (tagi <code>latest</code> + numer builda), potem <code>kubectl rollout restart</code> na Deployment/DaemonSet w namespace <code>backend-apps</code> (ArgoCD, cloud.config) — niezależne od reszty tego pipeline'u (k8s.manifests/deploy.sh, namespace default)',
+                                description: '<b>Build &amp; push obrazu Dockera</b> do <code>registry.00x097.com/trading-ai-backend</code> (tagi <code>latest</code> + numer builda), potem <code>kubectl rollout restart</code> na Deployment/DaemonSet w namespace <code>backend-apps</code> (ArgoCD, cloud.config) — niezależne od reszty tego pipeline\'u (k8s.manifests/deploy.sh, namespace default)',
                                 name: 'BUILD_AND_PUSH_IMAGE'
                             ),
                         ])

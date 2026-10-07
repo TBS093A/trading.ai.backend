@@ -8,9 +8,13 @@
 # trzy tox environments maja identyczny zestaw `deps`, wiec nie ma sensu budowac
 # trzech osobnych obrazow.
 
-FROM python:3.13.1-slim
+# 3.13-slim (nie 3.13.1-slim): tag przypiety do patcha nigdy nie dostaje poprawek Debiana -
+# 3.13.1-slim mial 9 CRITICAL w Trivy. Niezmienny jest obraz wynikowy (tag = commit SHA),
+# nie obraz bazowy. apt-get upgrade dociaga poprawki wydane po zbudowaniu obrazu bazowego.
+FROM python:3.13-slim
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
 

@@ -371,7 +371,8 @@ class DatabasePostgreSQL:
             
             for table_name in table_order:
                 try:
-                    await connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+                    # table_name pochodzi wyłącznie z hardcoded table_order powyżej, nie z inputu
+                    await connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")  # nosemgrep
                     logger.info(f"Usunięto tabelę: {table_name}")
                 except Exception as e:
                     logger.warning(f"Nie udało się usunąć tabeli {table_name}: {e}")

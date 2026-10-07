@@ -10,7 +10,14 @@ venv/
 pump.*
 !pump.py
 
+# Telethon sessions = live Telegram login credentials, never commit them
+*.session
 *.session-journal
+
+# CI scratch (Jenkinsfile.build)
+sca-deps/
+.gitleaks-src/
+image.tar
 
 *.txt
 *.log
