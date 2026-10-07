@@ -53,6 +53,9 @@
  *   trading-ai-backend-build-webhook-token (Secret text) - Generic Webhook Trigger token; the Gitea
  *                          webhook URL must use the same value (.../generic-webhook-trigger/invoke?token=...)
  *   registry-credentials   (Username with password) - registry.00x097.com login
+ *   kubeconfig-trading-ai-deployer (Secret file) - kubeconfig of the least-privilege SA
+ *                          development/jenkins-trading-ai-deployer (cloud.config ci-rbac/), used by the
+ *                          RELEASE rollout/egress checks instead of the agent's cluster-admin kubeconfig
  *   git-gitea-tbs093a      (Username with password) - checkout of PR heads
  *   git-gitea-jenkins-bot  (Username with password) - PR comments, commit statuses and the
  *                          cloud.config image-tag bump / rollback commits (needs write
@@ -627,36 +630,39 @@ pipeline {
             steps {
                 script {
                     try {
-                        sh """
-                            set -euo pipefail
-                            export KUBECONFIG="/home/jenkins/.kube/config"
-                            NS=backend-apps
-                            WANT="${CLUSTER_IMAGE}:\${BUILD_SHA}"
+                        // Least-privilege SA (cloud.config ci-rbac/jenkins-trading-ai-deployer.yml), not the
+                        // agent's cluster-admin kubeconfig: read rollout status + exec in backend-apps only.
+                        withCredentials([file(credentialsId: 'kubeconfig-trading-ai-deployer', variable: 'KUBECONFIG')]) {
+                            sh """
+                                set -euo pipefail
+                                NS=backend-apps
+                                WANT="${CLUSTER_IMAGE}:\${BUILD_SHA}"
 
-                            # ArgoCD applies the cloud.config commit asynchronously - wait until the
-                            # Deployment spec actually carries the new tag before checking rollout.
-                            current=""
-                            for i in \$(seq 1 60); do
-                                current=\$(kubectl -n "\$NS" get deployment trading-ai-backend-rest-api-controller \\
-                                    -o jsonpath='{.spec.template.spec.containers[?(@.name=="trading-ai-backend-rest-api-controller")].image}')
-                                [ "\$current" = "\$WANT" ] && break
-                                sleep 10
-                            done
-                            if [ "\$current" != "\$WANT" ]; then
-                                echo "ArgoCD did not apply \$WANT within 10 minutes (current: \$current)"
-                                exit 1
-                            fi
+                                # ArgoCD applies the cloud.config commit asynchronously - wait until the
+                                # Deployment spec actually carries the new tag before checking rollout.
+                                current=""
+                                for i in \$(seq 1 60); do
+                                    current=\$(kubectl -n "\$NS" get deployment trading-ai-backend-rest-api-controller \\
+                                        -o jsonpath='{.spec.template.spec.containers[?(@.name=="trading-ai-backend-rest-api-controller")].image}')
+                                    [ "\$current" = "\$WANT" ] && break
+                                    sleep 10
+                                done
+                                if [ "\$current" != "\$WANT" ]; then
+                                    echo "ArgoCD did not apply \$WANT within 10 minutes (current: \$current)"
+                                    exit 1
+                                fi
 
-                            kubectl -n "\$NS" rollout status deployment/trading-ai-backend-rest-api-controller --timeout=10m
-                            kubectl -n "\$NS" rollout status deployment/trading-ai-backend-sync-controller --timeout=10m
-                            kubectl -n "\$NS" rollout status daemonset/trading-ai-backend-celery-workers --timeout=10m
+                                kubectl -n "\$NS" rollout status deployment/trading-ai-backend-rest-api-controller --timeout=10m
+                                kubectl -n "\$NS" rollout status deployment/trading-ai-backend-sync-controller --timeout=10m
+                                kubectl -n "\$NS" rollout status daemonset/trading-ai-backend-celery-workers --timeout=10m
 
-                            # Smoke test through the public ingress: process up (/live) and DB reachable (/ready).
-                            for path in /live /ready; do
-                                curl -fsS --retry 5 --retry-delay 6 --retry-all-errors --max-time 10 "https://api.00x097.com\$path"
-                                echo
-                            done
-                        """
+                                # Smoke test through the public ingress: process up (/live) and DB reachable (/ready).
+                                for path in /live /ready; do
+                                    curl -fsS --retry 5 --retry-delay 6 --retry-all-errors --max-time 10 "https://api.00x097.com\$path"
+                                    echo
+                                done
+                            """
+                        }
                         sh 'python3 "$CI_DIR/ci-gate.py" result rollout 0 "rollout complete, smoke test OK"'
                     } catch (err) {
                         echo "Rollout verification failed: ${err} - rolling back"
@@ -704,14 +710,16 @@ pipeline {
                 // deploy still went green. Checked from inside one pod of each workload - any HTTP
                 // answer (even 429) proves the path is open. No rollback on failure: the image isn't
                 // the cause (NetworkPolicy allow-internet-egress-trading-ai-backend in cloud.config is).
-                sh '''
-                    set -euo pipefail
-                    export KUBECONFIG="/home/jenkins/.kube/config"
-                    failed=""
-                    for w in deployment/trading-ai-backend-rest-api-controller \
-                             deployment/trading-ai-backend-sync-controller \
-                             daemonset/trading-ai-backend-celery-workers; do
-                        if kubectl -n backend-apps exec -i "$w" -- python - <<'PY'
+                // Least-privilege SA (cloud.config ci-rbac/jenkins-trading-ai-deployer.yml), not the
+                // agent's cluster-admin kubeconfig: read rollout status + exec in backend-apps only.
+                withCredentials([file(credentialsId: 'kubeconfig-trading-ai-deployer', variable: 'KUBECONFIG')]) {
+                    sh '''
+                        set -euo pipefail
+                        failed=""
+                        for w in deployment/trading-ai-backend-rest-api-controller \
+                                 deployment/trading-ai-backend-sync-controller \
+                                 daemonset/trading-ai-backend-celery-workers; do
+                            if kubectl -n backend-apps exec -i "$w" -- python - <<'PY'
 import sys
 import urllib.error
 import urllib.request
@@ -725,17 +733,18 @@ for url in ("https://api.binance.com/api/v3/ping", "https://query1.finance.yahoo
         print(f"{url}: {e}")
         sys.exit(1)
 PY
-                        then
-                            echo "$w: internet egress OK"
-                        else
-                            failed="$failed ${w#*/}"
+                            then
+                                echo "$w: internet egress OK"
+                            else
+                                failed="$failed ${w#*/}"
+                            fi
+                        done
+                        if [ -n "$failed" ]; then
+                            python3 "$CI_DIR/ci-gate.py" result egress 1 "no internet egress from:$failed - check NetworkPolicy allow-internet-egress-trading-ai-backend in cloud.config"
                         fi
-                    done
-                    if [ -n "$failed" ]; then
-                        python3 "$CI_DIR/ci-gate.py" result egress 1 "no internet egress from:$failed - check NetworkPolicy allow-internet-egress-trading-ai-backend in cloud.config"
-                    fi
-                    python3 "$CI_DIR/ci-gate.py" result egress 0 "rest-api, sync, celery reach api.binance.com + Yahoo Finance"
-                '''
+                        python3 "$CI_DIR/ci-gate.py" result egress 0 "rest-api, sync, celery reach api.binance.com + Yahoo Finance"
+                    '''
+                }
             }
         }
 
