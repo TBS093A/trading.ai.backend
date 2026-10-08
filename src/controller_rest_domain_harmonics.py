@@ -46,7 +46,7 @@ from .db.postgresql.database_postgresql import DatabasePostgreSQL
 from . import harmonic_alerts, harmonic_scan, harmonic_setups
 from .config import config
 from .analysis_services.strength_service import (
-    pattern_strength_or_none, refresh_cached_model, setup_strength_or_none,
+    cached_model, pattern_strength_or_none, refresh_cached_model, setup_strength_or_none,
 )
 from . import pattern_strength
 from .harmonic_validation import Point, ValidationError, validate_xabcd
@@ -173,12 +173,15 @@ async def get_harmonic_setups(
     asset_id: int = Query(..., ge=1),
     interval: str = Query(...),
     status: Optional[str] = Query(default=None, description="waiting | open | win | loss | expired | no_entry | invalidated"),
+    active: bool = Query(default=False, description="tylko aktywne: waiting + open (lista w sidebarze)"),
     limit: int = Query(default=200, ge=1, le=2000),
 ):
+    """Setupy z wynikami; strength = siła pełna (od wejścia) albo wstępna (waiting, kind="pre")."""
     db = await get_db()
     table = db.get_factory().get_technical_analysis_harmonic_setups_table()
     version = harmonic_setups.params_version()
-    setups = await table.list(asset_id, interval, version, status=status, limit=limit)
+    setups = await table.list(asset_id, interval, version, status=status, limit=limit,
+                              statuses=("waiting", "open") if active else None)
     for row in setups:
         row["strength"] = setup_strength_or_none(row)
     return {"params_version": version, "setups": setups}
@@ -234,15 +237,42 @@ def _valid_intervals(intervals: List[str]) -> List[str]:
     return sorted(set(intervals), key=intervals.index)
 
 
+def _model_summary(model) -> Optional[Dict[str, Any]]:
+    if model is None:
+        return None
+    return {"trained_at": model.trained_at, "params_version": model.params_version, "kind": model.kind,
+            "features": len(model.feature_names), "metrics": model.metrics,
+            "top_weights": pattern_strength.top_weights(model, 25)}
+
+
 @router.get("/strength/model")
 async def get_strength_model():
-    """Aktywny model siły: kiedy uczony, metryki walidacji (AUC, kwintyle) i najważniejsze wagi."""
-    model = await refresh_cached_model(await get_db(), force=True)
-    if model is None:
-        return {"model": None}
-    return {"model": {"trained_at": model.trained_at, "params_version": model.params_version,
-                      "features": len(model.feature_names), "metrics": model.metrics,
-                      "top_weights": pattern_strength.top_weights(model, 25)}}
+    """Aktywne modele siły: "model" = pełny (od wejścia; formacje z wykresu, setupy open i zamknięte),
+    "pre_model" = wstępny (setupy czekające na PRZ, tylko konfluencje poziomowe)."""
+    await refresh_cached_model(await get_db(), force=True)
+    return {"model": _model_summary(cached_model("entry")), "pre_model": _model_summary(cached_model("pre"))}
+
+
+def _pattern_setup_key(p: Dict[str, Any]) -> Optional[Tuple]:
+    ta = p.get("ta_object_json") or {}
+    times = [p.get(f"{n}_point_timestamp") for n in ("x", "a", "b", "c")]
+    if not ta.get("pattern_type") or any(t is None for t in times):
+        return None   # ABCD / ABC - setupy są tylko dla XABCD
+    return (ta["pattern_type"],) + tuple(int(t) for t in times)
+
+
+async def attach_setups(db, asset_id: int, interval: str, patterns: List[Dict[str, Any]]) -> None:
+    """Dokleja do formacji z wykresu setup o tych samych punktach X..C (status, wynik) - pole "setup"."""
+    keys = {id(p): _pattern_setup_key(p) for p in patterns}
+    try:
+        found = await db.get_factory().get_technical_analysis_harmonic_setups_table().find_by_points(
+            asset_id, interval, harmonic_setups.params_version(), [k for k in keys.values() if k]
+        )
+    except Exception as e:
+        logger.warning(f"Powiązanie formacji z setupami nie powiodło się: {e}")
+        found = {}
+    for p in patterns:
+        p["setup"] = found.get(keys[id(p)]) if keys[id(p)] else None
 
 
 def _enqueue_strength_fit() -> str:
@@ -416,6 +446,7 @@ async def get_harmonic_patterns_in_range(
     )
     for p in patterns:
         p["strength"] = pattern_strength_or_none(p)
+    await attach_setups(db, asset_id, interval, patterns)
 
     body: Dict[str, Any] = {
         "asset_id": asset_id,

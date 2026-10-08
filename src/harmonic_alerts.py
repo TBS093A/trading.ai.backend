@@ -103,6 +103,10 @@ def describe(event: Dict[str, Any]) -> str:
                      f"TP1: {_fmt_price(p.get('tp1'))}  TP2: {_fmt_price(p.get('tp2'))}")
     if p.get("r_multiple") is not None:
         lines.append(f"  wynik: {p['r_multiple']:+.2f} R")
+    strength = _strength_view(p.get("strength"))
+    if strength:
+        lines.append(f"  siła ({strength['kind']}): {strength['score']}/100"
+                     + (f", szansa TP1 {strength['p_win']}" if strength["p_win"] else ""))
     return "\n".join(lines)
 
 
@@ -132,8 +136,9 @@ TEMPLATES_DIR = Path(__file__).resolve().parent / "templates" / "email"
 
 @lru_cache(maxsize=1)
 def _templates() -> Environment:
-    return Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)),
-                       autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)
+    # Szablon maila z repo, autoescape włączony - nie renderujemy szablonów od użytkownika.
+    return Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)),  # nosemgrep
+                       autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)  # nosemgrep
 
 
 def app_url_from_config(config) -> Optional[str]:
@@ -163,7 +168,28 @@ def _plural_changes(n: int) -> str:
     return f"{n} zmian setupów"
 
 
-def _event_view(e: Dict[str, Any]) -> Dict[str, Any]:
+def chart_link(app_url: Optional[str], e: Dict[str, Any]) -> Optional[str]:
+    """Link do wykresu z tym setupem (front czyta parametry z URL - view, asset_id, interval, t, setup)."""
+    if not app_url:
+        return None
+    from urllib.parse import urlencode
+
+    query = {"view": "chart", "asset_id": e["asset_id"], "interval": e["interval"], "t": e["event_time"],
+             "pattern": e["pattern_type"], "x": e.get("x_time"), "c": e.get("c_time")}
+    return f"{app_url}/?{urlencode({k: v for k, v in query.items() if v is not None})}"
+
+
+def _strength_view(strength: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not strength or strength.get("score") is None:
+        return None
+    score = int(strength["score"])
+    return {"score": score, "kind": "wstępna" if strength.get("kind") == "pre" else "pełna",
+            "bg": f"rgba(0,255,136,{0.06 + 0.34 * score / 100:.2f})",
+            "p_win": f"{round(100 * strength['p_win'])}%" if strength.get("p_win") is not None else None,
+            "factors": [f["label"] for f in (strength.get("factors") or [])[:3]]}
+
+
+def _event_view(e: Dict[str, Any], app_url: Optional[str] = None) -> Dict[str, Any]:
     p = e.get("payload") or {}
     label, color = STATUS_STYLE.get(e["to_status"], (e["to_status"].upper(), THEME["secondary"]))
     bull = bool(e["is_bullish"])
@@ -189,6 +215,8 @@ def _event_view(e: Dict[str, Any]) -> Dict[str, Any]:
         "r_color": THEME["green"] if (r or 0) > 0 else THEME["red"],
         "levels": levels,
         "time_utc": _fmt_time(e["event_time"]), "time_local": _local_time(e["event_time"]),
+        "strength": _strength_view(p.get("strength")),
+        "chart_url": chart_link(app_url, e),
     }
 
 
@@ -208,13 +236,13 @@ def render(subscriber: Dict[str, Any], events: Sequence[Dict[str, Any]],
     for e in events:
         counts[e["to_status"]] = counts.get(e["to_status"], 0) + 1
     subject = _subject(events, counts)
-    body = "\n\n".join(describe(e) for e in events)
+    body = "\n\n".join(describe(e) + (f"\n  wykres: {chart_link(app_url, e)}" if app_url else "") for e in events)
     body += ("\n\n--\nUstawienia alertów: zakładka Skuteczność formacji -> Alerty. "
              "Setup = X..C + PRZ znane w chwili zdarzenia; SL/TP wg reguł z wykresu.")
     if app_url:
         body += f"\n{app_url}"
 
-    views = [_event_view(e) for e in events]
+    views = [_event_view(e, app_url) for e in events]
     if len(views) == 1:
         v = views[0]
         headline = f"{v['symbol']} {v['interval']} {v['pattern']}: {v['description']}"
@@ -237,8 +265,11 @@ def sample_event() -> Dict[str, Any]:
     return {
         "id": 0, "asset_id": 0, "interval": "1h", "pattern_type": "gartley", "is_bullish": True,
         "from_status": "open", "to_status": "win", "event_time": now,
+        "x_time": now - 40 * 3_600_000, "c_time": now - 10 * 3_600_000,
         "payload": {"symbol": "BTC/USDT (przykład)", "prz": [61850.0, 62120.5], "entry_price": 62120.5,
-                    "sl": 61240.0, "tp1": 63550.0, "tp2": 64480.0, "r_multiple": 1.62},
+                    "sl": 61240.0, "tp1": 63550.0, "tp2": 64480.0, "r_multiple": 1.62,
+                    "strength": {"score": 82, "p_win": 0.46, "kind": "entry",
+                                 "factors": [{"label": "bullish engulfing (zgodna z kierunkiem)", "impact": 0.4}]}},
     }
 
 

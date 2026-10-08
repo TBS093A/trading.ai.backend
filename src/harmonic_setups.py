@@ -339,7 +339,8 @@ def setup_key_times(setup: Setup, klines: List[Dict]) -> Tuple:
 
 
 def to_row(setup: Setup, outcome: Outcome, klines: List[Dict], asset_id: int, interval: str,
-           source: str, confluences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+           source: str, confluences: Optional[Dict[str, Any]] = None,
+           pre_confluences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Wiersz technical_analysis_harmonic_setups - indeksy świec zamienione na open_time (ms)."""
     t = lambda i: None if i is None else int(klines[i]["open_time"])
     _, x_t, a_t, b_t, c_t = setup_key_times(setup, klines)
@@ -354,7 +355,7 @@ def to_row(setup: Setup, outcome: Outcome, klines: List[Dict], asset_id: int, in
         "exit_time": t(outcome.exit_index), "r_multiple": outcome.r_multiple, "tp2_reached": outcome.tp2_reached,
         "mfe_r": round(outcome.mfe_r, 4) if outcome.entry_index is not None else None,
         "mae_r": round(outcome.mae_r, 4) if outcome.entry_index is not None else None,
-        "confluences_json": confluences, "source": source,
+        "confluences_json": confluences, "pre_confluences_json": pre_confluences, "source": source,
     }
 
 
@@ -370,16 +371,20 @@ def wilson_interval(wins: int, n: int, z: float = 1.96) -> Tuple[Optional[float]
 
 
 ConfluencesFn = Callable[[Setup, Outcome, List[Dict]], Optional[Dict[str, Any]]]
+PreConfluencesFn = Callable[[Setup, List[Dict]], Optional[Dict[str, Any]]]
 
 
 def evaluate(klines: List[Dict], asset_id: int, interval: str, source: str,
              skip_keys: Iterable[Tuple] = (), targets_fn: Optional[TargetsFn] = None,
              confluences_fn: Optional[ConfluencesFn] = None,
-             spacings: Iterable[int] = SPACINGS) -> List[Dict[str, Any]]:
+             spacings: Iterable[int] = SPACINGS,
+             pre_confluences_fn: Optional[PreConfluencesFn] = None) -> List[Dict[str, Any]]:
     """Setupy z klines (tylko zamknięte świece!) i ich wyniki jako wiersze tabeli.
 
     skip_keys: klucze (pattern, x_time, a_time, b_time, c_time) już rozstrzygnięte w bazie.
     confluences_fn dostaje świece do świecy wejścia włącznie - konfluencje znane w chwili wejścia.
+    pre_confluences_fn - setupy wciąż czekające na PRZ: konfluencje poziomowe znane już teraz
+    (D = bliższa krawędź PRZ, świece do ostatniej zamkniętej) - podstawa siły wstępnej.
     """
     skip = set(skip_keys)
     rows = []
@@ -387,10 +392,12 @@ def evaluate(klines: List[Dict], asset_id: int, interval: str, source: str,
         if setup_key_times(setup, klines) in skip:
             continue
         outcome = simulate(setup, klines, targets_fn)
-        confluences = None
+        confluences = pre = None
         if confluences_fn is not None and outcome.entry_index is not None:
             confluences = confluences_fn(setup, outcome, klines[: outcome.entry_index + 1])
-        rows.append(to_row(setup, outcome, klines, asset_id, interval, source, confluences))
+        if pre_confluences_fn is not None and outcome.status == "waiting":
+            pre = pre_confluences_fn(setup, klines)
+        rows.append(to_row(setup, outcome, klines, asset_id, interval, source, confluences, pre))
     return rows
 
 
@@ -421,7 +428,8 @@ def _event_time(row: Dict[str, Any]) -> int:
 
 
 def status_events(rows: List[Dict[str, Any]], previous: Dict[Tuple, str], symbol: str,
-                  new_since: int) -> List[Dict[str, Any]]:
+                  new_since: int, strength_fn: Optional[Callable[[Dict[str, Any]], Any]] = None
+                  ) -> List[Dict[str, Any]]:
     """Zdarzenia z jednego przebiegu na żywo.
 
     previous: statusy nierozstrzygniętych setupów sprzed przebiegu (klucz pattern, x, a, b, c).
@@ -449,6 +457,8 @@ def status_events(rows: List[Dict[str, Any]], previous: Dict[Tuple, str], symbol
                 "entry_price": r["entry_price"], "sl": r["sl"], "tp1": r["tp1"], "tp2": r["tp2"],
                 "exit_time": r["exit_time"], "r_multiple": r["r_multiple"],
                 "targets_source": r["targets_source"],
+                # siła wstępna (waiting) albo pełna (od wejścia) - src/pattern_strength.py
+                "strength": strength_fn(r) if strength_fn else None,
             },
         })
     return events
