@@ -150,3 +150,39 @@ class ConfluencePostProcessor:
         except Exception as e:
             logger.error(f"Błąd Higher TF S/R (asset_id={asset_id}): {e}", exc_info=True)
         return updated
+
+
+# Typy, które dokłada post-processing (zastępowane przy każdym przeliczeniu).
+POST_PROCESSING_TYPES = [
+    'fib_cluster', 'higher_tf_fib',
+    'higher_tf_support_zone', 'higher_tf_resistance_zone',
+    'higher_tf_support_trendline', 'higher_tf_resistance_trendline',
+]
+HIGHER_TF_KLINES_WINDOW = 500   # tyle świec wyższego TF widzi nocny sync (TechnicalAnalysis.CANDLES_COUNT)
+
+
+def post_processing_entries(target: Dict, interval: str, patterns_by_interval: Dict[str, List[Dict]],
+                            klines_by_interval: Dict[str, List[Dict]]) -> List[Dict]:
+    """Konfluencje post-processingu dla jednej formacji / setupu - te same detektory co w sidebarze
+    (Fib cluster, Fib / S/R / trendline z wyższego TF). Detektory same odcinają dane znane po D."""
+    from ..utils.harmonic_patterns._common import klines_closed_before
+
+    entries: List[Dict] = []
+    same_tf = list(patterns_by_interval.get(interval, []))
+    if not any(p.get('id') == target.get('id') for p in same_tf):
+        same_tf.append(target)
+    for detect in (
+        lambda: FibClusterDetector.detect(same_tf, target['id']),
+        lambda: HigherTFFibDetector.detect(patterns_by_interval, target, interval),
+    ):
+        result = detect()
+        if result is not None:
+            entries.append(result)
+    d_ts = target.get('d_point_timestamp')
+    # Jak w nocnym syncu: ostatnie HIGHER_TF_KLINES_WINDOW świec wyższego TF - ale zamkniętych przed D.
+    window = {iv: klines_closed_before(kl, iv, d_ts)[-HIGHER_TF_KLINES_WINDOW:] for iv, kl in klines_by_interval.items()}
+    for detector in (HigherTFSRDetector, HigherTFTrendlineDetector):
+        result = detector.detect(window, target, interval)
+        if result is not None:
+            entries.append(result)
+    return entries

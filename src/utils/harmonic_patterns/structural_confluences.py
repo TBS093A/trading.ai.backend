@@ -19,7 +19,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from ._common import d_point_price, pattern_point_indices
+from ._common import (
+    d_point_price, pattern_point_indices, pattern_is_bullish, klines_closed_before,
+)
 
 from .fib_confluences import (
     INTERVAL_HIERARCHY, HIGHER_TF_CONFIDENCE_MAP, _get_d_price,
@@ -570,7 +572,9 @@ class HigherTFSRDetector:
             return None
         target_rank = INTERVAL_HIERARCHY.index(target_interval)
 
-        is_bullish = target_pattern.get('ta_object_json', {}).get('bullish', True)
+        # Kierunek: ta_object_json ma "is_bullish" - wcześniej czytane było "bullish" (zawsze True).
+        is_bullish = pattern_is_bullish(target_pattern)
+        d_timestamp = _get_d_timestamp(target_pattern)
 
         matches: List[Dict[str, Any]] = []
 
@@ -581,6 +585,8 @@ class HigherTFSRDetector:
             if interval_rank <= target_rank:
                 continue
 
+            # Tylko świece wyższego TF zamknięte przed D - strefy znane w chwili D.
+            klines = klines_closed_before(klines, interval, int(d_timestamp) if d_timestamp else None)
             if not klines or len(klines) < SR_SWING_LOOKBACK * 2 + 1:
                 continue
 
@@ -666,7 +672,7 @@ class HigherTFTrendlineDetector:
             return None
         target_rank = INTERVAL_HIERARCHY.index(target_interval)
 
-        is_bullish = target_pattern.get('ta_object_json', {}).get('bullish', True)
+        is_bullish = pattern_is_bullish(target_pattern)
 
         matches: List[Dict[str, Any]] = []
 
@@ -677,6 +683,8 @@ class HigherTFTrendlineDetector:
             if interval_rank <= target_rank:
                 continue
 
+            # Linia trendu z punktów zamkniętych przed D - ekstrapolowana do D, nie dopasowana po fakcie.
+            klines = klines_closed_before(klines, interval, int(d_timestamp) if d_timestamp else None)
             min_candles = SR_SWING_LOOKBACK * 2 + TRENDLINE_MIN_POINTS
             if not klines or len(klines) < min_candles:
                 continue

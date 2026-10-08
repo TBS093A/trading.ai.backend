@@ -43,7 +43,9 @@ EVENT_LOOKBACK_CANDLES = 3
 SETUP_PARAMS: Dict[str, Any] = {
     "spacings": list(SPACINGS), "fib_tolerance": FIB_TOLERANCE, "max_back_pivots": MAX_BACK_PIVOTS,
     "trade_timeout_factor": TRADE_TIMEOUT_FACTOR, "entry": "near PRZ edge or open",
-    "exit": "all at TP1", "same_candle": "SL first", "version": 1,
+    "exit": "all at TP1", "same_candle": "SL first",
+    # 2: konfluencje setupów = pełny zestaw z sidebara (+ Fib cluster, wyższe TF), przyczynowe.
+    "confluences": "sidebar set, causal", "version": 2,
 }
 
 

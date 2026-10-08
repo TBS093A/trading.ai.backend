@@ -9,6 +9,8 @@ Post-processing: konfluencje oparte na zbieżności poziomów Fibonacci.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from ._common import pattern_end_timestamp, patterns_known_before
+
 logger = logging.getLogger(__name__)
 
 FIB_CLUSTER_TOLERANCE_PCT = 0.5   # ±0.5% ceny D
@@ -136,9 +138,10 @@ class FibClusterDetector:
             return None
         # Formacje z tym samym punktem D liczą swoje rozszerzenia i cele od tego D - ich poziomy
         # leżą na D z definicji, więc "potwierdzałyby" D nim samym.
+        # Tylko formacje zakończone przed D celu - poziomy znane w chwili D (bez potwierdzeń z przyszłości).
         target_d_ts = target.get('d_point_timestamp')
         others = [
-            p for p in all_patterns
+            p for p in patterns_known_before(all_patterns, pattern_end_timestamp(target))
             if p['id'] != target_pattern_id
             and (target_d_ts is None or p.get('d_point_timestamp') != target_d_ts)
         ]
@@ -238,7 +241,9 @@ class HigherTFFibDetector:
 
             base_confidence = HIGHER_TF_CONFIDENCE_MAP.get(interval, 0.5)
 
-            for p in patterns:
+            from ...harmonic_scan import INTERVAL_MS
+            known = patterns_known_before(patterns, pattern_end_timestamp(target_pattern), INTERVAL_MS.get(interval, 0))
+            for p in known:
                 if p['id'] == target_pattern.get('id'):
                     continue
 

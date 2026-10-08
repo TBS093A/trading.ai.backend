@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest import mock
 
-from src.utils.harmonic_patterns import indicator_confluences as ind
+from src.utils.harmonic_patterns import HigherTFSRDetector, indicator_confluences as ind
 from src.utils.harmonic_patterns import structural_confluences as st
 from src.utils.harmonic_patterns._common import d_point_price, pattern_point_indices
 from src.utils.harmonic_patterns.candlestick_patterns import CandlestickPatternDetector as C
@@ -253,6 +253,9 @@ class TestVolume(unittest.TestCase):
         self.assertEqual(r["details"]["d_price"], 100.0)
 
 
+DAY = 86_400_000
+
+
 def fib_pattern(pid, d_price, levels, d_ts=None):
     return {
         "id": pid,
@@ -282,10 +285,23 @@ class TestFibConfluences(unittest.TestCase):
         self.assertIsNone(FibClusterDetector.detect([target] + dupes, 1))
 
     def test_higher_tf_only_counts_higher_intervals(self):
-        target = fib_pattern(1, 100.0, [], d_ts=10)
-        by_iv = {"1h": [fib_pattern(2, 0, [100.0])], "1d": [fib_pattern(3, 0, [100.1])]}
+        target = fib_pattern(1, 100.0, [], d_ts=10 * DAY)
+        by_iv = {"1h": [fib_pattern(2, 0, [100.0], 2 * DAY)], "1d": [fib_pattern(3, 0, [100.1], 2 * DAY)]}
         r = HigherTFFibDetector.detect(by_iv, target, "4h")
         self.assertEqual(r["details"]["source_intervals"], ["1d"])
+
+    def test_cluster_ignores_patterns_completed_after_d(self):
+        # Regression: post-processing used every pattern in the DB, including later ones.
+        target = fib_pattern(1, 100.0, [], d_ts=10)
+        later = [fib_pattern(i, 0, [100.0 + i / 100], d_ts=20 + i) for i in (2, 3, 4)]
+        self.assertIsNone(FibClusterDetector.detect([target] + later, 1))
+        earlier = [fib_pattern(i, 0, [100.0 + i / 100], d_ts=i) for i in (2, 3, 4)]
+        self.assertIsNotNone(FibClusterDetector.detect([target] + earlier, 1))
+
+    def test_higher_tf_fib_needs_the_higher_candle_closed_before_d(self):
+        target = fib_pattern(1, 100.0, [], d_ts=10 * DAY)
+        same_day = {"1d": [fib_pattern(2, 0, [100.0], 10 * DAY - 3_600_000)]}   # D wyższego TF w tej samej dobie
+        self.assertIsNone(HigherTFFibDetector.detect(same_day, target, "4h"))
 
     def test_merge_confluences_replaces_types(self):
         merged = merge_confluences({"confluences": [{"type": "fib_cluster"}, {"type": "doji"}]},
@@ -307,6 +323,42 @@ class TestConfluenceDetector(unittest.TestCase):
         self.assertIn("hammer", types)
         self.assertIn("volume_spike", types)
         self.assertEqual(result["total_score"], len(types))
+
+
+class TestHigherTFStructureCausality(unittest.TestCase):
+    """HigherTFSRDetector / HigherTFTrendlineDetector: tylko świece zamknięte przed D, kierunek z is_bullish."""
+
+    H = 3_600_000
+
+    def htf_klines(self, prices, start=0, step=4 * 3_600_000):
+        return [{"open_time": start + i * step, "open": p, "high": p * 1.001, "low": p * 0.999, "close": p, "volume": 1}
+                for i, p in enumerate(prices)]
+
+    def target(self, d_price, d_ts, bullish):
+        return {"id": 1, "d_point_timestamp": d_ts,
+                "ta_object_json": {"is_bullish": bullish, "points": {"D": {"price": d_price}}}}
+
+    def zigzag(self, lows_at, highs_at, n=120):
+        prices = []
+        for i in range(n):
+            phase = i % 20
+            prices.append(lows_at if phase == 0 else highs_at if phase == 10 else (lows_at + highs_at) / 2)
+        return prices
+
+    def test_support_zone_built_only_from_candles_before_d(self):
+        kl = self.htf_klines(self.zigzag(100.0, 110.0))
+        d_ts = kl[-1]["open_time"] + 4 * self.H
+        self.assertIsNotNone(HigherTFSRDetector.detect({"4h": kl}, self.target(100.0, d_ts, True), "1h"))
+        # Ta sama strefa, ale cała historia wyższego TF jest po D - nic nie było wtedy znane.
+        self.assertIsNone(HigherTFSRDetector.detect({"4h": kl}, self.target(100.0, 1, True), "1h"))
+
+    def test_bearish_pattern_looks_for_resistance(self):
+        # Regression: direction was read from "bullish" (missing key -> always True).
+        kl = self.htf_klines(self.zigzag(100.0, 110.0))
+        d_ts = kl[-1]["open_time"] + 4 * self.H
+        r = HigherTFSRDetector.detect({"4h": kl}, self.target(110.0, d_ts, False), "1h")
+        self.assertEqual(r["type"], "higher_tf_resistance_zone")
+        self.assertIsNone(HigherTFSRDetector.detect({"4h": kl}, self.target(100.0, d_ts, False), "1h"))
 
 
 if __name__ == "__main__":
