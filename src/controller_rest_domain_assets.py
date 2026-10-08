@@ -206,7 +206,6 @@ async def assets_info():
             "with_patterns": "GET /assets/with-harmonic-patterns - Assety z analizami (z datą ostatniego patternu)",
             "old_patterns": "GET /assets/with-old-harmonic-patterns - Assety ze starymi analizami",
             "recent_patterns": "GET /assets/with-recent-harmonic-patterns - Assety z nowymi analizami",
-            "unprocessed_charts": "GET /assets/with-unprocessed-chart-images - Assety z nieprzetworzonymi obrazami",
             "stats": "GET /assets/stats - Statystyki assetów"
         }
     }
@@ -761,64 +760,6 @@ async def get_assets_with_recent_harmonic_patterns(
         logger.error(f"Error getting assets with recent harmonic patterns: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get assets: {str(e)}")
 
-
-@router.get("/with-unprocessed-chart-images", response_model=AssetListResponse)
-async def get_assets_with_unprocessed_chart_images(
-    interval: str = Query(..., description="Interwał czasowy (np. '4h', '1d')"),
-    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
-    offset: int = Query(default=0, ge=0, description="Offset wyników")
-):
-    """
-    Pobiera assety, które mają chart images nieprzypisane do żadnej analizy technicznej
-    dla konkretnego interwału.
-    Przydatne do identyfikacji assetów z obrazami wymagającymi interpretacji LLM.
-    
-    Args:
-        interval: Interwał czasowy (np. '4h', '1d', '1w')
-        limit: Maksymalna liczba wyników
-        offset: Przesunięcie wyników
-        
-    Returns:
-        AssetListResponse: Lista assetów z nieprzetworzonymi obrazami
-    """
-    try:
-        db = await get_db()
-        assets_table = db.get_factory().get_assets_table()
-        
-        # Pobierz z dodatkowym rekordem
-        assets = await assets_table.get_assets_with_unprocessed_chart_images_by_interval(
-            interval=interval,
-            limit=limit + 1,
-            offset=offset
-        )
-        
-        has_more = len(assets) > limit
-        page_assets = assets[:limit]
-        
-        asset_responses = [
-            _asset_response(a)
-            for a in page_assets
-        ]
-        
-        pagination_info = PaginationInfo(
-            limit=limit,
-            offset=offset,
-            has_more=has_more
-        )
-        
-        return AssetListResponse(
-            assets=asset_responses,
-            pagination=pagination_info
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting assets with unprocessed chart images: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get assets: {str(e)}")
-
-
-# ===================
-# STATISTICS
-# ===================
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_assets_stats():

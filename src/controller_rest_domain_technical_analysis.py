@@ -61,22 +61,6 @@ class TechnicalAnalysisResponse(BaseModel):
     confluences_json: Optional[Dict[str, Any]] = None
 
 
-class TechnicalAnalysisWithImagesResponse(BaseModel):
-    """Odpowiedź z analizą techniczną i obrazami wykresów."""
-    id: int
-    asset_id: int
-    asset: Optional[str] = None
-    quote: Optional[str] = None
-    interval: Optional[str] = None
-    x_point_timestamp: Optional[int] = None
-    a_point_timestamp: Optional[int] = None
-    b_point_timestamp: Optional[int] = None
-    c_point_timestamp: Optional[int] = None
-    d_point_timestamp: Optional[int] = None
-    ta_object_json: Dict[str, Any]
-    confluences_json: Optional[Dict[str, Any]] = None
-    chart_images: List[Dict[str, Any]] = []
-
 
 class PaginationInfo(BaseModel):
     """Informacje o paginacji."""
@@ -91,11 +75,6 @@ class TechnicalAnalysisListResponse(BaseModel):
     analyses: List[TechnicalAnalysisResponse]
     pagination: PaginationInfo
 
-
-class TechnicalAnalysisWithImagesListResponse(BaseModel):
-    """Lista analiz technicznych z obrazami z informacją o paginacji."""
-    analyses: List[TechnicalAnalysisWithImagesResponse]
-    pagination: PaginationInfo
 
 
 class TechnicalAnalysisStatsResponse(BaseModel):
@@ -1166,63 +1145,6 @@ async def find_technical_analysis_by_points(
 
 
 # ===================
-# IMAGES - PRZED /{analysis_id}
-# ===================
-
-@router.get("/images", response_model=TechnicalAnalysisWithImagesListResponse)
-async def get_all_technical_analyses_with_images(
-    limit: int = Query(default=50, ge=1, le=1000, description="Liczba wyników"),
-    offset: int = Query(default=0, ge=0, description="Offset wyników")
-):
-    """
-    Pobiera wszystkie analizy techniczne wraz z powiązanymi obrazami wykresów.
-    
-    Args:
-        limit: Maksymalna liczba wyników
-        offset: Przesunięcie wyników
-        
-    Returns:
-        TechnicalAnalysisWithImagesListResponse: Lista analiz z obrazami
-    """
-    try:
-        db = await get_db()
-        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
-        
-        analyses = await ta_table.get_all_with_chart_images(limit=limit + 1, offset=offset)
-        
-        has_more = len(analyses) > limit
-        page_analyses = analyses[:limit]
-        
-        analysis_responses = [
-            TechnicalAnalysisWithImagesResponse(
-                id=a['id'],
-                asset_id=a['asset_id'],
-                asset=a.get('asset'),
-                quote=a.get('quote'),
-                interval=a.get('interval'),
-                x_point_timestamp=a.get('x_point_timestamp'),
-                a_point_timestamp=a.get('a_point_timestamp'),
-                b_point_timestamp=a.get('b_point_timestamp'),
-                c_point_timestamp=a.get('c_point_timestamp'),
-                d_point_timestamp=a.get('d_point_timestamp'),
-                ta_object_json=a['ta_object_json'],
-                confluences_json=a.get('confluences_json'),
-                chart_images=a.get('chart_images', [])
-            )
-            for a in page_analyses
-        ]
-        
-        return TechnicalAnalysisWithImagesListResponse(
-            analyses=analysis_responses,
-            pagination=PaginationInfo(limit=limit, offset=offset, has_more=has_more)
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting technical analyses with images: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get analyses with images: {str(e)}")
-
-
-# ===================
 # PATTERN COUNTS PER INTERVAL
 # ===================
 
@@ -1495,53 +1417,6 @@ async def get_technical_analysis(
         logger.error(f"Error getting technical analysis {analysis_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get technical analysis: {str(e)}")
 
-
-@router.get("/{analysis_id}/images", response_model=TechnicalAnalysisWithImagesResponse)
-async def get_technical_analysis_with_images(
-    analysis_id: int = Path(..., ge=1, description="ID analizy technicznej")
-):
-    """
-    Pobiera analizę techniczną wraz z powiązanymi obrazami wykresów.
-    
-    Args:
-        analysis_id: ID analizy
-        
-    Returns:
-        TechnicalAnalysisWithImagesResponse: Analiza z obrazami
-    """
-    try:
-        db = await get_db()
-        ta_table = db.get_factory().get_technical_analysis_harmonic_patterns_table()
-        
-        analysis = await ta_table.get_with_chart_images(analysis_id)
-        
-        if not analysis:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Technical analysis with ID {analysis_id} not found"
-            )
-        
-        return TechnicalAnalysisWithImagesResponse(
-            id=analysis['id'],
-            asset_id=analysis['asset_id'],
-            asset=analysis.get('asset'),
-            quote=analysis.get('quote'),
-            interval=analysis.get('interval'),
-            x_point_timestamp=analysis.get('x_point_timestamp'),
-            a_point_timestamp=analysis.get('a_point_timestamp'),
-            b_point_timestamp=analysis.get('b_point_timestamp'),
-            c_point_timestamp=analysis.get('c_point_timestamp'),
-            d_point_timestamp=analysis.get('d_point_timestamp'),
-            ta_object_json=analysis['ta_object_json'],
-            confluences_json=analysis.get('confluences_json'),
-            chart_images=analysis.get('chart_images', [])
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting technical analysis with images {analysis_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get analysis with images: {str(e)}")
 
 
 # =============================================================================
