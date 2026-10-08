@@ -186,7 +186,7 @@ pipeline {
         )
         string(
             name: 'MIN_COVERAGE',
-            defaultValue: '15',
+            defaultValue: '25',
             description: 'Minimum line coverage (%) of src/ from tests/unit - raise it as unit tests are added, never lower it.'
         )
         booleanParam(
@@ -260,7 +260,7 @@ pipeline {
                         error "Checked out ${env.BUILD_SHA}, expected PR head ${env.PR_HEAD_SHA}"
                     }
                     env.FAIL_SEVERITIES = params.FAIL_ON_HIGH ? 'CRITICAL,HIGH' : 'CRITICAL'
-                    env.MIN_COVERAGE = params.MIN_COVERAGE ?: '15'
+                    env.MIN_COVERAGE = params.MIN_COVERAGE ?: '25'
                     currentBuild.description = "${isPullRequest() ? "PR #${env.PR_NUMBER}" : DEFAULT_BRANCH} @ ${env.BUILD_SHA.take(8)}"
                 }
                 // Report files from a previous build in this reused workspace must not leak into

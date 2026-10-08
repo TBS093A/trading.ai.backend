@@ -131,15 +131,18 @@ class FibClusterDetector:
         Returns:
             Dict konfluencji lub None.
         """
-        target = None
-        others = []
-        for p in all_patterns:
-            if p['id'] == target_pattern_id:
-                target = p
-            else:
-                others.append(p)
-
-        if target is None or not others:
+        target = next((p for p in all_patterns if p['id'] == target_pattern_id), None)
+        if target is None:
+            return None
+        # Formacje z tym samym punktem D liczą swoje rozszerzenia i cele od tego D - ich poziomy
+        # leżą na D z definicji, więc "potwierdzałyby" D nim samym.
+        target_d_ts = target.get('d_point_timestamp')
+        others = [
+            p for p in all_patterns
+            if p['id'] != target_pattern_id
+            and (target_d_ts is None or p.get('d_point_timestamp') != target_d_ts)
+        ]
+        if not others:
             return None
 
         d_price = _get_d_price(target)
@@ -158,12 +161,8 @@ class FibClusterDetector:
                         'deviation_pct': round(abs(price - d_price) / abs(d_price) * 100, 4),
                     })
 
-        if len(matching_levels) < min_cluster_size:
-            return None
-
-        confidence = min(1.0, len(matching_levels) / 6.0)
-
-        # Deduplikuj po cenie (±0.01%) — wiele Fib levels mogą wylądować na tej samej cenie
+        # Deduplikuj po cenie - wiele formacji dzieli te same ramiona, a ten sam poziom liczony
+        # kilka razy zawyżał klaster. Próg i confidence liczone na unikalnych poziomach.
         seen_prices = set()
         unique_levels = []
         for lvl in matching_levels:
@@ -171,6 +170,11 @@ class FibClusterDetector:
             if rounded not in seen_prices:
                 seen_prices.add(rounded)
                 unique_levels.append(lvl)
+
+        if len(unique_levels) < min_cluster_size:
+            return None
+
+        confidence = min(1.0, len(unique_levels) / 6.0)
 
         # Top 10 najbliższych
         unique_levels.sort(key=lambda x: x['deviation_pct'])

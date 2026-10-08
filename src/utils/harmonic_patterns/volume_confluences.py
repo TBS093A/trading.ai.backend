@@ -11,6 +11,8 @@ import numpy as np
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+from ._common import d_point_price
+
 logger = logging.getLogger(__name__)
 
 # Volume Spike
@@ -165,7 +167,7 @@ class VolumeConfluenceDetector:
         if lookback < 20:
             return None
 
-        d_price = float(klines[d_index]['close'])
+        d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
         if d_price <= 0:
             return None
 
