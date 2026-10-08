@@ -260,6 +260,16 @@ def _quintiles(scores: np.ndarray, y: np.ndarray, r: np.ndarray) -> List[Dict[st
     return out
 
 
+def _calibration(z: np.ndarray, y: np.ndarray, bins: int = 10) -> List[Dict[str, Any]]:
+    """Kalibracja na teście: przewidywana szansa TP1 vs faktyczna, w decylach przewidywania."""
+    if len(z) < bins * 5:
+        return []
+    p = 1.0 / (1.0 + np.exp(-z))
+    order = np.argsort(p)
+    return [{"bin": i + 1, "n": int(len(c)), "predicted": round(float(p[c].mean()), 4),
+             "actual": round(float(y[c].mean()), 4)} for i, c in enumerate(np.array_split(order, bins))]
+
+
 def _matrix(samples: Sequence[Dict[str, float]], names: List[str]) -> np.ndarray:
     index = {n: i for i, n in enumerate(names)}
     X = np.zeros((len(samples), len(names)))
@@ -300,6 +310,11 @@ def fit(samples: Sequence[Tuple[Dict[str, float], int, float, int]], params_vers
         "base_win_rate_test": round(float(y_test.mean()), 4) if len(test) else None,
         "auc_test": _auc(z_test, y_test),
         "quintiles_test": _quintiles(z_test, y_test, r_test),
+        "calibration_test": _calibration(z_test, y_test),
+        "avg_r_test": round(float(r_test.mean()), 4) if len(test) else None,
+        "train_from": datetime.fromtimestamp(train[0][3] / 1000, tz=timezone.utc).isoformat() if train else None,
+        "test_to": datetime.fromtimestamp(test[-1][3] / 1000, tz=timezone.utc).isoformat() if test else None,
+        "features_considered": len(names),
     }
 
     names = names_for(samples)

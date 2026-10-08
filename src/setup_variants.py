@@ -219,8 +219,28 @@ def summarize(trades: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def report(trades: Iterable[Dict[str, Any]], cutoff_ms: Optional[int]) -> List[Dict[str, Any]]:
-    """Wiersz na wariant: wyniki całości, przed cutoff ("in") i po cutoff ("out" - poza próbką modelu siły)."""
+def equity_curve(trades: Sequence[Dict[str, Any]], points: int = 200) -> List[List[float]]:
+    """Skumulowane R po czasie wyjścia - [[exit_time_ms, cum_r], ...], przerzedzone do `points` punktów."""
+    curve, total = [], 0.0
+    for t in sorted(trades, key=lambda t: t["exit_time"]):
+        total += float(t["r"])
+        curve.append([int(t["exit_time"]), round(total, 3)])
+    if len(curve) <= points:
+        return curve
+    step = len(curve) / points
+    return [curve[int(i * step)] for i in range(points - 1)] + [curve[-1]]
+
+
+def breakdown(trades: Sequence[Dict[str, Any]], key: str) -> Dict[str, Dict[str, Any]]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for t in trades:
+        groups.setdefault(str(t.get(key)), []).append(t)
+    return {k: summarize(v) for k, v in sorted(groups.items())}
+
+
+def report(trades: Iterable[Dict[str, Any]], cutoff_ms: Optional[int], details: bool = True) -> List[Dict[str, Any]]:
+    """Wiersz na wariant: wyniki całości, przed cutoff ("in") i po cutoff ("out" - poza próbką modelu
+    siły); z details - krzywa kapitału w R i rozbicie na interwały / formacje (dashboard benchmarków)."""
     by_variant: Dict[str, List[Dict[str, Any]]] = {}
     for t in trades:
         by_variant.setdefault(t["variant"], []).append(t)
@@ -231,5 +251,9 @@ def report(trades: Iterable[Dict[str, Any]], cutoff_ms: Optional[int]) -> List[D
         if cutoff_ms is not None:
             row["in"] = summarize([t for t in ts if t["entry_time"] < cutoff_ms])
             row["out"] = summarize([t for t in ts if t["entry_time"] >= cutoff_ms])
+        if details:
+            row["equity"] = equity_curve(ts)
+            row["by_interval"] = breakdown(ts, "interval")
+            row["by_pattern"] = breakdown(ts, "pattern_type")
         rows.append(row)
     return rows

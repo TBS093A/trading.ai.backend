@@ -91,6 +91,10 @@ class VariantReportService:
                     f"{len(trades)} transakcji")
         return {"klines": len(klines), "trades": len(trades)}
 
+    async def reports(self, limit: int = 20) -> List[Dict[str, Any]]:
+        rows = await self.db.get_factory().get_harmonic_variant_reports_table().get_all(limit=limit)
+        return [{**r, "complete": r["pairs_done"] >= r["pairs_total"]} for r in rows]
+
     async def summary(self, report_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         table = self.db.get_factory().get_harmonic_variant_reports_table()
         report = await table.get_report(report_id)

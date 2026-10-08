@@ -53,6 +53,19 @@ class HarmonicStrengthModelsTable(AbstractTable):
                     row[c] = json.loads(row[c])
         return row
 
+    async def history(self, kind: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Przebiegi uczenia od najstarszego - do wykresów na dashboardzie modelu."""
+        rows = await self.fetch_all(
+            """SELECT id, params_version, kind, metrics_json, active, created_at FROM (
+                 SELECT * FROM harmonic_strength_models WHERE ($1::text IS NULL OR kind = $1)
+                 ORDER BY id DESC LIMIT $2) recent ORDER BY id""",
+            kind, limit,
+        )
+        for r in rows:
+            if isinstance(r.get("metrics_json"), str):
+                r["metrics_json"] = json.loads(r["metrics_json"])
+        return rows
+
     async def create(self, **kwargs) -> Optional[int]:
         return await self.save(kwargs["params_version"], kwargs["model"], kwargs.get("metrics") or {},
                                kwargs.get("kind", "entry"))

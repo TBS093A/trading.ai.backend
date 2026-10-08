@@ -26,6 +26,9 @@ PUT  /harmonics/tracked-assets/{asset_id}       (admin) dodaj / zmień; nowe int
 DELETE /harmonics/tracked-assets/{asset_id}     (admin) przestań śledzić (historia zostaje)
 GET  /harmonics/strength/model                  aktywny model siły formacji (metryki walidacji, najważniejsze wagi)
 POST /harmonics/strength/fit                    (admin) naucz model od nowa na wynikach setupów
+GET  /harmonics/strength/history?kind=          przebiegi uczenia (metryki w czasie) - dashboard modelu
+GET  /harmonics/strength/data                   dane uczące w czasie (rozstrzygnięte setupy na tydzień)
+GET  /harmonics/variants/reports                lista raportów wariantów (benchmarki)
 POST /harmonics/variants/run                    (admin) raport wariantów wejścia / zarządzania na historii
 GET  /harmonics/variants/report?report_id=      wyniki wariantów (całość, przed i po cutoff modelu siły)
 GET  /harmonics/alerts/settings                 alerty mailowe zalogowanego użytkownika
@@ -170,20 +173,45 @@ async def get_tracked_harmonic_setups():
             "tracked": await table.tracked_assets(harmonic_setups.params_version())}
 
 
+SETUP_SECTIONS = {
+    "active": ("waiting", "open"),
+    "won": ("win",),
+    "lost": ("loss",),
+    "junk": ("expired", "no_entry", "invalidated"),
+}
+
+
+@router.get("/setups/sections")
+async def get_setup_sections(asset_id: int = Query(..., ge=1), interval: str = Query(...)):
+    """Liczniki sekcji listy setupów w sidebarze (aktywne / wygrane / przegrane / śmieciowe)."""
+    db = await get_db()
+    counts = await db.get_factory().get_technical_analysis_harmonic_setups_table().status_counts(
+        asset_id, interval, harmonic_setups.params_version()
+    )
+    return {"sections": {name: {"statuses": list(st), "count": sum(counts.get(x, 0) for x in st)}
+                         for name, st in SETUP_SECTIONS.items()},
+            "by_status": counts}
+
+
 @router.get("/setups")
 async def get_harmonic_setups(
     asset_id: int = Query(..., ge=1),
     interval: str = Query(...),
     status: Optional[str] = Query(default=None, description="waiting | open | win | loss | expired | no_entry | invalidated"),
     active: bool = Query(default=False, description="tylko aktywne: waiting + open (lista w sidebarze)"),
+    section: Optional[str] = Query(default=None, description="active | won | lost | junk (sekcje sidebara)"),
     limit: int = Query(default=200, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
 ):
     """Setupy z wynikami; strength = siła pełna (od wejścia) albo wstępna (waiting, kind="pre")."""
+    if section is not None and section not in SETUP_SECTIONS:
+        raise HTTPException(status_code=422, detail=f"nieznana sekcja: {section}")
+    statuses = SETUP_SECTIONS["active"] if active else SETUP_SECTIONS.get(section) if section else None
     db = await get_db()
     table = db.get_factory().get_technical_analysis_harmonic_setups_table()
     version = harmonic_setups.params_version()
-    setups = await table.list(asset_id, interval, version, status=status, limit=limit,
-                              statuses=("waiting", "open") if active else None)
+    setups = await table.list(asset_id, interval, version, status=status, limit=limit, statuses=statuses,
+                              offset=offset, newest_exit_first=section in ("won", "lost", "junk"))
     for row in setups:
         row["strength"] = setup_strength_or_none(row)
     return {"params_version": version, "setups": setups}
@@ -277,6 +305,32 @@ async def attach_setups(db, asset_id: int, interval: str, patterns: List[Dict[st
         p["setup"] = found.get(keys[id(p)]) if keys[id(p)] else None
 
 
+@router.get("/strength/history")
+async def get_strength_history(kind: Optional[str] = Query(default=None, description="entry | pre"),
+                               limit: int = Query(default=50, ge=1, le=200)):
+    """Każdy przebieg uczenia: data, rodzaj, metryki walidacji (AUC, kwintyle, kalibracja)."""
+    if kind is not None and kind not in pattern_strength.KINDS:
+        raise HTTPException(status_code=422, detail=f"nieznany rodzaj modelu: {kind}")
+    db = await get_db()
+    rows = await db.get_factory().get_harmonic_strength_models_table().history(kind, limit)
+    return {"runs": [{"id": r["id"], "kind": r["kind"], "created_at": r["created_at"], "active": r["active"],
+                      "params_version": r["params_version"], "metrics": r["metrics_json"]} for r in rows]}
+
+
+@router.get("/strength/data")
+async def get_strength_training_data():
+    """Przyrost danych uczących: rozstrzygnięte setupy bieżącej serii na tydzień wejścia + statusy."""
+    db = await get_db()
+    table = db.get_factory().get_technical_analysis_harmonic_setups_table()
+    version = harmonic_setups.params_version()
+    weeks = await table.decided_by_week(version)
+    return {"params_version": version,
+            "weeks": [{"week": w["week"], "trades": int(w["trades"]), "wins": int(w["wins"]),
+                       "win_rate": round(int(w["wins"]) / int(w["trades"]), 4) if w["trades"] else None,
+                       "avg_r": round(float(w["avg_r"]), 4) if w["avg_r"] is not None else None} for w in weeks],
+            "totals": await table.status_totals(version)}
+
+
 def _enqueue_strength_fit() -> str:
     from .celery_tasks.analysis_tasks import fit_strength_model_task
 
@@ -308,6 +362,13 @@ async def run_variant_report(
     for t in created["pairs"]:
         await asyncio.to_thread(_enqueue_variant_pair, created["report_id"], t["asset_id"], t["interval"])
     return {"report_id": created["report_id"], "cutoff_ms": created["cutoff_ms"], "pairs": len(created["pairs"])}
+
+
+@router.get("/variants/reports")
+async def list_variant_reports(limit: int = Query(default=20, ge=1, le=100)):
+    from .analysis_services.variant_report_service import VariantReportService
+
+    return {"reports": await VariantReportService(await get_db()).reports(limit)}
 
 
 @router.get("/variants/report")
