@@ -249,7 +249,9 @@ def notify_harmonic_setup_events_task(self) -> Dict[str, Any]:
         db = DatabaseFacade().get_database_postgresql()
         await db.init_db()
         try:
-            return await harmonic_alerts.notify_pending(db, harmonic_alerts.SmtpSettings.from_config(config))
+            return await harmonic_alerts.notify_pending(
+                db, harmonic_alerts.SmtpSettings.from_config(config), app_url=harmonic_alerts.app_url_from_config(config)
+            )
         finally:
             await db.close_db()
 

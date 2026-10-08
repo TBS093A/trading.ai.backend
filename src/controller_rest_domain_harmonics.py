@@ -342,8 +342,10 @@ async def send_test_alert(current_user: AuthUser = Depends(require_auth)):
     if not settings.get("email"):
         raise HTTPException(status_code=422, detail="najpierw zapisz adres e-mail w ustawieniach alertów")
     try:
+        _, body, html = harmonic_alerts.render(settings, [harmonic_alerts.sample_event()],
+                                               harmonic_alerts.app_url_from_config(config))
         await asyncio.to_thread(harmonic_alerts.send_email, smtp, settings["email"],
-                                "[trading.ai] test alertów", "Alerty setupów działają.")
+                                "[trading.ai] test alertów", "Alerty setupów działają - przykład:\n\n" + body, html)
     except Exception as e:
         logger.error(f"Test alertu dla użytkownika {current_user.user_id} nie powiódł się: {e}")
         raise HTTPException(status_code=502, detail="wysyłka nie powiodła się - sprawdź logi serwera")

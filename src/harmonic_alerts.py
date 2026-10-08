@@ -4,6 +4,9 @@ Alerty mailowe o zmianach setupów XABCD (zdarzenia z harmonic_setup_events).
 Każdy użytkownik dostaje co najwyżej jeden mail na przebieg - zestawienie zdarzeń pasujących do
 jego ustawień (harmonic_setup_alert_settings: statusy, assety, interwały). SMTP z konfiguracji
 (SMTP_*); bez SMTP_HOST zdarzenia czekają w bazie (nic nie jest oznaczane jako wysłane).
+
+Mail ma dwie wersje: HTML w stylu frontu (szablon src/templates/email/setup_alerts.html, Jinja2 z
+autoescape) i zwykły tekst (describe) dla klientów bez HTML.
 """
 
 import logging
@@ -12,7 +15,11 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 logger = logging.getLogger(__name__)
 
@@ -99,21 +106,140 @@ def describe(event: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render(subscriber: Dict[str, Any], events: Sequence[Dict[str, Any]]) -> Tuple[str, str]:
+# Motyw frontu (trading.ai.frontend src/styles: --bg-*, --text-*, --accent-*).
+THEME = {
+    "bg": "#060810", "card": "#0f1419", "border": "#21262d",
+    "text": "#e6edf3", "secondary": "#8b949e", "muted": "#484f58",
+    "accent": "#00f0ff", "accent_dim": "#00a0aa",
+    "green": "#00ff88", "red": "#ff3366", "yellow": "#ffcc00", "orange": "#ff9933",
+    "purple": "#9945ff", "magenta": "#ff00aa",
+}
+FONTS = {
+    "sans": "'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
+    "mono": "'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
+}
+STATUS_STYLE = {   # status -> (krótka etykieta, kolor)
+    "waiting": ("WAITING", THEME["yellow"]),
+    "open": ("OPEN", THEME["accent"]),
+    "win": ("WIN", THEME["green"]),
+    "loss": ("LOSS", THEME["red"]),
+    "expired": ("EXPIRED", THEME["orange"]),
+    "no_entry": ("NO ENTRY", THEME["secondary"]),
+    "invalidated": ("INVALIDATED", THEME["purple"]),
+}
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates" / "email"
+
+
+@lru_cache(maxsize=1)
+def _templates() -> Environment:
+    return Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)),
+                       autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)
+
+
+def app_url_from_config(config) -> Optional[str]:
+    """Adres frontu do przycisku w mailu: FRONTEND_URL, inaczej pierwszy origin z CORS."""
+    url = (getattr(config, "frontend_url", "") or "").strip()
+    if not url:
+        origins = (getattr(config, "cors_allowed_origins_str", "") or "").split(",")
+        url = next((o.strip() for o in origins if o.strip().startswith("https://")), "")
+    return url.rstrip("/") or None
+
+
+def _local_time(ms: Optional[int]) -> str:
+    if ms is None:
+        return "-"
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.fromtimestamp(ms / 1000, tz=ZoneInfo("Europe/Warsaw")).strftime("%Y-%m-%d %H:%M %Z")
+    except Exception:   # obraz bez bazy stref czasowych - zostaje UTC
+        return ""
+
+
+def _plural_changes(n: int) -> str:
+    if n == 1:
+        return "1 zmiana setupu"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return f"{n} zmiany setupów"
+    return f"{n} zmian setupów"
+
+
+def _event_view(e: Dict[str, Any]) -> Dict[str, Any]:
+    p = e.get("payload") or {}
+    label, color = STATUS_STYLE.get(e["to_status"], (e["to_status"].upper(), THEME["secondary"]))
+    bull = bool(e["is_bullish"])
+    prz = p.get("prz") or [None, None]
+    levels = [{"label": "PRZ", "value": f"{_fmt_price(prz[0])} – {_fmt_price(prz[1])}", "color": THEME["text"]}]
+    if p.get("entry_price") is not None:
+        levels += [
+            {"label": "Wejście", "value": _fmt_price(p["entry_price"]), "color": THEME["accent"]},
+            {"label": "SL", "value": _fmt_price(p.get("sl")), "color": THEME["red"]},
+            {"label": "TP1", "value": _fmt_price(p.get("tp1")), "color": THEME["green"]},
+            {"label": "TP2", "value": _fmt_price(p.get("tp2")), "color": THEME["green"]},
+        ]
+    r = p.get("r_multiple")
+    return {
+        "symbol": p.get("symbol", str(e["asset_id"])), "interval": e["interval"], "pattern": e["pattern_type"],
+        "direction": "LONG" if bull else "SHORT",
+        "direction_color": THEME["green"] if bull else THEME["red"],
+        "direction_bg": "rgba(0,255,136,0.12)" if bull else "rgba(255,51,102,0.12)",
+        "status_label": label, "status_color": color,
+        "from_label": STATUS_STYLE.get(e.get("from_status"), (None,))[0] if e.get("from_status") else None,
+        "description": STATUS_LABELS.get(e["to_status"], e["to_status"]),
+        "r": f"{r:+.2f} R" if r is not None else None,
+        "r_color": THEME["green"] if (r or 0) > 0 else THEME["red"],
+        "levels": levels,
+        "time_utc": _fmt_time(e["event_time"]), "time_local": _local_time(e["event_time"]),
+    }
+
+
+def _subject(events: Sequence[Dict[str, Any]], counts: Dict[str, int]) -> str:
+    if len(events) == 1:
+        e = events[0]
+        return (f"[trading.ai] {(e.get('payload') or {}).get('symbol', e['asset_id'])} {e['interval']} "
+                f"{e['pattern_type']} - {e['to_status']}")
+    summary = ", ".join(f"{k}: {v}" for k, v in sorted(counts.items()))
+    return f"[trading.ai] {_plural_changes(len(events))} ({summary})"
+
+
+def render(subscriber: Dict[str, Any], events: Sequence[Dict[str, Any]],
+           app_url: Optional[str] = None) -> Tuple[str, str, str]:
+    """(temat, tekst, HTML) zestawienia zdarzeń dla jednego odbiorcy."""
     counts: Dict[str, int] = {}
     for e in events:
         counts[e["to_status"]] = counts.get(e["to_status"], 0) + 1
-    summary = ", ".join(f"{k}: {v}" for k, v in sorted(counts.items()))
-    if len(events) == 1:
-        e = events[0]
-        subject = (f"[trading.ai] {(e.get('payload') or {}).get('symbol', e['asset_id'])} {e['interval']} "
-                   f"{e['pattern_type']} - {e['to_status']}")
-    else:
-        subject = f"[trading.ai] {len(events)} zmian setupów ({summary})"
+    subject = _subject(events, counts)
     body = "\n\n".join(describe(e) for e in events)
     body += ("\n\n--\nUstawienia alertów: zakładka Skuteczność formacji -> Alerty. "
              "Setup = X..C + PRZ znane w chwili zdarzenia; SL/TP wg reguł z wykresu.")
-    return subject, body
+    if app_url:
+        body += f"\n{app_url}"
+
+    views = [_event_view(e) for e in events]
+    if len(views) == 1:
+        v = views[0]
+        headline = f"{v['symbol']} {v['interval']} {v['pattern']}: {v['description']}"
+    else:
+        headline = _plural_changes(len(views))
+    summary = [{"label": STATUS_STYLE.get(k, (k.upper(),))[0], "count": n,
+                "color": STATUS_STYLE.get(k, (None, THEME["secondary"]))[1]}
+               for k, n in sorted(counts.items(), key=lambda kv: list(STATUS_STYLE).index(kv[0])
+                                  if kv[0] in STATUS_STYLE else 99)]
+    html = _templates().get_template("setup_alerts.html").render(
+        subject=subject, headline=headline, preheader=" · ".join(f"{s['label']} {s['count']}" for s in summary),
+        summary=summary, events=views, app_url=app_url, settings_url=None, c=THEME, f=FONTS,
+    )
+    return subject, body, html
+
+
+def sample_event() -> Dict[str, Any]:
+    """Przykładowe zdarzenie do maila testowego (POST /harmonics/alerts/test)."""
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
+    return {
+        "id": 0, "asset_id": 0, "interval": "1h", "pattern_type": "gartley", "is_bullish": True,
+        "from_status": "open", "to_status": "win", "event_time": now,
+        "payload": {"symbol": "BTC/USDT (przykład)", "prz": [61850.0, 62120.5], "entry_price": 62120.5,
+                    "sl": 61240.0, "tp1": 63550.0, "tp2": 64480.0, "r_multiple": 1.62},
+    }
 
 
 class SmtpSession:
@@ -143,12 +269,14 @@ class SmtpSession:
             raise
         return self
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    def send(self, to: str, subject: str, body: str, html: Optional[str] = None) -> None:
         msg = EmailMessage()
         msg["From"] = self.settings.sender
         msg["To"] = to
         msg["Subject"] = subject
         msg.set_content(body)
+        if html:
+            msg.add_alternative(html, subtype="html")
         self.server.send_message(msg)
 
     def __exit__(self, *exc) -> None:
@@ -158,9 +286,9 @@ class SmtpSession:
             self.server.close()
 
 
-def send_email(settings: SmtpSettings, to: str, subject: str, body: str) -> None:
+def send_email(settings: SmtpSettings, to: str, subject: str, body: str, html: Optional[str] = None) -> None:
     with SmtpSession(settings) as session:
-        session.send(to, subject, body)
+        session.send(to, subject, body, html)
 
 
 # Błędy, po których nie ma sensu wysyłać dalej w tym przebiegu - serwer / sieć / logowanie.
@@ -173,7 +301,8 @@ MAX_EVENT_AGE_S = 24 * 3600
 
 
 async def notify_pending(db, settings: Optional[SmtpSettings], session_factory=SmtpSession,
-                         limit: int = 1000, now: Optional[datetime] = None) -> Dict[str, Any]:
+                         limit: int = 1000, now: Optional[datetime] = None,
+                         app_url: Optional[str] = None) -> Dict[str, Any]:
     """Wysyła zestawienia oczekujących zdarzeń; oznacza jako obsłużone tylko to, co doszło.
 
     - brak SMTP albo błąd połączenia / logowania -> nic nie jest oznaczane, następny przebieg ponawia;
@@ -212,9 +341,9 @@ async def notify_pending(db, settings: Optional[SmtpSettings], session_factory=S
         try:
             with session_factory(settings) as session:
                 for sub, mine in plan:
-                    subject, body = render(sub, mine)
+                    subject, body, html = render(sub, mine, app_url)
                     try:
-                        session.send(sub["email"], subject, body)
+                        session.send(sub["email"], subject, body, html)
                         sent += 1
                     except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError,
                             smtplib.SMTPSenderRefused) as e:
