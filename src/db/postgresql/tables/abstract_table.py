@@ -19,6 +19,10 @@ class CleanupRule:
 class AbstractTable(ABC):
     """Abstrakcyjna klasa bazowa dla wszystkich tabel."""
 
+    # Tabele pomocnicze tworzone w create_table() tej klasy (np. szczegóły raportu) - janitor nie
+    # raportuje ich jako "spoza rejestru".
+    EXTRA_TABLES: tuple = ()
+
     def cleanup_rules(self) -> List[CleanupRule]:
         """Dane tej tabeli, które straciły znaczenie - janitor je liczy i (poza dry-run) usuwa."""
         return []
