@@ -327,13 +327,13 @@ class DatabasePostgreSQL:
             await self.init_db()
         
         async with self.pool.acquire() as connection:
-            # Odwrotność kolejności tworzenia + dawne tabele (database_postgresql_factory.LEGACY_TABLES)
+            # Odwrotność kolejności tworzenia (database_postgresql_factory.creation_order)
             table_order = self.get_factory().get_drop_order()
             table_order.append(migrations.MIGRATIONS_TABLE)
 
             for table_name in table_order:
                 try:
-                    # table_name pochodzi wyłącznie z rejestru tabel / LEGACY_TABLES, nie z inputu
+                    # table_name pochodzi wyłącznie z rejestru tabel, nie z inputu
                     await connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")  # nosemgrep
                     logger.info(f"Usunięto tabelę: {table_name}")
                 except Exception as e:

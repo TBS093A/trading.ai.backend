@@ -16,7 +16,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from .postgresql.database_postgresql_factory import LEGACY_TABLES
 from .postgresql.migrations import MIGRATIONS_TABLE
 from .postgresql.tables.abstract_table import CleanupRule
 
@@ -117,10 +116,7 @@ class DatabaseJanitor:
                    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
                    ORDER BY bytes DESC"""
             )
-        return [
-            {**dict(r), "legacy": r["name"] in LEGACY_TABLES}
-            for r in rows if r["name"] not in known
-        ]
+        return [dict(r) for r in rows if r["name"] not in known]
 
     @staticmethod
     def _log(report: JanitorReport) -> None:

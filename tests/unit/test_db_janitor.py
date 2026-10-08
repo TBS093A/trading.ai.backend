@@ -19,9 +19,7 @@ from src.db import janitor as janitor_mod
 from src.db.janitor import DatabaseJanitor
 from src.db.postgresql import migrations
 from src.db.postgresql.database_postgresql import DatabasePostgreSQL
-from src.db.postgresql.database_postgresql_factory import (
-    LEGACY_TABLES, DatabasePostgreSQLFactory, creation_order,
-)
+from src.db.postgresql.database_postgresql_factory import DatabasePostgreSQLFactory, creation_order
 from src.db.postgresql.tables.abstract_table import CleanupRule
 from src.db.postgresql.tables.technical_analysis_harmonic_scan_windows_table import (
     TechnicalAnalysisHarmonicScanWindowsTable,
@@ -72,11 +70,8 @@ class TestTableOrder(unittest.TestCase):
                 if ref in position and ref != name:
                     self.assertLess(position[ref], position[name], f"{name} -> {ref}")
 
-    def test_drop_order_is_the_reverse_plus_legacy_tables(self):
-        drop = self.factory.get_drop_order()
-        n = len(self.factory.get_creation_order())
-        self.assertEqual(drop[:n], list(reversed(self.factory.get_creation_order())))
-        self.assertEqual(tuple(drop[n:]), LEGACY_TABLES)
+    def test_drop_order_is_the_reverse(self):
+        self.assertEqual(self.factory.get_drop_order(), list(reversed(self.factory.get_creation_order())))
 
     def test_cycles_are_reported(self):
         with self.assertRaises(ValueError):
@@ -171,14 +166,14 @@ class TestJanitor(unittest.TestCase):
         self.assertEqual(report.rules[0].error, "bad sql")
         self.assertIsNone(report.rules[1].error)
 
-    def test_unknown_tables_skip_the_registry_and_flag_legacy_ones(self):
+    def test_unknown_tables_skip_the_registry(self):
         rows = [{"name": "users", "approx_rows": 1, "bytes": 1},
                 {"name": "schema_migrations", "approx_rows": 1, "bytes": 1},
                 {"name": "chart_images", "approx_rows": 9, "bytes": 4096},
                 {"name": "mystery", "approx_rows": 0, "bytes": 8192}]
         conn = FakeConn(fetchval=lambda *a: 0, fetch=lambda *a: rows)
         unknown = run(janitor_with(conn, []).run(dry_run=True)).unknown_tables
-        self.assertEqual([(t["name"], t["legacy"]) for t in unknown], [("chart_images", True), ("mystery", False)])
+        self.assertEqual([t["name"] for t in unknown], ["chart_images", "mystery"])
 
     def test_table_rules(self):
         factory = DatabasePostgreSQLFactory(mock.MagicMock())
