@@ -76,9 +76,24 @@
       {%- endfor %}
     </table>
 
-    <div style="margin-top:10px;font-family:{{ f.mono }};font-size:11px;color:{{ c.muted }};">
-      {{ e.time_utc }} &nbsp;·&nbsp; {{ e.time_local }}
-    </div>
+    {%- if e.strength %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;">
+      <tr><td style="background:{{ e.strength.bg }};border-radius:6px;padding:8px 12px;">
+        <span style="font-family:{{ f.mono }};font-size:12px;font-weight:600;color:{{ c.text }};">SIŁA {{ e.strength.score }}/100</span>
+        <span style="font-family:{{ f.sans }};font-size:11px;color:{{ c.secondary }};">&nbsp;({{ e.strength.kind }}{% if e.strength.p_win %}, szansa TP1 {{ e.strength.p_win }}{% endif %})</span>
+        {%- if e.strength.factors %}
+        <div style="font-family:{{ f.sans }};font-size:11px;color:{{ c.secondary }};margin-top:3px;">{{ e.strength.factors | join(" · ") }}</div>
+        {%- endif %}
+      </td></tr>
+    </table>
+    {%- endif %}
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;"><tr>
+      <td style="font-family:{{ f.mono }};font-size:11px;color:{{ c.muted }};">{{ e.time_utc }} &nbsp;·&nbsp; {{ e.time_local }}</td>
+      {%- if e.chart_url %}
+      <td align="right"><a href="{{ e.chart_url }}" style="font-family:{{ f.sans }};font-size:12px;font-weight:600;color:{{ c.accent }};text-decoration:none;">Pokaż na wykresie →</a></td>
+      {%- endif %}
+    </tr></table>
   </td></tr>
   {%- endfor %}
 

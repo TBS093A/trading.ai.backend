@@ -65,8 +65,10 @@ class TechnicalAnalysisResponse(BaseModel):
     d_point_timestamp: Optional[int] = None
     ta_object_json: Dict[str, Any]
     confluences_json: Optional[Dict[str, Any]] = None
-    # Siła formacji 0-100 z modelu (src/pattern_strength.py): {score, p_win, factors[], model_trained_at}
+    # Siła formacji 0-100 z modelu (src/pattern_strength.py): {score, p_win, factors[], model_trained_at, kind}
     strength: Optional[Dict[str, Any]] = None
+    # Setup o tych samych punktach X..C (alerty): {id, status, entry_*, sl, tp1, tp2, exit_time, r_multiple, ...}
+    setup: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _fill_strength(self):
@@ -502,6 +504,9 @@ async def get_technical_analyses_by_asset_and_interval(
         
         has_more = len(analyses) > limit
         page_analyses = analyses[:limit]
+        # Lista w sidebarze: formacja dostaje setup o tych samych punktach (status z alertów).
+        from .controller_rest_domain_harmonics import attach_setups
+        await attach_setups(db, asset_id, interval, page_analyses)
         
         analysis_responses = [
             TechnicalAnalysisResponse(
@@ -516,7 +521,8 @@ async def get_technical_analyses_by_asset_and_interval(
                 c_point_timestamp=a.get('c_point_timestamp'),
                 d_point_timestamp=a.get('d_point_timestamp'),
                 ta_object_json=a['ta_object_json'],
-                confluences_json=a.get('confluences_json')
+                confluences_json=a.get('confluences_json'),
+                setup=a.get('setup')
             )
             for a in page_analyses
         ]

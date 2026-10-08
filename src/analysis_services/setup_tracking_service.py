@@ -8,6 +8,8 @@ from .. import harmonic_scan, harmonic_setups
 from ..utils.harmonic_patterns import ConfluenceDetector, merge_confluences
 from ..utils.harmonic_patterns.fib_confluences import INTERVAL_HIERARCHY
 from .confluence_postprocessor import HIGHER_TF_KLINES_WINDOW, POST_PROCESSING_TYPES, post_processing_entries
+from .strength_service import refresh_cached_model, setup_strength_or_none
+from ..pattern_strength import LEVEL_TYPES
 from .klines_source import KlinesSource
 
 logger = logging.getLogger(__name__)
@@ -83,17 +85,47 @@ class SetupTrackingService:
                 extra = []
             return merge_confluences(base, extra, replace_types=POST_PROCESSING_TYPES)
 
+        def pre_confluences_fn(setup, all_klines):
+            # Setup czeka na PRZ: tylko konfluencje poziomowe, D = bliższa krawędź PRZ, dane do teraz.
+            near_edge = setup.prz_max if setup.is_bullish else setup.prz_min
+            last = len(all_klines) - 1
+            pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
+            pp['D'] = {'index': last, 'price': near_edge}
+            try:
+                base = ConfluenceDetector.detect(all_klines, pp, setup.is_bullish, last, interval) or {}
+            except Exception as e:
+                logger.debug(f"Konfluencje wstępne setupu {setup.key} nie powiodły się: {e}")
+                base = {'total_score': 0, 'confluences': []}
+            now_ts = int(all_klines[-1]['open_time']) + step   # zamknięcie ostatniej świecy
+            target = {
+                'id': -1, 'interval': interval, 'd_point_timestamp': now_ts,
+                'c_point_timestamp': int(all_klines[setup.points['C'].index]['open_time']),
+                'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
+                                   'points': {'D': {'price': near_edge, 'open_time': now_ts}},
+                                   'fibonacci_levels': {}},
+            }
+            try:
+                extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
+            except Exception as e:
+                logger.debug(f"Post-processing wstępny setupu {setup.key} nie powiódł się: {e}")
+                extra = []
+            levels = [c for c in base.get('confluences', []) if c.get('type') in LEVEL_TYPES]
+            return merge_confluences({'confluences': levels}, extra, replace_types=POST_PROCESSING_TYPES)
+
         rows = harmonic_setups.evaluate(
             klines, asset_id, interval, source, skip_keys=final_keys,
             targets_fn=harmonic_setups.app_targets, confluences_fn=confluences_fn,
+            pre_confluences_fn=pre_confluences_fn,
         )
         events = []
         if source == 'live':
             # Statusy sprzed tego przebiegu - zdarzenie = setup nowy albo ze zmienionym statusem.
             previous = await table.get_unresolved_statuses(asset_id, interval, version, int(klines[0]['open_time']))
+            await refresh_cached_model(self.db)   # siła w treści alertu (worker ma własny cache)
             events = harmonic_setups.status_events(
                 rows, previous, symbol=resolved.symbol,
                 new_since=int(klines[-1]['open_time']) - harmonic_setups.EVENT_LOOKBACK_CANDLES * step,
+                strength_fn=setup_strength_or_none,
             )
         saved = await table.upsert_many(rows)
         if events:

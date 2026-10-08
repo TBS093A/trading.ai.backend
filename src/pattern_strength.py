@@ -47,6 +47,11 @@ CONFLUENCE_CATALOG: Dict[str, Tuple[str, str]] = {
     "obv_bullish_divergence": ("volume", "bullish"), "obv_bearish_divergence": ("volume", "bearish"),
 }
 CATEGORIES = ("momentum", "candles", "fibonacci", "structure", "volume")
+# Konfluencje poziomowe - znane, zanim cena dojdzie do PRZ (siła wstępna setupu "waiting").
+# Pozostałe (świece, RSI/stochastic, dywergencje, wolumen, MACD) to reakcja ceny w strefie.
+LEVEL_TYPES = frozenset(t for t, (cat, _) in CONFLUENCE_CATALOG.items() if cat in ("fibonacci", "structure")) | {
+    "volume_profile"}
+KINDS = ("entry", "pre")   # siła pełna (od wejścia) i wstępna (setup czeka na PRZ)
 CATEGORY_LABELS = {"momentum": "RSI / Stochastic", "candles": "świece", "fibonacci": "Fibonacci",
                    "structure": "S/R / trendline", "volume": "wolumen / MACD / OBV"}
 
@@ -118,14 +123,28 @@ def _confluence_list(confluences_json: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def setup_features(row: Dict[str, Any]) -> Dict[str, float]:
-    """Wiersz technical_analysis_harmonic_setups (z wejściem) -> cechy; D = wejście."""
+def setup_features(row: Dict[str, Any], kind: str = "entry") -> Dict[str, float]:
+    """Wiersz technical_analysis_harmonic_setups -> cechy.
+
+    kind="entry": D = wejście, wszystkie konfluencje z chwili wejścia.
+    kind="pre":   tylko konfluencje poziomowe (LEVEL_TYPES). Dla setupu z wejściem - podzbiór
+                  konfluencji z wejścia (tak uczymy model wstępny); dla czekającego - pre_confluences_json
+                  liczone na bliższej krawędzi PRZ, D = ta krawędź.
+    """
     pts = row.get("points_json") or {}
     points = {k: (v["time"], v["price"]) for k, v in pts.items() if isinstance(v, dict)}
     if row.get("entry_time") is not None and row.get("entry_price") is not None:
         points["D"] = (row["entry_time"], row["entry_price"])
+        confluences = _confluence_list(row.get("confluences_json"))
+    else:
+        near_edge = row.get("prz_max") if row.get("is_bullish") else row.get("prz_min")
+        if near_edge is not None and row.get("created_time") is not None:
+            points["D"] = (row["created_time"], near_edge)
+        confluences = _confluence_list(row.get("pre_confluences_json"))
+    if kind == "pre":
+        confluences = [c for c in confluences if isinstance(c, dict) and c.get("type") in LEVEL_TYPES]
     return features(row["pattern_type"], row["is_bullish"], row.get("interval"), row.get("spacing"),
-                    _confluence_list(row.get("confluences_json")), ratio_deviation(points, row["pattern_type"]))
+                    confluences, ratio_deviation(points, row["pattern_type"]))
 
 
 def pattern_features(row: Dict[str, Any]) -> Dict[str, float]:
@@ -154,6 +173,7 @@ class StrengthModel:
     trained_at: str = ""
     params_version: str = ""
     model_version: int = MODEL_VERSION
+    kind: str = "entry"
 
     def as_dict(self) -> Dict[str, Any]:
         return dict(self.__dict__)
@@ -178,6 +198,7 @@ class StrengthModel:
             "p_win": round(1.0 / (1.0 + math.exp(-z)), 4),
             "factors": [{"feature": n, "label": feature_label(n), "impact": round(v, 3)} for n, v in contributions],
             "model_trained_at": self.trained_at,
+            "kind": self.kind,
         }
 
 
@@ -249,7 +270,8 @@ def _matrix(samples: Sequence[Dict[str, float]], names: List[str]) -> np.ndarray
     return X
 
 
-def fit(samples: Sequence[Tuple[Dict[str, float], int, float, int]], params_version: str = "") -> StrengthModel:
+def fit(samples: Sequence[Tuple[Dict[str, float], int, float, int]], params_version: str = "",
+        kind: str = "entry") -> StrengthModel:
     """samples: (cechy, 1 = TP1 przed SL, R transakcji, czas wejścia ms). Zwraca model produkcyjny
     (uczony na całości) z metrykami z walidacji na najnowszych (1 - TRAIN_SHARE) setupach."""
     if len(samples) < 200:
@@ -286,16 +308,16 @@ def fit(samples: Sequence[Tuple[Dict[str, float], int, float, int]], params_vers
     z = b + X @ w
     quantiles = [float(v) for v in np.quantile(z, np.linspace(0, 1, 101))]
     return StrengthModel(feature_names=names, weights=[round(float(v), 6) for v in w], intercept=round(b, 6),
-                         quantiles=quantiles, metrics=metrics, params_version=params_version,
+                         quantiles=quantiles, metrics=metrics, params_version=params_version, kind=kind,
                          trained_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
 
-def training_samples(rows: Iterable[Dict[str, Any]]) -> List[Tuple[Dict[str, float], int, float, int]]:
+def training_samples(rows: Iterable[Dict[str, Any]], kind: str = "entry") -> List[Tuple[Dict[str, float], int, float, int]]:
     out = []
     for r in rows:
         if r.get("status") not in DECIDED or r.get("entry_time") is None:
             continue
-        out.append((setup_features(r), 1 if r["status"] == "win" else 0, float(r.get("r_multiple") or 0.0),
+        out.append((setup_features(r, kind), 1 if r["status"] == "win" else 0, float(r.get("r_multiple") or 0.0),
                     int(r["entry_time"])))
     return out
 

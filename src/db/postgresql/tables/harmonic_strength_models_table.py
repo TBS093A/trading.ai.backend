@@ -10,13 +10,14 @@ logger = logging.getLogger(__name__)
 class HarmonicStrengthModelsTable(AbstractTable):
     """Modele siły formacji (src/pattern_strength.py). Aktywny jest najnowszy wiersz z active = TRUE."""
 
-    KEEP_MODELS = 10
+    KEEP_MODELS = 20   # 10 przebiegów uczenia x (entry, pre)
 
     def create_table(self) -> str:
         return """
         CREATE TABLE IF NOT EXISTS harmonic_strength_models (
             id SERIAL PRIMARY KEY,
             params_version VARCHAR(32) NOT NULL,
+            kind VARCHAR(10) NOT NULL DEFAULT 'entry',
             model_json JSONB NOT NULL,
             metrics_json JSONB,
             active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -28,22 +29,23 @@ class HarmonicStrengthModelsTable(AbstractTable):
         return [CleanupRule(
             name="harmonic_strength_models.old",
             table="harmonic_strength_models",
-            description=f"modele siły starsze niż {self.KEEP_MODELS} ostatnich",
+            description=f"modele siły starsze niż {self.KEEP_MODELS} ostatnich (każdego rodzaju razem)",
             where="id NOT IN (SELECT id FROM harmonic_strength_models ORDER BY id DESC LIMIT $1)",
             args=(self.KEEP_MODELS,),
         )]
 
-    async def save(self, params_version: str, model: Dict[str, Any], metrics: Dict[str, Any]) -> Optional[int]:
+    async def save(self, params_version: str, model: Dict[str, Any], metrics: Dict[str, Any],
+                   kind: str = "entry") -> Optional[int]:
         return await self.fetch_val(
-            """INSERT INTO harmonic_strength_models (params_version, model_json, metrics_json)
-            VALUES ($1, $2, $3) RETURNING id""",
-            params_version, json.dumps(model), json.dumps(metrics),
+            """INSERT INTO harmonic_strength_models (params_version, kind, model_json, metrics_json)
+            VALUES ($1, $2, $3, $4) RETURNING id""",
+            params_version, kind, json.dumps(model), json.dumps(metrics),
         )
 
-    async def get_active(self) -> Optional[Dict[str, Any]]:
+    async def get_active(self, kind: str = "entry") -> Optional[Dict[str, Any]]:
         row = await self.fetch_one(
-            "SELECT id, params_version, model_json, metrics_json, created_at FROM harmonic_strength_models "
-            "WHERE active ORDER BY id DESC LIMIT 1"
+            "SELECT id, params_version, kind, model_json, metrics_json, created_at FROM harmonic_strength_models "
+            "WHERE active AND kind = $1 ORDER BY id DESC LIMIT 1", kind,
         )
         if row:
             for c in ("model_json", "metrics_json"):
@@ -52,7 +54,8 @@ class HarmonicStrengthModelsTable(AbstractTable):
         return row
 
     async def create(self, **kwargs) -> Optional[int]:
-        return await self.save(kwargs["params_version"], kwargs["model"], kwargs.get("metrics") or {})
+        return await self.save(kwargs["params_version"], kwargs["model"], kwargs.get("metrics") or {},
+                               kwargs.get("kind", "entry"))
 
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetch_one("SELECT * FROM harmonic_strength_models WHERE id = $1", record_id)

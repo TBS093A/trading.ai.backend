@@ -11,13 +11,14 @@ COLUMNS = (
     "asset_id", "interval", "params_version", "pattern_type", "is_bullish", "spacing",
     "x_time", "a_time", "b_time", "c_time", "points_json", "prz_min", "prz_max", "created_time",
     "status", "entry_time", "entry_price", "sl", "tp1", "tp2", "targets_source", "exit_time",
-    "r_multiple", "tp2_reached", "mfe_r", "mae_r", "confluences_json", "source",
+    "r_multiple", "tp2_reached", "mfe_r", "mae_r", "confluences_json", "pre_confluences_json", "source",
 )
 # Pola wyniku - jedyne, które upsert zmienia w istniejącym, jeszcze nierozstrzygniętym setupie.
 OUTCOME_COLUMNS = (
     "status", "entry_time", "entry_price", "sl", "tp1", "tp2", "targets_source", "exit_time",
-    "r_multiple", "tp2_reached", "mfe_r", "mae_r", "confluences_json",
+    "r_multiple", "tp2_reached", "mfe_r", "mae_r", "confluences_json", "pre_confluences_json",
 )
+JSON_COLUMNS = ("points_json", "confluences_json", "pre_confluences_json")
 GROUPABLE = ("pattern_type", "interval", "asset_id", "is_bullish", "source", "targets_source", "spacing")
 
 
@@ -59,6 +60,7 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
             mfe_r DOUBLE PRECISION,
             mae_r DOUBLE PRECISION,
             confluences_json JSONB,
+            pre_confluences_json JSONB,
             source VARCHAR(10) NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE (asset_id, interval, params_version, pattern_type, x_time, a_time, b_time, c_time)
@@ -100,7 +102,7 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
             f"WHERE technical_analysis_harmonic_setups.status NOT IN ({final})"
         )  # nosemgrep: nazwy kolumn i statusy to stałe z tego modułu, wartości idą parametrami
         args = [
-            tuple(json.dumps(r[c]) if c in ("points_json", "confluences_json") and r.get(c) is not None else r.get(c)
+            tuple(json.dumps(r[c]) if c in JSON_COLUMNS and r.get(c) is not None else r.get(c)
                   for c in COLUMNS)
             for r in rows
         ]
@@ -139,6 +141,25 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
             asset_id, interval, params_version, since_c_time,
         )
         return {(r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"]): r["status"] for r in rows}
+
+    async def find_by_points(self, asset_id: int, interval: str, params_version: str,
+                             keys: Sequence[tuple]) -> Dict[tuple, Dict[str, Any]]:
+        """Setupy o tych samych punktach X..C co formacje z wykresu - klucz (typ, x, a, b, c)."""
+        keys = list({tuple(k) for k in keys})
+        if not keys:
+            return {}
+        cols = list(zip(*keys))
+        rows = await self.fetch_all(
+            """SELECT s.id, s.pattern_type, s.x_time, s.a_time, s.b_time, s.c_time, s.status, s.entry_time,
+                      s.entry_price, s.sl, s.tp1, s.tp2, s.exit_time, s.r_multiple, s.created_time,
+                      s.prz_min, s.prz_max
+            FROM technical_analysis_harmonic_setups s
+            JOIN unnest($4::text[], $5::bigint[], $6::bigint[], $7::bigint[], $8::bigint[]) AS k(p, x, a, b, c)
+              ON s.pattern_type = k.p AND s.x_time = k.x AND s.a_time = k.a AND s.b_time = k.b AND s.c_time = k.c
+            WHERE s.asset_id = $1 AND s.interval = $2 AND s.params_version = $3""",
+            asset_id, interval, params_version, *[list(c) for c in cols],
+        )
+        return {(r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"]): r for r in rows}
 
     async def tracked_assets(self, params_version: str) -> List[Dict[str, Any]]:
         return await self.fetch_all(
@@ -181,10 +202,13 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
         return await self.fetch_all(query, *args)
 
     async def list(self, asset_id: int, interval: str, params_version: str, status: Optional[str] = None,
-                   limit: int = 200) -> List[Dict[str, Any]]:
+                   limit: int = 200, statuses: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
         args: List[Any] = [asset_id, interval, params_version, limit]
         extra = ""
-        if status:
+        if statuses:
+            args.append(list(statuses))
+            extra = " AND status = ANY($5::text[])"
+        elif status:
             args.append(status)
             extra = " AND status = $5"
         rows = await self.fetch_all(
@@ -194,7 +218,7 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
             *args,
         )
         for r in rows:
-            for c in ("points_json", "confluences_json"):
+            for c in JSON_COLUMNS:
                 if isinstance(r.get(c), str):
                     r[c] = json.loads(r[c])
         return rows

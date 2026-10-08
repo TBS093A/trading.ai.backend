@@ -92,6 +92,12 @@ MIGRATIONS: List[Migration] = [
              AND NOT EXISTS (SELECT 1 FROM cron_system_sync_job c
                              WHERE c.system_sync_job_id = system_sync_job.id)""",
     ]),
+    # Siła wstępna setupów czekających na PRZ: konfluencje poziomowe liczone przed wejściem i drugi
+    # rodzaj modelu siły (entry = pełna od wejścia, pre = wstępna).
+    Migration(6, "setup_pre_confluences_strength_kind", [
+        "ALTER TABLE technical_analysis_harmonic_setups ADD COLUMN IF NOT EXISTS pre_confluences_json JSONB",
+        "ALTER TABLE harmonic_strength_models ADD COLUMN IF NOT EXISTS kind VARCHAR(10) NOT NULL DEFAULT 'entry'",
+    ]),
 ]
 
 
