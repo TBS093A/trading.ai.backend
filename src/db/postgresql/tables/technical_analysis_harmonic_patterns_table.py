@@ -1,5 +1,5 @@
-from typing import Optional, Dict, Any, List
-from .abstract_table import AbstractTable
+from typing import Optional, Dict, Any, List, Sequence, Tuple
+from .abstract_table import AbstractTable, CleanupRule
 import json
 import logging
 import numpy as np
@@ -36,9 +36,93 @@ class TechnicalAnalysisHarmonicPatternsTable(AbstractTable):
             c_point_timestamp BIGINT,
             d_point_timestamp BIGINT,
             ta_object_json JSONB NOT NULL,
-            confluences_json JSONB
+            confluences_json JSONB,
+            engine_version VARCHAR(32),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
         );
         """
+    # Klucz formacji (migracja 4 - unikalny indeks): te same punkty na tym samym assecie i interwale
+    # to jedna formacja. X (ABCD) i D (ABC) mogą być NULL - stąd COALESCE.
+    POINTS_KEY = ("asset_id, interval, COALESCE(x_point_timestamp, -1), a_point_timestamp, "
+                  "b_point_timestamp, c_point_timestamp, COALESCE(d_point_timestamp, -1)")
+
+    @staticmethod
+    def points_key(p: Dict[str, Any]) -> Tuple:
+        nz = lambda v: -1 if v is None else int(v)
+        return (int(p["asset_id"]), p["interval"], nz(p.get("x_point_timestamp")), int(p["a_point_timestamp"]),
+                int(p["b_point_timestamp"]), int(p["c_point_timestamp"]), nz(p.get("d_point_timestamp")))
+
+    def cleanup_rules(self) -> List[CleanupRule]:
+        from ....harmonic_scan import params_hash
+
+        # Tylko jawnie stara wersja silnika (NULL = zapis sprzed wersjonowania - zostaje) i tylko tam,
+        # gdzie zakres przeskanowano już bieżącą wersją: gdyby formacja nadal wychodziła, upsert
+        # podbiłby jej engine_version - skoro nie, silnik jej już nie znajduje.
+        return [CleanupRule(
+            name="harmonic_patterns.old_engine",
+            table="technical_analysis_harmonic_patterns",
+            description="formacje ze starej wersji silnika w zakresach przeskanowanych bieżącą wersją",
+            where="""engine_version IS NOT NULL AND engine_version <> $1 AND EXISTS (
+                SELECT 1 FROM technical_analysis_harmonic_scan_windows w
+                WHERE w.asset_id = technical_analysis_harmonic_patterns.asset_id
+                  AND w.interval = technical_analysis_harmonic_patterns.interval
+                  AND w.params_hash = $1
+                  AND w.start_time <= COALESCE(x_point_timestamp, a_point_timestamp)
+                  AND w.end_time >= COALESCE(d_point_timestamp, c_point_timestamp))""",
+            args=(params_hash(),),
+        )]
+
+    async def get_existing_by_points(self, patterns: Sequence[Dict[str, Any]]) -> Dict[Tuple, Dict[str, Any]]:
+        """Istniejące wiersze dla kluczy punktów z `patterns` - jedno zapytanie na całą paczkę."""
+        keys = list({self.points_key(p) for p in patterns})
+        if not keys:
+            return {}
+        cols = list(zip(*keys))
+        rows = await self.fetch_all(
+            f"""SELECT t.id, t.asset_id, t.interval, t.x_point_timestamp, t.a_point_timestamp,
+                       t.b_point_timestamp, t.c_point_timestamp, t.d_point_timestamp,
+                       t.ta_object_json, t.engine_version
+            FROM technical_analysis_harmonic_patterns t
+            JOIN unnest($1::int[], $2::text[], $3::bigint[], $4::bigint[], $5::bigint[], $6::bigint[], $7::bigint[])
+                 AS k(asset_id, interval, x, a, b, c, d)
+              ON ({self.POINTS_KEY}) = (k.asset_id, k.interval, k.x, k.a, k.b, k.c, k.d)""",  # nosemgrep: stała
+            *[list(c) for c in cols],
+        )
+        out = {}
+        for r in rows:
+            if isinstance(r.get("ta_object_json"), str):
+                r["ta_object_json"] = json.loads(r["ta_object_json"])
+            out[self.points_key(r)] = r
+        return out
+
+    async def upsert_many(self, patterns: Sequence[Dict[str, Any]], engine_version: str) -> int:
+        """Wstawia nowe / nadpisuje istniejące formacje (klucz punktów). Pusty confluences_json nie
+        kasuje zapisanych konfluencji (post-processing dopisuje je osobno)."""
+        if not patterns:
+            return 0
+        query = f"""
+        INSERT INTO technical_analysis_harmonic_patterns
+            (asset_id, interval, x_point_timestamp, a_point_timestamp, b_point_timestamp, c_point_timestamp,
+             d_point_timestamp, ta_object_json, confluences_json, engine_version, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        ON CONFLICT ({self.POINTS_KEY}) DO UPDATE SET
+            ta_object_json = EXCLUDED.ta_object_json,
+            confluences_json = COALESCE(EXCLUDED.confluences_json, technical_analysis_harmonic_patterns.confluences_json),
+            engine_version = EXCLUDED.engine_version,
+            updated_at = NOW()
+        """  # nosemgrep: POINTS_KEY to stała, wartości idą parametrami
+        args = []
+        for p in patterns:
+            conf = convert_numpy_types(p.get("confluences_json")) if p.get("confluences_json") else None
+            args.append((
+                p["asset_id"], p["interval"], p.get("x_point_timestamp"), p["a_point_timestamp"],
+                p["b_point_timestamp"], p["c_point_timestamp"], p.get("d_point_timestamp"),
+                json.dumps(convert_numpy_types(p["ta_object_json"])), json.dumps(conf) if conf else None,
+                engine_version,
+            ))
+        async with self.pool.acquire() as conn:
+            await conn.executemany(query, args)  # nosemgrep: query z POINTS_KEY (stała), wartości parametrami
+        return len(args)
     
     async def create(self, asset_id: int, ta_object_json: Dict[str, Any], 
                     interval: str = None, x_point_timestamp: int = None, a_point_timestamp: int = None, 

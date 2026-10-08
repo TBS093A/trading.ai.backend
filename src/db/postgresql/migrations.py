@@ -65,6 +65,24 @@ MIGRATIONS: List[Migration] = [
              AND NOT EXISTS (SELECT 1 FROM cron_system_sync_job c
                              WHERE c.system_sync_job_id = system_sync_job.id)""",
     ]),
+    # Formacje: wersja silnika i jeden wiersz na klucz punktów. Duplikaty usuwamy tą samą regułą co
+    # dotychczasowe remove_duplicates przy każdym syncu (zostaje najstarszy wiersz), potem unikalny
+    # indeks - od teraz zapis to upsert (ON CONFLICT), nie "zapisz i sprzątaj".
+    Migration(4, "harmonic_patterns_engine_version_unique_points", [
+        "ALTER TABLE technical_analysis_harmonic_patterns ADD COLUMN IF NOT EXISTS engine_version VARCHAR(32)",
+        "ALTER TABLE technical_analysis_harmonic_patterns ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()",
+        """DELETE FROM technical_analysis_harmonic_patterns WHERE id IN (
+             SELECT id FROM (
+               SELECT id, row_number() OVER (
+                 PARTITION BY asset_id, interval, COALESCE(x_point_timestamp, -1), a_point_timestamp,
+                              b_point_timestamp, c_point_timestamp, COALESCE(d_point_timestamp, -1)
+                 ORDER BY id) AS rn
+               FROM technical_analysis_harmonic_patterns) ranked
+             WHERE rn > 1)""",
+        """CREATE UNIQUE INDEX IF NOT EXISTS ux_harmonic_patterns_points
+           ON technical_analysis_harmonic_patterns (asset_id, interval, COALESCE(x_point_timestamp, -1),
+              a_point_timestamp, b_point_timestamp, c_point_timestamp, COALESCE(d_point_timestamp, -1))""",
+    ]),
 ]
 
 
