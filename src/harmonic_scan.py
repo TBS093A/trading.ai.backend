@@ -35,6 +35,7 @@ DEFAULT_RANGE_CANDLES = 500
 PAD_CANDLES = 30              # = największy peak_spacing silnika
 PAD_CALENDAR_FACTOR = 3       # zapas czasu na weekendy / sesje giełd akcji (Yahoo)
 KLINES_PAGE = 1000
+MAX_KLINES_REQUESTS = 50   # bezpiecznik: 50 stron = 50k świec
 
 # Parametry silnika - hash wchodzi do klucza pokrycia, więc zmiana ustawień HarmonicPatterns
 # (np. inny zestaw peak_spacing) automatycznie unieważnia stare okna.
@@ -194,19 +195,29 @@ def fetch_klines_range(
     get_klines: Callable[..., List[Dict[str, Any]]],
     base: str, quote: str, interval: str, start: int, end: int,
 ) -> List[Dict[str, Any]]:
-    """Wszystkie świece z [start, end], stronami po KLINES_PAGE od najnowszych (end_time -> wstecz)."""
+    """Wszystkie świece z [start, end], stronami po KLINES_PAGE.
+
+    Giełdy różnie wybierają stronę z za dużego zakresu: Binance (startTime + endTime) zwraca
+    NAJSTARSZE `limit` świec, inne - najnowsze. Dlatego po pełnej stronie dociągamy oba brzegi,
+    których strona nie pokryła, aż każdy fragment zwróci mniej niż KLINES_PAGE świec.
+    """
+    step = INTERVAL_MS.get(interval, 1)  # brzeg krótszy niż świeca nie może jej zawierać
     by_open: Dict[int, Dict[str, Any]] = {}
-    cursor = end
-    while True:
+    pending: List[Window] = [(start, end)]
+    requests = 0
+    while pending and requests < MAX_KLINES_REQUESTS:
+        s, e = pending.pop()
+        requests += 1
         page = get_klines(base_currency=base, quote_currency=quote, interval=interval,
-                          start_time=start, end_time=cursor, limit=KLINES_PAGE)
-        page = [k for k in page if start <= k["open_time"] <= end]
+                          start_time=s, end_time=e, limit=KLINES_PAGE)
+        page = [k for k in page if s <= k["open_time"] <= e]
         for k in page:
             by_open[k["open_time"]] = k
         if len(page) < KLINES_PAGE:
-            break
-        oldest = min(k["open_time"] for k in page)
-        if oldest <= start or oldest - 1 >= cursor:
-            break
-        cursor = oldest - 1
+            continue
+        lo, hi = min(k["open_time"] for k in page), max(k["open_time"] for k in page)
+        if lo - s >= step:
+            pending.append((s, lo - 1))
+        if e - hi >= step:
+            pending.append((hi + 1, e))
     return [by_open[t] for t in sorted(by_open)]

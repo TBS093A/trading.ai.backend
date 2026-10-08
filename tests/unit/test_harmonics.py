@@ -137,6 +137,23 @@ class TestRangesAndHelpers(unittest.TestCase):
         self.assertEqual([c["open_time"] for c in result], [t * H for t in range(100, 2401)])
         self.assertEqual(len(calls), 3)
 
+    def test_fetch_klines_range_handles_exchanges_returning_the_oldest_page(self):
+        # Regression: Binance with startTime + endTime returns the OLDEST `limit` candles, so a
+        # backwards-only pager stopped after the first page (1000 of 5000 requested candles).
+        candles = [{"open_time": t * H} for t in range(6000)]
+
+        def get_klines(base_currency, quote_currency, interval, start_time, end_time, limit):
+            return [c for c in candles if start_time <= c["open_time"] <= end_time][:limit]
+
+        result = hs.fetch_klines_range(get_klines, "BTC", "USDT", "1h", 500 * H, 5499 * H)
+        self.assertEqual([c["open_time"] for c in result], [t * H for t in range(500, 5500)])
+
+    def test_fetch_klines_range_stops_at_the_request_limit(self):
+        get_klines = mock.MagicMock(side_effect=lambda **kw: [{"open_time": kw["start_time"] + i}
+                                                              for i in range(hs.KLINES_PAGE)])
+        hs.fetch_klines_range(get_klines, "BTC", "USDT", "1h", 0, 10 ** 12)
+        self.assertEqual(get_klines.call_count, hs.MAX_KLINES_REQUESTS)
+
 
 def gartley(bullish=True):
     # XA = 100, B = 0.618 XA, D = 0.786 XA, BCD ~ 1.54
