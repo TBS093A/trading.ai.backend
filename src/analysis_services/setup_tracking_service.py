@@ -5,13 +5,17 @@ from datetime import datetime
 from typing import Any, Dict
 
 from .. import harmonic_scan, harmonic_setups
-from ..utils.harmonic_patterns import ConfluenceDetector
+from ..utils.harmonic_patterns import ConfluenceDetector, merge_confluences
+from ..utils.harmonic_patterns.fib_confluences import INTERVAL_HIERARCHY
+from .confluence_postprocessor import HIGHER_TF_KLINES_WINDOW, POST_PROCESSING_TYPES, post_processing_entries
 from .klines_source import KlinesSource
 
 logger = logging.getLogger(__name__)
 
 SETUP_LIVE_CANDLES = 600              # przebieg godzinny: ostatnie świece (+ pokrycie otwartych setupów)
 SETUP_MAX_CANDLES = 10000             # górna granica jednego przebiegu (backfill)
+HIGHER_TF_COUNT = 3                   # ile wyższych interwałów do konfluencji S/R / trendline (np. 1h -> 4h, 1d, 3d)
+PATTERNS_FOR_CONFLUENCES = 5000       # formacje assetu do Fib cluster / Fib z wyższego TF
 
 
 class SetupTrackingService:
@@ -53,14 +57,31 @@ class SetupTrackingService:
 
         final_keys = await table.get_final_keys(asset_id, interval, version, int(klines[0]['open_time']))
 
+        context = await self._confluence_context(resolved, asset_id, interval, klines)
+
         def confluences_fn(setup, outcome, klines_to_entry):
+            # Ten sam zestaw co w sidebarze: detektory w punkcie D (tu: wejście) + post-processing.
             pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
             pp['D'] = {'index': outcome.entry_index, 'price': outcome.entry_price}
             try:
-                return ConfluenceDetector.detect(klines_to_entry, pp, setup.is_bullish, outcome.entry_index, interval)
+                base = ConfluenceDetector.detect(klines_to_entry, pp, setup.is_bullish, outcome.entry_index, interval)
             except Exception as e:  # konfluencje są dodatkiem - nie blokują zapisu wyniku
                 logger.debug(f"Konfluencje setupu {setup.key} nie powiodły się: {e}")
                 return None
+            entry_ts = int(klines_to_entry[-1]['open_time'])
+            target = {
+                'id': -1, 'interval': interval, 'd_point_timestamp': entry_ts,
+                'c_point_timestamp': int(klines_to_entry[setup.points['C'].index]['open_time']),
+                'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
+                                   'points': {'D': {'price': outcome.entry_price, 'open_time': entry_ts}},
+                                   'fibonacci_levels': {}},
+            }
+            try:
+                extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
+            except Exception as e:
+                logger.debug(f"Post-processing konfluencji setupu {setup.key} nie powiódł się: {e}")
+                extra = []
+            return merge_confluences(base, extra, replace_types=POST_PROCESSING_TYPES)
 
         rows = harmonic_setups.evaluate(
             klines, asset_id, interval, source, skip_keys=final_keys,
@@ -84,3 +105,29 @@ class SetupTrackingService:
                     f"{len(rows)} nowych/otwartych, {len(final_keys)} już rozstrzygniętych, {by_status}")
         return {'klines': len(klines), 'setups': len(rows), 'saved': saved,
                 'already_final': len(final_keys), 'by_status': by_status, 'events': len(events)}
+
+    async def _confluence_context(self, resolved, asset_id: int, interval: str, klines) -> Dict[str, Any]:
+        """Dane do konfluencji post-processingu: formacje assetu (wg interwału) i świece wyższych TF
+        od HIGHER_TF_KLINES_WINDOW świec przed początkiem zakresu do jego końca."""
+        patterns_by_interval: Dict[str, list] = {}
+        try:
+            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
+            for p in await table.get_by_asset_id(asset_id, limit=PATTERNS_FOR_CONFLUENCES):
+                if p.get('interval'):
+                    patterns_by_interval.setdefault(p['interval'], []).append(p)
+        except Exception as e:
+            logger.warning(f"Formacje do konfluencji setupów niedostępne: {e}")
+        higher = []
+        if interval in INTERVAL_HIERARCHY:
+            higher = [iv for iv in INTERVAL_HIERARCHY[INTERVAL_HIERARCHY.index(interval) + 1:]
+                      if iv in harmonic_scan.INTERVAL_MS][:HIGHER_TF_COUNT]
+        klines_by_interval: Dict[str, list] = {}
+        for iv in higher:
+            step = harmonic_scan.interval_ms(iv)
+            start = int(klines[0]['open_time']) - HIGHER_TF_KLINES_WINDOW * step
+            try:
+                klines_by_interval[iv] = self.klines.fetch_range(resolved, iv, start, int(klines[-1]['open_time']))
+            except Exception as e:
+                logger.warning(f"Świece {iv} do konfluencji setupów niedostępne: {e}")
+        return {'patterns': patterns_by_interval, 'klines': klines_by_interval}
+

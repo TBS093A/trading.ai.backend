@@ -294,6 +294,33 @@ class TestWorker(unittest.TestCase):
         self.assertTrue(all(e["from_status"] == "waiting" for e in events))
         self.assertLessEqual(first["events"], len(rows))
 
+    def test_setup_confluences_include_the_sidebar_post_processing(self):
+        ta, table, kl, now = self.make()
+        ta.db.get_factory().get_technical_analysis_harmonic_patterns_table.return_value.get_by_asset_id = \
+            mock.AsyncMock(return_value=[])
+        seen = []
+
+        def fake_post(target, interval, patterns, klines):
+            seen.append((target["d_point_timestamp"], sorted(klines)))
+            return [{"type": "fib_cluster", "confidence": 0.5}]
+
+        with mock.patch("src.analysis_services.setup_tracking_service.post_processing_entries", fake_post), \
+                mock.patch("src.analysis_services.setup_tracking_service.ConfluenceDetector.detect",
+                           return_value={"total_score": 1, "confluences": [{"type": "doji"}]}), \
+                mock.patch("src.analysis_services.setup_tracking_service.datetime") as dt, \
+                mock.patch.object(hs, "app_targets", hs.fallback_targets):
+            dt.now.return_value.timestamp.return_value = now / 1000
+            asyncio.run(ta._track_harmonic_setups(5, "1h", 600, "replay"))
+        rows = table.upsert_many.await_args.args[0]
+        entered = [r for r in rows if r["entry_time"] is not None]
+        self.assertTrue(entered)
+        self.assertEqual({tuple(c["type"] for c in r["confluences_json"]["confluences"]) for r in entered},
+                         {("doji", "fib_cluster")})
+        self.assertEqual(entered[0]["confluences_json"]["total_score"], 2)
+        # D = świeca wejścia; wyższe TF dla 1h: 4h, 1d, 3d
+        self.assertEqual(seen[0][1], ["1d", "3d", "4h"])
+        self.assertIn(seen[0][0], {r["entry_time"] for r in entered})
+
     def test_replay_records_no_events(self):
         ta, table, kl, now = self.make()
         with mock.patch("src.analysis_services.setup_tracking_service.datetime") as dt, \
