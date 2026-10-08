@@ -14,6 +14,8 @@ from .cron_system_sync_job_table import CronSystemSyncJobTable
 from .users_table import UsersTable
 from .user_sessions_table import UserSessionsTable
 from .saved_analyses_table import SavedAnalysesTable
+from .tracked_assets_table import TrackedAssetsTable
+from .harmonic_setup_alerts_table import HarmonicSetupAlertSettingsTable, HarmonicSetupEventsTable
 
 __all__ = [
     'AbstractTable',
@@ -32,4 +34,7 @@ __all__ = [
     'UsersTable',
     'UserSessionsTable',
     'SavedAnalysesTable',
+    'TrackedAssetsTable',
+    'HarmonicSetupAlertSettingsTable',
+    'HarmonicSetupEventsTable',
 ] 

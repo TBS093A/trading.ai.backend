@@ -227,16 +227,16 @@ class TechnicalAnalysis:
                 logger.warning(f"Fib cluster confluences po skanie zakresu nie powiodły się: {e}")
         return results
 
-    SETUP_INTERVALS = ('1h', '4h', '1d')   # interwały, na których śledzimy setupy na żywo
-    SETUP_LIVE_CANDLES = 600              # nocny przebieg: ostatnie świece (+ pokrycie otwartych setupów)
+    SETUP_LIVE_CANDLES = 600              # przebieg godzinny: ostatnie świece (+ pokrycie otwartych setupów)
     SETUP_MAX_CANDLES = 10000             # górna granica jednego przebiegu (backfill)
 
     async def track_harmonic_setups(self, asset_id: int, interval: str, candles: int = SETUP_LIVE_CANDLES,
                                     source: str = 'live') -> Dict[str, Any]:
         """Setupy XABCD (X..C + PRZ znane w danej chwili) i ich wyniki - patrz src/harmonic_setups.py.
 
-        source='live' (nocny sync) dokłada świece wstecz, żeby objąć najstarszy nierozstrzygnięty
-        setup; source='replay' (backfill) liczy historię z `candles` ostatnich świec.
+        source='live' (co godzinę, proces _run_harmonic_setups_tracking) dokłada świece wstecz, żeby
+        objąć najstarszy nierozstrzygnięty setup, i zapisuje zdarzenia zmian statusów (alerty);
+        source='replay' (backfill) liczy historię z `candles` ostatnich świec, bez zdarzeń.
         """
         opened_here = getattr(self.db, 'factory', None) is None
         if opened_here:
@@ -300,23 +300,24 @@ class TechnicalAnalysis:
             klines, asset_id, interval, source, skip_keys=final_keys,
             targets_fn=harmonic_setups.app_targets, confluences_fn=confluences_fn,
         )
+        events = []
+        if source == 'live':
+            # Statusy sprzed tego przebiegu - zdarzenie = setup nowy albo ze zmienionym statusem.
+            previous = await table.get_unresolved_statuses(asset_id, interval, version, int(klines[0]['open_time']))
+            events = harmonic_setups.status_events(
+                rows, previous, symbol=f"{asset['asset']}/{asset['quote']}",
+                new_since=int(klines[-1]['open_time']) - harmonic_setups.EVENT_LOOKBACK_CANDLES * step,
+            )
         saved = await table.upsert_many(rows)
+        if events:
+            await factory.get_harmonic_setup_events_table().add_many(events)
         by_status: Dict[str, int] = {}
         for r in rows:
             by_status[r['status']] = by_status.get(r['status'], 0) + 1
         logger.info(f"Setupy {asset['asset']}/{asset['quote']} [{interval}] ({source}): {len(klines)} świec, "
                     f"{len(rows)} nowych/otwartych, {len(final_keys)} już rozstrzygniętych, {by_status}")
         return {'klines': len(klines), 'setups': len(rows), 'saved': saved,
-                'already_final': len(final_keys), 'by_status': by_status}
-
-    async def _track_harmonic_setups_live(self, asset: Dict[str, Any]) -> None:
-        table = self.db.get_factory().get_technical_analysis_harmonic_setups_table()
-        tracked = await table.get_tracked_intervals(asset['id'], harmonic_setups.params_version())
-        for interval in tracked:
-            try:
-                await self._track_harmonic_setups(asset['id'], interval, self.SETUP_LIVE_CANDLES, 'live')
-            except Exception as e:
-                logger.warning(f"Śledzenie setupów {asset['asset']} [{interval}] nie powiodło się: {e}")
+                'already_final': len(final_keys), 'by_status': by_status, 'events': len(events)}
 
     async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> Dict[str, int]:
         """
@@ -669,7 +670,14 @@ class TechnicalAnalysis:
                     logger.info(f"Tryb bulk - {len(assets)} assetów: {', '.join(asset_names)}")
             else:
                 # Tryb wielu assetów - użyj limit/offset
-                assets = await assets_table.get_all(limit=limit, offset=offset)
+                # Nocny sync liczy tylko śledzone assety (tracked_assets.patterns_sync, ustawiane w UI);
+                # pozostałe liczy skan zakresu na żądanie z wykresu.
+                tracked_ids = await self.db.get_factory().get_tracked_assets_table().get_patterns_sync_asset_ids()
+                assets = []
+                for tracked_id in tracked_ids[offset:offset + limit]:
+                    asset = await assets_table.get_by_id(tracked_id)
+                    if asset:
+                        assets.append(asset)
             
             if not assets:
                 logger.info("Brak assetów do przetworzenia")
@@ -804,9 +812,6 @@ class TechnicalAnalysis:
                     
                     # KROK 10: Post-processing — Higher TF S/R i Trendline (cross-interval, wymaga klines cache)
                     await self._update_higher_tf_sr_confluences(asset['id'], klines_cache)
-
-                    # KROK 11: Wyniki setupów XABCD - tylko assety objęte śledzeniem (backfill je dodaje)
-                    await self._track_harmonic_setups_live(asset)
                     
                 except Exception as e:
                     error_count += 1

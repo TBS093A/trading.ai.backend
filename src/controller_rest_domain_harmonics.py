@@ -21,6 +21,13 @@ GET  /harmonics/setups/tracked
      Assety i interwały, dla których śledzimy setupy (nocny sync aktualizuje je na żywo).
 POST /harmonics/setups/backfill  (admin)
      Zleca replay historii dla listy assetów i interwałów.
+GET  /harmonics/tracked-assets                  śledzone assety (nocny sync formacji + setupy co godzinę)
+PUT  /harmonics/tracked-assets/{asset_id}       (admin) dodaj / zmień; nowe interwały -> backfill setupów
+DELETE /harmonics/tracked-assets/{asset_id}     (admin) przestań śledzić (historia zostaje)
+GET  /harmonics/alerts/settings                 alerty mailowe zalogowanego użytkownika
+PUT  /harmonics/alerts/settings                 zapis (e-mail, statusy, assety, interwały)
+GET  /harmonics/alerts/events?asset_id=&interval=&limit=   ostatnie zmiany setupów (historia alertów)
+POST /harmonics/alerts/test                     mail testowy na adres użytkownika
 """
 
 import asyncio
@@ -29,13 +36,16 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .auth import AuthUser, require_admin, require_auth
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
-from . import harmonic_scan, harmonic_setups
+from . import harmonic_alerts, harmonic_scan, harmonic_setups
+from .config import config
 from .harmonic_validation import Point, ValidationError, validate_xabcd
+from .db.postgresql.tables.harmonic_setup_alerts_table import ALERT_STATUSES, DEFAULT_ALERT_STATUSES
+from .db.postgresql.tables.tracked_assets_table import DEFAULT_SETUP_INTERVALS
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +211,143 @@ async def backfill_harmonic_setups(
             task_id = await asyncio.to_thread(_enqueue_setups, asset_id, interval, request.candles)
             tasks.append({"asset_id": asset_id, "interval": interval, "task_id": task_id})
     return {"params_version": harmonic_setups.params_version(), "tasks": tasks}
+
+
+def _valid_intervals(intervals: List[str]) -> List[str]:
+    for interval in intervals:
+        try:
+            harmonic_scan.interval_ms(interval)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    return sorted(set(intervals), key=intervals.index)
+
+
+@router.get("/tracked-assets")
+async def get_tracked_assets():
+    db = await get_db()
+    return {"tracked": await db.get_factory().get_tracked_assets_table().list_with_assets()}
+
+
+class TrackedAssetIn(BaseModel):
+    patterns_sync: bool = Field(default=True, description="nocny sync formacji harmonicznych")
+    setup_intervals: List[str] = Field(default=list(DEFAULT_SETUP_INTERVALS),
+                                       description="interwały śledzenia setupów (puste = bez setupów)")
+    backfill_candles: int = Field(default=5000, ge=100, le=10000)
+
+
+@router.put("/tracked-assets/{asset_id}")
+async def put_tracked_asset(
+    asset_id: int = Path(..., ge=1),
+    request: TrackedAssetIn = Body(...),
+    current_user: AuthUser = Depends(require_admin),
+):
+    """Dodaje / zmienia śledzony asset. Dla interwałów, których wcześniej nie było, zleca backfill
+    setupów (bez alertów) - od następnej pełnej godziny asset jest śledzony na żywo."""
+    intervals = _valid_intervals(request.setup_intervals)
+    db = await get_db()
+    factory = db.get_factory()
+    if not await factory.get_assets_table().get_by_id(asset_id):
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
+    table = factory.get_tracked_assets_table()
+    before = await table.get_by_id(asset_id)
+    row = await table.upsert(asset_id, request.patterns_sync, intervals)
+    added = [i for i in intervals if not before or i not in (before.get("setup_intervals") or [])]
+    tasks = []
+    for interval in added:
+        task_id = await asyncio.to_thread(_enqueue_setups, asset_id, interval, request.backfill_candles)
+        tasks.append({"asset_id": asset_id, "interval": interval, "task_id": task_id})
+    logger.info(f"Śledzony asset {asset_id} zapisany przez {getattr(current_user, 'username', '?')}: "
+                f"patterns_sync={request.patterns_sync}, interwały={intervals}, backfill={added}")
+    return {"tracked": row, "backfill_tasks": tasks}
+
+
+@router.delete("/tracked-assets/{asset_id}")
+async def delete_tracked_asset(asset_id: int = Path(..., ge=1), current_user: AuthUser = Depends(require_admin)):
+    db = await get_db()
+    if not await db.get_factory().get_tracked_assets_table().delete(asset_id):
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} nie jest śledzony")
+    return {"deleted": asset_id}
+
+
+class AlertSettingsIn(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=254)
+    email_enabled: bool = False
+    statuses: List[str] = Field(default=list(DEFAULT_ALERT_STATUSES))
+    asset_ids: Optional[List[int]] = Field(default=None, description="null = wszystkie śledzone")
+    intervals: Optional[List[str]] = Field(default=None, description="null = wszystkie śledzone")
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v):
+        if v is None or not v.strip():
+            return None
+        v = v.strip()
+        local, _, domain = v.partition("@")
+        if not local or "." not in domain or any(c.isspace() for c in v):
+            raise ValueError("nieprawidłowy adres e-mail")
+        return v
+
+    @field_validator("statuses")
+    @classmethod
+    def _statuses(cls, v):
+        unknown = [s for s in v if s not in ALERT_STATUSES]
+        if unknown:
+            raise ValueError(f"nieznane statusy: {unknown}")
+        return list(dict.fromkeys(v))
+
+
+@router.get("/alerts/settings")
+async def get_alert_settings(current_user: AuthUser = Depends(require_auth)):
+    db = await get_db()
+    settings = await db.get_factory().get_harmonic_setup_alert_settings_table().get_for_user(current_user.user_id)
+    if not settings:
+        raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
+    return {**settings, "available_statuses": list(ALERT_STATUSES), "smtp_configured": bool(config.smtp_host)}
+
+
+@router.put("/alerts/settings")
+async def put_alert_settings(request: AlertSettingsIn = Body(...), current_user: AuthUser = Depends(require_auth)):
+    if request.email_enabled and not request.email:
+        raise HTTPException(status_code=422, detail="włączone alerty wymagają adresu e-mail")
+    if request.intervals is not None:
+        _valid_intervals(request.intervals)
+    db = await get_db()
+    saved = await db.get_factory().get_harmonic_setup_alert_settings_table().save_for_user(
+        current_user.user_id, request.email, request.email_enabled, request.statuses,
+        request.asset_ids, request.intervals,
+    )
+    return {**saved, "available_statuses": list(ALERT_STATUSES), "smtp_configured": bool(config.smtp_host)}
+
+
+@router.get("/alerts/events")
+async def get_alert_events(
+    asset_id: Optional[int] = Query(default=None, ge=1),
+    interval: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    db = await get_db()
+    events = await db.get_factory().get_harmonic_setup_events_table().recent(
+        [asset_id] if asset_id else None, interval, limit
+    )
+    return {"events": events}
+
+
+@router.post("/alerts/test")
+async def send_test_alert(current_user: AuthUser = Depends(require_auth)):
+    smtp = harmonic_alerts.SmtpSettings.from_config(config)
+    if smtp is None:
+        raise HTTPException(status_code=503, detail="poczta wychodząca nie jest skonfigurowana (SMTP_HOST)")
+    db = await get_db()
+    settings = await db.get_factory().get_harmonic_setup_alert_settings_table().get_for_user(current_user.user_id)
+    if not settings.get("email"):
+        raise HTTPException(status_code=422, detail="najpierw zapisz adres e-mail w ustawieniach alertów")
+    try:
+        await asyncio.to_thread(harmonic_alerts.send_email, smtp, settings["email"],
+                                "[trading.ai] test alertów", "Alerty setupów działają.")
+    except Exception as e:
+        logger.error(f"Test alertu dla użytkownika {current_user.user_id} nie powiódł się: {e}")
+        raise HTTPException(status_code=502, detail="wysyłka nie powiodła się - sprawdź logi serwera")
+    return {"sent_to": settings["email"]}
 
 
 @router.get("/{asset_id}/{interval}")

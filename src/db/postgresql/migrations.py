@@ -50,6 +50,21 @@ MIGRATIONS: List[Migration] = [
              AND NOT EXISTS (SELECT 1 FROM cron_system_sync_job c
                              WHERE c.system_sync_job_id = system_sync_job.id)""",
     ]),
+    # Śledzone assety i alerty setupów: e-mail użytkownika, startowa lista śledzonych = assety,
+    # które mają już setupy (backfill z 2026-10-08), oraz godzinny proces śledzenia setupów.
+    Migration(3, "tracked_assets_and_setup_alerts", [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT",
+        """INSERT INTO tracked_assets (asset_id, patterns_sync, setup_intervals)
+           SELECT asset_id, TRUE, array_agg(DISTINCT interval ORDER BY interval)
+           FROM technical_analysis_harmonic_setups GROUP BY asset_id
+           ON CONFLICT (asset_id) DO NOTHING""",
+        "INSERT INTO system_sync_job (process) VALUES ('_run_harmonic_setups_tracking') ON CONFLICT (process) DO NOTHING",
+        """INSERT INTO cron_system_sync_job (name, system_sync_job_id, minute, timezone, enabled)
+           SELECT 'Hourly harmonic setups tracking - _run_harmonic_setups_tracking', id, 3, 'UTC', TRUE
+           FROM system_sync_job WHERE process = '_run_harmonic_setups_tracking'
+             AND NOT EXISTS (SELECT 1 FROM cron_system_sync_job c
+                             WHERE c.system_sync_job_id = system_sync_job.id)""",
+    ]),
 ]
 
 

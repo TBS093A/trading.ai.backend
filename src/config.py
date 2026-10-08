@@ -107,6 +107,15 @@ class Config:
         # Janitor bazy (src/db/janitor.py): bez "true" tylko liczy, co by usunął (dry-run)
         self.db_janitor_enabled = os.getenv("DB_JANITOR_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
 
+        # Poczta wychodząca (alerty setupów, src/harmonic_alerts.py); bez SMTP_HOST alerty czekają w bazie
+        self.smtp_host = os.getenv("SMTP_HOST")
+        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        self.smtp_username = os.getenv("SMTP_USERNAME")
+        self.smtp_password = os.getenv("SMTP_PASSWORD")
+        self.smtp_from = os.getenv("SMTP_FROM")
+        self.smtp_starttls = os.getenv("SMTP_STARTTLS", "true").strip().lower() in ("1", "true", "yes", "on")
+        self.smtp_ssl = os.getenv("SMTP_SSL", "false").strip().lower() in ("1", "true", "yes", "on")
+
         # Celery konfiguracja
         self.celery_broker_url = os.getenv("CELERY_BROKER_URL")
         self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND")

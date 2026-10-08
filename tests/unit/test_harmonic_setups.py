@@ -244,7 +244,9 @@ class TestWorker(unittest.TestCase):
         table.get_oldest_unresolved_x_time = mock.AsyncMock(return_value=oldest_unresolved)
         table.get_final_keys = mock.AsyncMock(return_value=set(final_keys))
         table.upsert_many = mock.AsyncMock(side_effect=lambda rows: len(rows))
+        table.get_unresolved_statuses = mock.AsyncMock(return_value={})
         factory = mock.MagicMock()
+        factory.get_harmonic_setup_events_table.return_value.add_many = mock.AsyncMock(side_effect=len)
         factory.get_assets_table.return_value.get_by_id = mock.AsyncMock(return_value={"asset": "BTC", "quote": "USDT"})
         factory.get_asset_exchanges_table.return_value.get_by_asset_id = mock.AsyncMock(
             return_value=[{"exchange_name": "Binance"}])
@@ -274,6 +276,33 @@ class TestWorker(unittest.TestCase):
         self.assertEqual(res["saved"], len(rows))
         self.assertTrue(all(r["source"] == "live" and r["asset_id"] == 5 for r in rows))
         self.assertTrue(all(r["c_time"] >= kl[-600]["open_time"] for r in rows))
+
+    def test_live_run_records_status_changes_as_events(self):
+        ta, table, kl, now = self.make()
+        first = self.run_track(ta, now, candles=600)
+        rows = table.upsert_many.await_args.args[0]
+        unresolved = [r for r in rows if r["status"] in ("waiting", "open")]
+        self.assertTrue(unresolved)
+        # Ten sam przebieg, ale baza "pamięta" otwarte setupy jako waiting -> zmiany open/final to zdarzenia.
+        table.get_unresolved_statuses.return_value = {
+            (r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"]): "waiting" for r in rows
+        }
+        second = self.run_track(ta, now, candles=600)
+        changed = [r for r in rows if r["status"] != "waiting"]
+        self.assertEqual(second["events"], len(changed))
+        events = ta.db.get_factory().get_harmonic_setup_events_table().add_many.await_args.args[0]
+        self.assertTrue(all(e["from_status"] == "waiting" for e in events))
+        self.assertLessEqual(first["events"], len(rows))
+
+    def test_replay_records_no_events(self):
+        ta, table, kl, now = self.make()
+        with mock.patch("src.sync_technical_analysis.datetime") as dt, \
+                mock.patch.object(hs, "app_targets", hs.fallback_targets), \
+                mock.patch("src.sync_technical_analysis.ConfluenceDetector.detect", return_value=None):
+            dt.now.return_value.timestamp.return_value = now / 1000
+            res = asyncio.run(ta._track_harmonic_setups(5, "1h", 600, "replay"))
+        self.assertEqual(res["events"], 0)
+        table.get_unresolved_statuses.assert_not_awaited()
 
     def test_extends_history_to_cover_the_oldest_unresolved_setup(self):
         ta, table, kl, now = self.make(oldest_unresolved=kl_time(2000))

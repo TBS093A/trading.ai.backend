@@ -184,7 +184,7 @@ class TestJanitor(unittest.TestCase):
         factory = DatabasePostgreSQLFactory(mock.MagicMock())
         rules = {r.name: r for t in factory.get_all_tables().values() for r in t.cleanup_rules()}
         self.assertEqual(set(rules), {"user_sessions.expired", "harmonic_scan_windows.old_params",
-                                      "harmonic_setups.old_versions"})
+                                      "harmonic_setups.old_versions", "harmonic_setup_events.old"})
         self.assertEqual(rules["harmonic_scan_windows.old_params"].args, (harmonic_scan.params_hash(),))
         for r in rules.values():
             self.assertNotIn("'", r.where.replace("''", ""))  # wartości tylko jako parametry

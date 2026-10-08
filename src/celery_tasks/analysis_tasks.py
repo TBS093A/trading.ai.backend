@@ -223,8 +223,8 @@ def track_harmonic_setups_task(self, asset_id: int, interval: str, candles: int 
                                source: str = 'replay') -> Dict[str, Any]:
     """
     Setupy XABCD i ich wyniki (src/harmonic_setups.py) dla jednego assetu i interwału.
-    source='replay' - backfill historii z POST /harmonics/setups/backfill; nocny sync woła
-    TechnicalAnalysis._track_harmonic_setups_live bezpośrednio.
+    source='replay' - backfill historii (POST /harmonics/setups/backfill, dodanie śledzonego assetu);
+    source='live' - co godzinę z procesu _run_harmonic_setups_tracking (zapisuje zdarzenia do alertów).
     """
     logger.info(f"📈 track_harmonic_setups asset={asset_id} interval={interval} candles={candles} "
                 f"source={source} (ID: {self.request.id})")
@@ -235,3 +235,22 @@ def track_harmonic_setups_task(self, asset_id: int, interval: str, candles: int 
     )
     return {'success': True, 'task_id': self.request.id, 'asset_id': asset_id, 'interval': interval,
             'result': result, 'duration': str(datetime.now() - start)}
+
+
+@celery.task(bind=True, name='analysis_tasks.notify_harmonic_setup_events')
+def notify_harmonic_setup_events_task(self) -> Dict[str, Any]:
+    """Maile z oczekujących zdarzeń setupów (src/harmonic_alerts.py). Zlecane przez proces
+    _run_harmonic_setups_tracking z opóźnieniem, po zadaniach śledzenia."""
+    from ..config import config
+    from ..db.database_facade import DatabaseFacade
+    from .. import harmonic_alerts
+
+    async def run() -> Dict[str, Any]:
+        db = DatabaseFacade().get_database_postgresql()
+        await db.init_db()
+        try:
+            return await harmonic_alerts.notify_pending(db, harmonic_alerts.SmtpSettings.from_config(config))
+        finally:
+            await db.close_db()
+
+    return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}
