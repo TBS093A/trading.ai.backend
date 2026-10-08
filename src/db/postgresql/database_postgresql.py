@@ -19,7 +19,9 @@ class DatabasePostgreSQL:
         """Inicjalizuje pulę połączeń i tworzy wszystkie tabele, jeśli nie istnieją."""
         if self.pool is None:
             try:
-                self.pool = await asyncpg.create_pool(self.database_url)
+                # min_size=1: zadania Celery tworzą własną pulę na każde zadanie - domyślne 10
+                # połączeń na start wyczerpywało max_connections przy kilku workerach naraz.
+                self.pool = await asyncpg.create_pool(self.database_url, min_size=1, max_size=10)
                 logger.info("Utworzono pulę połączeń z bazą danych.")
                 
                 # Inicjalizuj fabrykę
