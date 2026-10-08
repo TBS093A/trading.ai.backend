@@ -5,7 +5,9 @@ i /harmonics/alerts - bez bazy, sieci i serwera poczty.
 """
 
 import asyncio
+import smtplib
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from fastapi import FastAPI
@@ -103,27 +105,88 @@ def alerts_db(events, subscribers):
 SMTP = ha.SmtpSettings(host="smtp.test")
 
 
+class FakeSession:
+    """Atrapa SmtpSession: enter_error - błąd połączenia/logowania, outcomes - wynik kolejnych send()."""
+
+    def __init__(self, enter_error=None, outcomes=()):
+        self.enter_error = enter_error
+        self.outcomes = list(outcomes)
+        self.sent = []
+
+    def __call__(self, settings):
+        return self
+
+    def __enter__(self):
+        if self.enter_error:
+            raise self.enter_error
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def send(self, to, subject, body):
+        outcome = self.outcomes.pop(0) if self.outcomes else None
+        if outcome:
+            raise outcome
+        self.sent.append(to)
+
+
+NOW = datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc)
+
+
+def fresh(eid, **kw):
+    return {**event(eid, **kw), "created_at": NOW - timedelta(minutes=20)}
+
+
 class TestNotifyPending(unittest.TestCase):
+    def notify(self, events, subscribers, session):
+        db, table = alerts_db(events, subscribers)
+        res = asyncio.run(ha.notify_pending(db, SMTP, session_factory=session, now=NOW))
+        marked = table.mark_notified.await_args.args[0] if table.mark_notified.await_count else None
+        return res, marked
+
     def test_without_smtp_events_wait(self):
-        db, table = alerts_db([event(1)], [SUB_ALL])
+        db, table = alerts_db([fresh(1)], [SUB_ALL])
         self.assertEqual(asyncio.run(ha.notify_pending(db, None))["smtp"], False)
         table.pending.assert_not_awaited()
         table.mark_notified.assert_not_awaited()
 
     def test_one_mail_per_user_and_events_marked(self):
-        db, table = alerts_db([event(1), event(2, "loss")], [SUB_ALL, SUB_4H])
-        send = mock.MagicMock()
-        res = asyncio.run(ha.notify_pending(db, SMTP, send=send))
-        self.assertEqual(res["sent"], 1)
-        self.assertEqual(send.call_args.args[1], "a@x.io")
-        table.mark_notified.assert_awaited_once_with([1, 2])
+        session = FakeSession()
+        res, marked = self.notify([fresh(1), fresh(2, status="loss")], [SUB_ALL, SUB_4H], session)
+        self.assertEqual((res["sent"], session.sent, marked), (1, ["a@x.io"], [1, 2]))
 
-    def test_a_failed_mail_does_not_resend_to_others(self):
-        db, table = alerts_db([event(1)], [SUB_ALL, {**SUB_4H, "intervals": None}])
-        send = mock.MagicMock(side_effect=[OSError("refused"), None])
-        res = asyncio.run(ha.notify_pending(db, SMTP, send=send))
-        self.assertEqual((res["sent"], res["failed_users"]), (1, [1]))
-        table.mark_notified.assert_awaited_once_with([1])
+    def test_connection_failure_keeps_everything_for_the_next_run(self):
+        # Regression: before, a failed send still marked the events -> alerts were lost.
+        session = FakeSession(enter_error=TimeoutError("timed out"))
+        res, marked = self.notify([fresh(1)], [SUB_ALL], session)
+        self.assertEqual(marked, [])
+        self.assertIn("TimeoutError", res["aborted"])
+
+    def test_disconnect_midway_marks_only_fully_delivered_events(self):
+        both = {**SUB_4H, "intervals": None}            # dostaje zdarzenie 1 (win)
+        session = FakeSession(outcomes=[None, smtplib.SMTPServerDisconnected("gone")])
+        events = [fresh(1), fresh(2, status="loss")]   # 1 -> A i B, 2 -> tylko A
+        res, marked = self.notify(events, [SUB_ALL, both], session)
+        # A dostał oba, B nie dostał 1 -> 2 obsłużone, 1 czeka (A dostanie je drugi raz)
+        self.assertEqual((session.sent, marked), (["a@x.io"], [2]))
+
+    def test_refused_recipient_does_not_block_the_event(self):
+        refused = smtplib.SMTPRecipientsRefused({"a@x.io": (550, b"no such user")})
+        session = FakeSession(outcomes=[refused, None])
+        res, marked = self.notify([fresh(1)], [SUB_ALL, {**SUB_4H, "intervals": None}], session)
+        self.assertEqual((res["refused_users"], marked), ([1], [1]))
+
+    def test_stale_events_are_closed_without_mail(self):
+        old = {**event(1), "created_at": NOW - timedelta(days=2)}
+        session = FakeSession()
+        res, marked = self.notify([old, fresh(2)], [SUB_ALL], session)
+        self.assertEqual((res["stale"], marked, session.sent), (1, [1, 2], ["a@x.io"]))
+
+    def test_events_nobody_subscribes_to_are_closed(self):
+        session = FakeSession(enter_error=AssertionError("must not connect"))
+        res, marked = self.notify([fresh(1, status="open")], [SUB_4H], session)
+        self.assertEqual(marked, [1])
 
     def test_send_email_uses_starttls_and_login(self):
         with mock.patch("smtplib.SMTP") as smtp:
@@ -132,6 +195,15 @@ class TestNotifyPending(unittest.TestCase):
         server.starttls.assert_called_once()
         server.login.assert_called_once_with("u", "p")
         self.assertEqual(server.send_message.call_args.args[0]["To"], "t@x")
+        server.quit.assert_called_once()
+
+    def test_failed_login_closes_the_connection(self):
+        with mock.patch("smtplib.SMTP") as smtp:
+            smtp.return_value.login.side_effect = smtplib.SMTPAuthenticationError(535, b"bad")
+            with self.assertRaises(smtplib.SMTPAuthenticationError):
+                ha.send_email(ha.SmtpSettings(host="h", username="u", password="p"), "t@x", "S", "B")
+        smtp.return_value.close.assert_called_once()
+        smtp.return_value.send_message.assert_not_called()
 
     def test_settings_from_config(self):
         cfg = mock.MagicMock(smtp_host=None)

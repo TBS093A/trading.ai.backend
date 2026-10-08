@@ -116,31 +116,71 @@ def render(subscriber: Dict[str, Any], events: Sequence[Dict[str, Any]]) -> Tupl
     return subject, body
 
 
+class SmtpSession:
+    """Jedno połączenie SMTP (STARTTLS / SSL + login) na cały przebieg notifiera.
+
+    Błąd połączenia albo logowania wychodzi już z __enter__ - wtedy nic nie zostało wysłane.
+    """
+
+    def __init__(self, settings: SmtpSettings):
+        self.settings = settings
+        self.server = None
+
+    def __enter__(self) -> "SmtpSession":
+        st = self.settings
+        context = ssl.create_default_context()
+        if st.ssl:
+            self.server = smtplib.SMTP_SSL(st.host, st.port, timeout=st.timeout, context=context)
+        else:
+            self.server = smtplib.SMTP(st.host, st.port, timeout=st.timeout)
+        try:
+            if st.starttls and not st.ssl:
+                self.server.starttls(context=context)
+            if st.username:
+                self.server.login(st.username, st.password or "")
+        except Exception:
+            self.server.close()
+            raise
+        return self
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        msg = EmailMessage()
+        msg["From"] = self.settings.sender
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.set_content(body)
+        self.server.send_message(msg)
+
+    def __exit__(self, *exc) -> None:
+        try:
+            self.server.quit()
+        except Exception:
+            self.server.close()
+
+
 def send_email(settings: SmtpSettings, to: str, subject: str, body: str) -> None:
-    msg = EmailMessage()
-    msg["From"] = settings.sender
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
-    context = ssl.create_default_context()
-    if settings.ssl:
-        server = smtplib.SMTP_SSL(settings.host, settings.port, timeout=settings.timeout, context=context)
-    else:
-        server = smtplib.SMTP(settings.host, settings.port, timeout=settings.timeout)
-    with server:
-        if settings.starttls and not settings.ssl:
-            server.starttls(context=context)
-        if settings.username:
-            server.login(settings.username, settings.password or "")
-        server.send_message(msg)
+    with SmtpSession(settings) as session:
+        session.send(to, subject, body)
 
 
-async def notify_pending(db, settings: Optional[SmtpSettings], send=send_email,
-                         limit: int = 1000) -> Dict[str, Any]:
-    """Wysyła zestawienia oczekujących zdarzeń i oznacza je jako obsłużone.
+# Błędy, po których nie ma sensu wysyłać dalej w tym przebiegu - serwer / sieć / logowanie.
+# Odmowa dla jednego adresu (SMTPRecipientsRefused, SMTPDataError) dotyczy tylko tego maila.
+CONNECTION_ERRORS = (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
+                     smtplib.SMTPAuthenticationError, smtplib.SMTPHeloError, OSError)
+# Zdarzenie, które czekało dłużej (np. poczta nie działała), zamykamy bez maila - alert o wejściu
+# w pozycję sprzed doby to już nie alert.
+MAX_EVENT_AGE_S = 24 * 3600
 
-    Zdarzenia oznaczamy po próbie wysyłki wszystkim odbiorcom - nieudany mail do jednej osoby jest
-    logowany, ale nie powoduje ponownej wysyłki pozostałym.
+
+async def notify_pending(db, settings: Optional[SmtpSettings], session_factory=SmtpSession,
+                         limit: int = 1000, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Wysyła zestawienia oczekujących zdarzeń; oznacza jako obsłużone tylko to, co doszło.
+
+    - brak SMTP albo błąd połączenia / logowania -> nic nie jest oznaczane, następny przebieg ponawia;
+    - błąd połączenia w trakcie -> oznaczone są zdarzenia, które dostali już wszyscy ich odbiorcy
+      (pozostali dostaną je w następnym przebiegu, część osób może dostać je drugi raz);
+    - odmowa dla jednego adresu -> logujemy i traktujemy jak obsłużone (ponowienie nic nie da);
+    - zdarzenia starsze niż MAX_EVENT_AGE_S są zamykane bez maila.
     """
     import asyncio
 
@@ -152,16 +192,50 @@ async def notify_pending(db, settings: Optional[SmtpSettings], send=send_email,
     events = await events_table.pending(limit)
     if not events:
         return {"sent": 0, "events": 0, "smtp": True}
+
+    now = now or datetime.now(timezone.utc)
+    stale = [e for e in events if e.get("created_at") and (now - e["created_at"]).total_seconds() > MAX_EVENT_AGE_S]
+    stale_ids = {e["id"] for e in stale}
+    fresh = [e for e in events if e["id"] not in stale_ids]
+
     subscribers = await factory.get_harmonic_setup_alert_settings_table().get_email_subscribers()
-    sent, failed = 0, []
-    for sub, mine in recipients(events, subscribers):
-        subject, body = render(sub, mine)
+    plan = recipients(fresh, subscribers)
+    owed: Dict[int, int] = {e["id"]: 0 for e in fresh}       # ilu odbiorcom zdarzenie jest winne
+    for _, mine in plan:
+        for e in mine:
+            owed[e["id"]] += 1
+
+    def deliver() -> Tuple[int, List[int], Optional[str]]:
+        sent, refused, aborted = 0, [], None
+        if not plan:
+            return sent, refused, aborted
         try:
-            await asyncio.to_thread(send, settings, sub["email"], subject, body)
-            sent += 1
-        except Exception as e:
-            logger.error(f"Alert do użytkownika {sub['user_id']} nie wysłany: {e}")
-            failed.append(sub["user_id"])
-    await events_table.mark_notified([e["id"] for e in events])
-    logger.info(f"Alerty setupów: {len(events)} zdarzeń, {sent} maili, nieudane: {failed or 'brak'}")
-    return {"sent": sent, "events": len(events), "failed_users": failed, "smtp": True}
+            with session_factory(settings) as session:
+                for sub, mine in plan:
+                    subject, body = render(sub, mine)
+                    try:
+                        session.send(sub["email"], subject, body)
+                        sent += 1
+                    except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError,
+                            smtplib.SMTPSenderRefused) as e:
+                        logger.error(f"Alert do użytkownika {sub['user_id']} odrzucony: {e}")
+                        refused.append(sub["user_id"])
+                    except CONNECTION_ERRORS as e:
+                        aborted = f"{type(e).__name__}: {e}"
+                        break
+                    for e in mine:
+                        owed[e["id"]] -= 1
+        except CONNECTION_ERRORS as e:
+            aborted = f"{type(e).__name__}: {e}"
+        return sent, refused, aborted
+
+    sent, refused, aborted = await asyncio.to_thread(deliver)
+    done = sorted(stale_ids | {eid for eid, left in owed.items() if left == 0})
+    await events_table.mark_notified(done)
+    result = {"sent": sent, "events": len(events), "marked": len(done), "stale": len(stale_ids),
+              "refused_users": refused, "smtp": True}
+    if aborted:
+        result["aborted"] = aborted
+        logger.error(f"Alerty setupów: przerwane ({aborted}) - {len(events) - len(done)} zdarzeń czeka na ponowienie")
+    logger.info(f"Alerty setupów: {result}")
+    return result
