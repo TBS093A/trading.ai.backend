@@ -1,0 +1,105 @@
+{#- Alerty setupów XABCD - kolory i czcionki z motywu frontu (src/styles: --bg-*, --text-*, --accent-*).
+    Tabele + style inline: tylko tak wygląda tak samo w Gmailu, Outlooku i na telefonie.
+    Dane: subject, preheader, summary[], events[] (src/harmonic_alerts.py: email_context), app_url, settings_url. -#}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>{{ subject }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:{{ c.bg }};-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:{{ c.bg }};">{{ preheader }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{{ c.bg }};">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
+
+  <!-- nagłówek -->
+  <tr><td style="padding:0 4px 16px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="font-family:{{ f.sans }};font-size:20px;font-weight:700;color:{{ c.text }};letter-spacing:0.5px;">
+        trading<span style="color:{{ c.accent }};">.ai</span>
+      </td>
+      <td align="right" style="font-family:{{ f.mono }};font-size:11px;color:{{ c.muted }};text-transform:uppercase;letter-spacing:1px;">
+        alerty setupów
+      </td>
+    </tr></table>
+  </td></tr>
+
+  <!-- podsumowanie -->
+  <tr><td style="background:{{ c.card }};border:1px solid {{ c.border }};border-radius:10px;padding:18px 20px;">
+    <div style="font-family:{{ f.sans }};font-size:17px;font-weight:600;color:{{ c.text }};margin:0 0 10px 0;">
+      {{ headline }}
+    </div>
+    {%- for s in summary %}
+    <span style="display:inline-block;margin:0 6px 6px 0;padding:3px 10px;border-radius:999px;border:1px solid {{ s.color }};color:{{ s.color }};font-family:{{ f.mono }};font-size:12px;">
+      {{ s.label }}&nbsp;{{ s.count }}
+    </span>
+    {%- endfor %}
+  </td></tr>
+
+  {%- for e in events %}
+  <tr><td style="height:14px;line-height:14px;font-size:0;">&nbsp;</td></tr>
+  <!-- karta zdarzenia -->
+  <tr><td style="background:{{ c.card }};border:1px solid {{ c.border }};border-left:3px solid {{ e.status_color }};border-radius:10px;padding:16px 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="font-family:{{ f.sans }};font-size:16px;font-weight:600;color:{{ c.text }};">
+        {{ e.symbol }}
+        <span style="font-family:{{ f.mono }};font-size:12px;font-weight:400;color:{{ c.secondary }};">&nbsp;{{ e.interval }}&nbsp;·&nbsp;{{ e.pattern }}</span>
+      </td>
+      <td align="right" style="white-space:nowrap;">
+        <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:{{ e.direction_bg }};color:{{ e.direction_color }};font-family:{{ f.mono }};font-size:11px;font-weight:600;">{{ e.direction }}</span>
+      </td>
+    </tr></table>
+
+    <div style="margin:10px 0 12px 0;font-family:{{ f.mono }};font-size:13px;">
+      {%- if e.from_label %}
+      <span style="color:{{ c.muted }};">{{ e.from_label }}</span>
+      <span style="color:{{ c.muted }};">&nbsp;→&nbsp;</span>
+      {%- endif %}
+      <span style="color:{{ e.status_color }};font-weight:600;">{{ e.status_label }}</span>
+      {%- if e.r %}
+      <span style="color:{{ e.r_color }};font-weight:600;">&nbsp;&nbsp;{{ e.r }}</span>
+      {%- endif %}
+      <div style="color:{{ c.secondary }};font-family:{{ f.sans }};font-size:12px;margin-top:3px;">{{ e.description }}</div>
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid {{ c.border }};">
+      {%- for row in e.levels %}
+      <tr>
+        <td style="padding:6px 0 0 0;font-family:{{ f.mono }};font-size:11px;color:{{ c.secondary }};text-transform:uppercase;letter-spacing:0.5px;">{{ row.label }}</td>
+        <td align="right" style="padding:6px 0 0 0;font-family:{{ f.mono }};font-size:13px;color:{{ row.color }};">{{ row.value }}</td>
+      </tr>
+      {%- endfor %}
+    </table>
+
+    <div style="margin-top:10px;font-family:{{ f.mono }};font-size:11px;color:{{ c.muted }};">
+      {{ e.time_utc }} &nbsp;·&nbsp; {{ e.time_local }}
+    </div>
+  </td></tr>
+  {%- endfor %}
+
+  {%- if app_url %}
+  <tr><td align="center" style="padding:22px 0 6px 0;">
+    <a href="{{ app_url }}" style="display:inline-block;padding:11px 26px;border-radius:8px;background:{{ c.accent }};color:{{ c.bg }};font-family:{{ f.sans }};font-size:14px;font-weight:600;text-decoration:none;">Otwórz trading.ai</a>
+  </td></tr>
+  {%- endif %}
+
+  <!-- stopka -->
+  <tr><td style="padding:18px 4px 0 4px;font-family:{{ f.sans }};font-size:11px;line-height:17px;color:{{ c.muted }};">
+    Setup = punkty X..C i strefa PRZ znane w chwili zdarzenia; wejście na bliższej krawędzi PRZ, SL/TP wg reguł z wykresu, całość zamykana na TP1.
+    {%- if settings_url %}
+    <br>Zmień, które zdarzenia dostajesz: <a href="{{ settings_url }}" style="color:{{ c.accent_dim }};">ustawienia alertów</a>.
+    {%- else %}
+    <br>Ustawienia alertów: zakładka Skuteczność formacji → Alerty.
+    {%- endif %}
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

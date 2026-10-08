@@ -83,12 +83,68 @@ class TestRecipientsAndRendering(unittest.TestCase):
         self.assertEqual([(s["user_id"], [e["id"] for e in es]) for s, es in out], [(1, [1, 3]), (2, [3])])
 
     def test_render(self):
-        subject, body = ha.render(SUB_ALL, [event(1)])
+        subject, body, html = ha.render(SUB_ALL, [event(1)])
         self.assertIn("ETH/USDT 1h bat - win", subject)
         self.assertIn("SHORT", body)
         self.assertIn("+1.00 R", body)
-        subject, _ = ha.render(SUB_ALL, [event(1), event(2, "loss")])
-        self.assertIn("2 zmian", subject)
+        subject, _, _ = ha.render(SUB_ALL, [event(1), event(2, "loss")])
+        self.assertIn("2 zmiany setupów", subject)
+
+
+class TestHtmlEmail(unittest.TestCase):
+    def test_uses_the_frontend_theme_and_status_colours(self):
+        _, _, html = ha.render(SUB_ALL, [event(1), event(2, "loss"), event(3, "open")], app_url="https://app.test")
+        for colour in (ha.THEME["bg"], ha.THEME["card"], ha.THEME["green"], ha.THEME["red"], ha.THEME["accent"]):
+            self.assertIn(colour, html)
+        for label in ("WIN", "LOSS", "OPEN", "SHORT", "OPEN</span>"):
+            self.assertIn(label, html)
+        self.assertIn("3 zmiany setupów", html)
+        self.assertIn('href="https://app.test"', html)
+        self.assertIn("+1.00 R", html)
+
+    def test_event_data_is_escaped(self):
+        evil = event(1)
+        evil["payload"] = {**evil["payload"], "symbol": "<script>alert(1)</script>"}
+        evil["pattern_type"] = 'bat" onmouseover="x'
+        _, _, html = ha.render(SUB_ALL, [evil])
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn('bat" onmouseover', html)
+
+    def test_new_setup_without_entry_shows_only_the_zone(self):
+        e = {**event(1, "waiting"), "from_status": None,
+             "payload": {"symbol": "BTC/USDT", "prz": [1.0, 2.0]}}
+        _, _, html = ha.render(SUB_ALL, [e])
+        self.assertIn(">PRZ</td>", html)
+        self.assertNotIn(">TP1</td>", html)
+        self.assertNotIn("&nbsp;→&nbsp;", html)
+
+    def test_without_app_url_there_is_no_button(self):
+        _, _, html = ha.render(SUB_ALL, [event(1)])
+        self.assertNotIn("Otwórz trading.ai", html)
+
+    def test_polish_plurals(self):
+        self.assertEqual([ha._plural_changes(n) for n in (1, 2, 5, 12, 22)],
+                         ["1 zmiana setupu", "2 zmiany setupów", "5 zmian setupów", "12 zmian setupów",
+                          "22 zmiany setupów"])
+
+    def test_app_url_from_config(self):
+        self.assertEqual(ha.app_url_from_config(mock.MagicMock(frontend_url="https://a.io/")), "https://a.io")
+        cfg = mock.MagicMock(frontend_url="", cors_allowed_origins_str="http://localhost:3000, https://b.io")
+        self.assertEqual(ha.app_url_from_config(cfg), "https://b.io")
+        self.assertIsNone(ha.app_url_from_config(mock.MagicMock(frontend_url="", cors_allowed_origins_str="")))
+
+    def test_sample_event_renders(self):
+        _, body, html = ha.render({}, [ha.sample_event()])
+        self.assertIn("przykład", body)
+        self.assertIn("WIN", html)
+
+    def test_message_is_multipart_with_text_and_html(self):
+        with mock.patch("smtplib.SMTP") as smtp:
+            ha.send_email(ha.SmtpSettings(host="h"), "t@x", "S", "plain", "<p>html</p>")
+        msg = smtp.return_value.send_message.call_args.args[0]
+        self.assertEqual(msg.get_content_type(), "multipart/alternative")
+        self.assertEqual([p.get_content_type() for p in msg.iter_parts()], ["text/plain", "text/html"])
 
 
 def alerts_db(events, subscribers):
@@ -124,7 +180,8 @@ class FakeSession:
     def __exit__(self, *exc):
         return False
 
-    def send(self, to, subject, body):
+    def send(self, to, subject, body, html=None):
+        assert html and "<html" in html
         outcome = self.outcomes.pop(0) if self.outcomes else None
         if outcome:
             raise outcome
