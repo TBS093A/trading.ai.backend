@@ -53,6 +53,7 @@ class DatabasePostgreSQLFactory:
         'harmonic_setup_alert_settings': HarmonicSetupAlertSettingsTable,
         'harmonic_setup_events': HarmonicSetupEventsTable,
         'harmonic_strength_models': HarmonicStrengthModelsTable,
+        'harmonic_variant_reports': HarmonicVariantReportsTable,
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -144,6 +145,9 @@ class DatabasePostgreSQLFactory:
     def get_harmonic_strength_models_table(self) -> HarmonicStrengthModelsTable:
         return self.get_table('harmonic_strength_models')
 
+    def get_harmonic_variant_reports_table(self) -> HarmonicVariantReportsTable:
+        return self.get_table('harmonic_variant_reports')
+
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""
         return {name: self.get_table(name) for name in self._table_classes.keys()}
@@ -161,4 +165,7 @@ class DatabasePostgreSQLFactory:
 
     @classmethod
     def registered_table_names(cls) -> List[str]:
-        return list(cls._table_classes)
+        names = list(cls._table_classes)
+        for table_class in cls._table_classes.values():
+            names.extend(getattr(table_class, "EXTRA_TABLES", ()))
+        return names

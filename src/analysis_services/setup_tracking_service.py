@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .. import harmonic_scan, harmonic_setups
 from ..utils.harmonic_patterns import ConfluenceDetector, merge_confluences
@@ -18,6 +18,33 @@ SETUP_LIVE_CANDLES = 600              # przebieg godzinny: ostatnie świece (+ p
 SETUP_MAX_CANDLES = 10000             # górna granica jednego przebiegu (backfill)
 HIGHER_TF_COUNT = 3                   # ile wyższych interwałów do konfluencji S/R / trendline (np. 1h -> 4h, 1d, 3d)
 PATTERNS_FOR_CONFLUENCES = 5000       # formacje assetu do Fib cluster / Fib z wyższego TF
+
+
+def entry_confluences(setup, entry_index: int, entry_price: float, klines_to_entry, interval: str,
+                      context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Ten sam zestaw co w sidebarze, w chwili wejścia: detektory w punkcie D (= wejście) +
+    post-processing (Fib cluster, wyższe TF). klines_to_entry kończy się świecą wejścia."""
+    pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
+    pp['D'] = {'index': entry_index, 'price': entry_price}
+    try:
+        base = ConfluenceDetector.detect(klines_to_entry, pp, setup.is_bullish, entry_index, interval)
+    except Exception as e:  # konfluencje są dodatkiem - nie blokują zapisu wyniku
+        logger.debug(f"Konfluencje setupu {setup.key} nie powiodły się: {e}")
+        return None
+    entry_ts = int(klines_to_entry[-1]['open_time'])
+    target = {
+        'id': -1, 'interval': interval, 'd_point_timestamp': entry_ts,
+        'c_point_timestamp': int(klines_to_entry[setup.points['C'].index]['open_time']),
+        'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
+                           'points': {'D': {'price': entry_price, 'open_time': entry_ts}},
+                           'fibonacci_levels': {}},
+    }
+    try:
+        extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
+    except Exception as e:
+        logger.debug(f"Post-processing konfluencji setupu {setup.key} nie powiódł się: {e}")
+        extra = []
+    return merge_confluences(base, extra, replace_types=POST_PROCESSING_TYPES)
 
 
 class SetupTrackingService:
@@ -62,28 +89,8 @@ class SetupTrackingService:
         context = await self._confluence_context(resolved, asset_id, interval, klines)
 
         def confluences_fn(setup, outcome, klines_to_entry):
-            # Ten sam zestaw co w sidebarze: detektory w punkcie D (tu: wejście) + post-processing.
-            pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
-            pp['D'] = {'index': outcome.entry_index, 'price': outcome.entry_price}
-            try:
-                base = ConfluenceDetector.detect(klines_to_entry, pp, setup.is_bullish, outcome.entry_index, interval)
-            except Exception as e:  # konfluencje są dodatkiem - nie blokują zapisu wyniku
-                logger.debug(f"Konfluencje setupu {setup.key} nie powiodły się: {e}")
-                return None
-            entry_ts = int(klines_to_entry[-1]['open_time'])
-            target = {
-                'id': -1, 'interval': interval, 'd_point_timestamp': entry_ts,
-                'c_point_timestamp': int(klines_to_entry[setup.points['C'].index]['open_time']),
-                'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
-                                   'points': {'D': {'price': outcome.entry_price, 'open_time': entry_ts}},
-                                   'fibonacci_levels': {}},
-            }
-            try:
-                extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
-            except Exception as e:
-                logger.debug(f"Post-processing konfluencji setupu {setup.key} nie powiódł się: {e}")
-                extra = []
-            return merge_confluences(base, extra, replace_types=POST_PROCESSING_TYPES)
+            return entry_confluences(setup, outcome.entry_index, outcome.entry_price, klines_to_entry, interval,
+                                     context)
 
         def pre_confluences_fn(setup, all_klines):
             # Setup czeka na PRZ: tylko konfluencje poziomowe, D = bliższa krawędź PRZ, dane do teraz.

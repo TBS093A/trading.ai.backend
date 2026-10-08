@@ -273,3 +273,22 @@ def fit_strength_model_task(self) -> Dict[str, Any]:
             await db.close_db()
 
     return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}
+
+
+@celery.task(bind=True, name='analysis_tasks.run_variant_pair')
+def run_variant_pair_task(self, report_id: int, asset_id: int, interval: str) -> Dict[str, Any]:
+    """Jedna para (asset, interwał) raportu wariantów (src/setup_variants.py)."""
+    from ..db.database_facade import DatabaseFacade
+    from ..analysis_services import KlinesSource
+    from ..analysis_services.variant_report_service import VariantReportService
+
+    async def run() -> Dict[str, Any]:
+        db = DatabaseFacade().get_database_postgresql()
+        await db.init_db()
+        try:
+            source = KlinesSource(TechnicalAnalysis().api_facade, db.get_factory())
+            return await VariantReportService(db, source).run_pair(report_id, asset_id, interval)
+        finally:
+            await db.close_db()
+
+    return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}

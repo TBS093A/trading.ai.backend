@@ -26,6 +26,8 @@ PUT  /harmonics/tracked-assets/{asset_id}       (admin) dodaj / zmień; nowe int
 DELETE /harmonics/tracked-assets/{asset_id}     (admin) przestań śledzić (historia zostaje)
 GET  /harmonics/strength/model                  aktywny model siły formacji (metryki walidacji, najważniejsze wagi)
 POST /harmonics/strength/fit                    (admin) naucz model od nowa na wynikach setupów
+POST /harmonics/variants/run                    (admin) raport wariantów wejścia / zarządzania na historii
+GET  /harmonics/variants/report?report_id=      wyniki wariantów (całość, przed i po cutoff modelu siły)
 GET  /harmonics/alerts/settings                 alerty mailowe zalogowanego użytkownika
 PUT  /harmonics/alerts/settings                 zapis (e-mail, statusy, assety, interwały)
 GET  /harmonics/alerts/events?asset_id=&interval=&limit=   ostatnie zmiany setupów (historia alertów)
@@ -284,6 +286,38 @@ def _enqueue_strength_fit() -> str:
 @router.post("/strength/fit")
 async def fit_strength_model(current_user: AuthUser = Depends(require_admin)):
     return {"task_id": await asyncio.to_thread(_enqueue_strength_fit)}
+
+
+def _enqueue_variant_pair(report_id: int, asset_id: int, interval: str) -> str:
+    from .celery_tasks.analysis_tasks import run_variant_pair_task
+
+    return run_variant_pair_task.apply_async(
+        kwargs={"report_id": report_id, "asset_id": asset_id, "interval": interval}, queue="analysis_queue"
+    ).id
+
+
+@router.post("/variants/run")
+async def run_variant_report(
+    candles: int = Query(default=5000, ge=500, le=10000),
+    current_user: AuthUser = Depends(require_admin),
+):
+    """Porównanie wariantów (src/setup_variants.py) na historii śledzonych par - liczone przez workery."""
+    from .analysis_services.variant_report_service import VariantReportService
+
+    created = await VariantReportService(await get_db()).create(candles)
+    for t in created["pairs"]:
+        await asyncio.to_thread(_enqueue_variant_pair, created["report_id"], t["asset_id"], t["interval"])
+    return {"report_id": created["report_id"], "cutoff_ms": created["cutoff_ms"], "pairs": len(created["pairs"])}
+
+
+@router.get("/variants/report")
+async def get_variant_report(report_id: Optional[int] = Query(default=None, ge=1)):
+    from .analysis_services.variant_report_service import VariantReportService
+
+    summary = await VariantReportService(await get_db()).summary(report_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="brak raportu wariantów")
+    return summary
 
 
 @router.get("/tracked-assets")

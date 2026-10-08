@@ -325,3 +325,25 @@ def training_samples(rows: Iterable[Dict[str, Any]], kind: str = "entry") -> Lis
 def top_weights(model: StrengthModel, n: int = 15) -> List[Dict[str, Any]]:
     pairs = sorted(zip(model.feature_names, model.weights), key=lambda kv: -abs(kv[1]))[:n]
     return [{"feature": f, "label": feature_label(f), "weight": round(w, 4)} for f, w in pairs]
+
+
+def fit_before(samples: Sequence[Tuple[Dict[str, float], int, float, int]], cutoff_ms: int,
+               kind: str = "entry") -> StrengthModel:
+    """Model uczony WYŁĄCZNIE na setupach z wejściem przed cutoff_ms - do oceny filtrów siły na
+    danych późniejszych bez przecieku (model produkcyjny z fit() widział całość)."""
+    train = [s for s in samples if s[3] < cutoff_ms]
+    if len(train) < 200:
+        raise ValueError(f"za mało setupów przed {cutoff_ms} ({len(train)} < 200)")
+    counts: Dict[str, int] = {}
+    for f, *_ in train:
+        for n, v in f.items():
+            if v:
+                counts[n] = counts.get(n, 0) + 1
+    names = sorted(n for n, c in counts.items() if c >= MIN_FEATURE_COUNT)
+    X = _matrix([s[0] for s in train], names)
+    w, b = _fit_logistic(X, np.array([s[1] for s in train], dtype=float))
+    z = b + X @ w
+    return StrengthModel(feature_names=names, weights=[float(v) for v in w], intercept=b,
+                         quantiles=[float(v) for v in np.quantile(z, np.linspace(0, 1, 101))],
+                         metrics={"train": len(train), "cutoff_ms": cutoff_ms}, kind=kind,
+                         trained_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
