@@ -59,6 +59,7 @@ class DatabasePostgreSQL:
                 'asset_country_map',
                 'technical_analysis_harmonic_patterns',
                 'technical_analysis_harmonic_scan_windows',
+                'technical_analysis_harmonic_setups',
             ]
             
             for table_name in table_order:
@@ -361,6 +362,7 @@ class DatabasePostgreSQL:
                 'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
                 'fundamental_analysis_interpretation_assets',  # Tabela pośrednia
                 'fundamental_analysis_interpretation',
+                'technical_analysis_harmonic_setups',
                 'technical_analysis_harmonic_scan_windows',
                 'technical_analysis_harmonic_patterns',
                 'fundamental_analysis_assets',  # Tabela pośrednia
