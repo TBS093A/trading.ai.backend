@@ -20,6 +20,7 @@ from src.db.database_facade import DatabaseFacade
 from src.celery_tasks.sync_tasks import sync_exchanges_task
 from src.celery_tasks.analysis_tasks import (
     sync_technical_analysis_task, track_harmonic_setups_task, notify_harmonic_setup_events_task,
+    fit_strength_model_task,
 )
 from src import harmonic_scan
 from src.celery_tasks.maintenance_tasks import db_janitor_task
@@ -35,6 +36,7 @@ METHOD_TO_TASK_MAPPING = {
     '_run_exchanges_sync': 'sync_tasks.sync_exchanges',
     '_run_technical_analysis_sync': 'analysis_tasks.sync_technical_analysis',
     '_run_db_janitor': 'maintenance_tasks.db_janitor',
+    '_run_strength_model_fit': 'analysis_tasks.fit_strength_model',
     'run_full_sync_workflow': 'run_full_sync_workflow'  # Special case
 }
 
@@ -520,6 +522,19 @@ class SyncController:
             return tasks
         except Exception as e:
             logger.error(f"Błąd podczas zlecania śledzenia setupów: {e}")
+            logger.error(traceback.format_exc())
+            return []
+
+    @sync_with_cron_db
+    @prevent_duplicate_tasks
+    async def _run_strength_model_fit(self) -> List[AsyncResult]:
+        """Co tydzień: model siły formacji z wyników setupów (src/pattern_strength.py)."""
+        try:
+            task_result = fit_strength_model_task.apply_async(queue='analysis_queue', priority=2)
+            logger.info(f"✅ Wysłano fit_strength_model: task_id={task_result.id}")
+            return [task_result]
+        except Exception as e:
+            logger.error(f"Błąd podczas wysyłania uczenia modelu siły: {e}")
             logger.error(traceback.format_exc())
             return []
 

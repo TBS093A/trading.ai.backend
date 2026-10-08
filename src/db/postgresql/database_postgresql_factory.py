@@ -52,6 +52,7 @@ class DatabasePostgreSQLFactory:
         'tracked_assets': TrackedAssetsTable,
         'harmonic_setup_alert_settings': HarmonicSetupAlertSettingsTable,
         'harmonic_setup_events': HarmonicSetupEventsTable,
+        'harmonic_strength_models': HarmonicStrengthModelsTable,
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -139,6 +140,9 @@ class DatabasePostgreSQLFactory:
 
     def get_harmonic_setup_events_table(self) -> HarmonicSetupEventsTable:
         return self.get_table('harmonic_setup_events')
+
+    def get_harmonic_strength_models_table(self) -> HarmonicStrengthModelsTable:
+        return self.get_table('harmonic_strength_models')
 
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

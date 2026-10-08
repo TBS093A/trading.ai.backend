@@ -256,3 +256,20 @@ def notify_harmonic_setup_events_task(self) -> Dict[str, Any]:
             await db.close_db()
 
     return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}
+
+
+@celery.task(bind=True, name='analysis_tasks.fit_strength_model')
+def fit_strength_model_task(self) -> Dict[str, Any]:
+    """Uczy model siły formacji na rozstrzygniętych setupach bieżącej serii (src/pattern_strength.py)."""
+    from ..db.database_facade import DatabaseFacade
+    from ..analysis_services import StrengthService
+
+    async def run() -> Dict[str, Any]:
+        db = DatabaseFacade().get_database_postgresql()
+        await db.init_db()
+        try:
+            return await StrengthService(db).fit_and_activate()
+        finally:
+            await db.close_db()
+
+    return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}

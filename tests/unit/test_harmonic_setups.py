@@ -384,7 +384,7 @@ class TestSetupEndpoints(unittest.TestCase):
     def test_setups_list_is_not_shadowed_by_the_range_route(self):
         r = self.client.get("/harmonics/setups", params={"asset_id": 1, "interval": "1h", "status": "win"})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["setups"], [{"id": 1}])
+        self.assertEqual(r.json()["setups"], [{"id": 1, "strength": None}])
 
     def test_backfill_enqueues_one_task_per_asset_and_interval(self):
         r = self.client.post("/harmonics/setups/backfill", json={"asset_ids": [1, 2], "intervals": ["1h", "4h"]})

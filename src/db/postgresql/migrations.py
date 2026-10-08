@@ -83,6 +83,15 @@ MIGRATIONS: List[Migration] = [
            ON technical_analysis_harmonic_patterns (asset_id, interval, COALESCE(x_point_timestamp, -1),
               a_point_timestamp, b_point_timestamp, c_point_timestamp, COALESCE(d_point_timestamp, -1))""",
     ]),
+    # Model siły formacji (src/pattern_strength.py) uczony co tydzień na wynikach setupów.
+    Migration(5, "strength_model_weekly_fit", [
+        "INSERT INTO system_sync_job (process) VALUES ('_run_strength_model_fit') ON CONFLICT (process) DO NOTHING",
+        """INSERT INTO cron_system_sync_job (name, system_sync_job_id, day_of_week, hour, minute, timezone, enabled)
+           SELECT 'Weekly pattern strength model fit - _run_strength_model_fit', id, 'sun', 4, 0, 'UTC', TRUE
+           FROM system_sync_job WHERE process = '_run_strength_model_fit'
+             AND NOT EXISTS (SELECT 1 FROM cron_system_sync_job c
+                             WHERE c.system_sync_job_id = system_sync_job.id)""",
+    ]),
 ]
 
 
