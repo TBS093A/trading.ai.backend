@@ -142,6 +142,34 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
         )
         return {(r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"]): r["status"] for r in rows}
 
+    async def status_counts(self, asset_id: int, interval: str, params_version: str) -> Dict[str, int]:
+        rows = await self.fetch_all(
+            """SELECT status, COUNT(*) AS n FROM technical_analysis_harmonic_setups
+            WHERE asset_id = $1 AND interval = $2 AND params_version = $3 GROUP BY status""",
+            asset_id, interval, params_version,
+        )
+        return {r["status"]: int(r["n"]) for r in rows}
+
+    async def status_totals(self, params_version: str) -> Dict[str, int]:
+        rows = await self.fetch_all(
+            "SELECT status, COUNT(*) AS n FROM technical_analysis_harmonic_setups WHERE params_version = $1 "
+            "GROUP BY status", params_version,
+        )
+        return {r["status"]: int(r["n"]) for r in rows}
+
+    async def decided_by_week(self, params_version: str) -> List[Dict[str, Any]]:
+        """Dane uczące modelu siły w czasie: rozstrzygnięte setupy na tydzień wejścia."""
+        return await self.fetch_all(
+            """SELECT date_trunc('week', to_timestamp(entry_time / 1000.0)) AS week,
+                      COUNT(*) AS trades,
+                      COUNT(*) FILTER (WHERE status = 'win') AS wins,
+                      AVG(r_multiple) AS avg_r
+            FROM technical_analysis_harmonic_setups
+            WHERE params_version = $1 AND status IN ('win', 'loss', 'expired') AND entry_time IS NOT NULL
+            GROUP BY 1 ORDER BY 1""",
+            params_version,
+        )
+
     async def find_by_points(self, asset_id: int, interval: str, params_version: str,
                              keys: Sequence[tuple]) -> Dict[tuple, Dict[str, Any]]:
         """Setupy o tych samych punktach X..C co formacje z wykresu - klucz (typ, x, a, b, c)."""
@@ -202,19 +230,22 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
         return await self.fetch_all(query, *args)
 
     async def list(self, asset_id: int, interval: str, params_version: str, status: Optional[str] = None,
-                   limit: int = 200, statuses: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
-        args: List[Any] = [asset_id, interval, params_version, limit]
+                   limit: int = 200, statuses: Optional[Sequence[str]] = None, offset: int = 0,
+                   newest_exit_first: bool = False) -> List[Dict[str, Any]]:
+        args: List[Any] = [asset_id, interval, params_version, limit, offset]
         extra = ""
         if statuses:
             args.append(list(statuses))
-            extra = " AND status = ANY($5::text[])"
+            extra = " AND status = ANY($6::text[])"
         elif status:
             args.append(status)
-            extra = " AND status = $5"
+            extra = " AND status = $6"
+        # Zamknięte sekcje (wygrane / przegrane / śmieciowe): najświeższe wyjście na górze.
+        order = "COALESCE(exit_time, created_time) DESC, id DESC" if newest_exit_first else "created_time DESC, id DESC"
         rows = await self.fetch_all(
             f"""SELECT * FROM technical_analysis_harmonic_setups
             WHERE asset_id = $1 AND interval = $2 AND params_version = $3{extra}
-            ORDER BY created_time DESC LIMIT $4""",
+            ORDER BY {order} LIMIT $4 OFFSET $5""",  # nosemgrep: warunek i kolejność ze stałych, wartości parametrami
             *args,
         )
         for r in rows:
