@@ -8,6 +8,8 @@ import logging
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 
+from ._common import d_point_price
+
 logger = logging.getLogger(__name__)
 
 RSI_PERIOD = 14
@@ -130,6 +132,23 @@ def _calculate_obv(klines: List[Dict]) -> np.ndarray:
     return obv
 
 
+def _relative_difference(a: float, b: float) -> float:
+    """|a-b| / (|a|+|b|) w [0, 1]. Dzielenie przez samo |b| dawało 1.0 za każdym razem, gdy
+    wskaźnik w punkcie odniesienia był bliski zera (MACD przechodzi przez zero co chwilę)."""
+    denom = abs(a) + abs(b)
+    return abs(a - b) / denom if denom > 0 else 0.0
+
+
+def _obv_strength(obv_d: float, obv_ref: float, klines: List[Dict], ref_idx: int, d_index: int) -> float:
+    """Zmiana OBV między ref a D jako część wolumenu obróconego w tym czasie, w [0, 1].
+
+    OBV to suma od początku okna świec, więc jego wartość bezwzględna zależy od tego, gdzie okno
+    się zaczyna - dzielenie przez |OBV(ref)| dawało losowe confidence.
+    """
+    traded = sum(float(k.get('volume', 0)) for k in klines[ref_idx + 1: d_index + 1])
+    return abs(obv_d - obv_ref) / traded if traded > 0 else 0.0
+
+
 class IndicatorConfluenceDetector:
     """Detektory konfluencji oparte na RSI, MACD i OBV."""
 
@@ -230,7 +249,7 @@ class IndicatorConfluenceDetector:
             if ref_rsi is None:
                 continue
 
-            d_price = float(klines[d_index]['close'])
+            d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
 
             if is_bullish:
                 # Bullish divergence: cena robi niższy dołek, RSI robi wyższy dołek
@@ -287,7 +306,10 @@ class IndicatorConfluenceDetector:
         pattern_points: Dict = None,
     ) -> Optional[Dict]:
         """
-        MACD crossover w okolicach D (±CROSSOVER_LOOKBACK świec).
+        MACD crossover w ostatnich CROSSOVER_LOOKBACK świecach do D włącznie.
+
+        Tylko świece do D: przecięcie po D jest w momencie D jeszcze nieznane (look-ahead -
+        zawyżałoby skuteczność formacji w każdym pomiarze wyników).
 
         Bullish: MACD przecina sygnał w górę.
         Bearish: MACD przecina sygnał w dół.
@@ -298,7 +320,7 @@ class IndicatorConfluenceDetector:
         macd_line, signal_line, _ = _calculate_macd(klines)
 
         start = max(1, d_index - CROSSOVER_LOOKBACK)
-        end = min(len(klines), d_index + CROSSOVER_LOOKBACK + 1)
+        end = min(len(klines), d_index + 1)
 
         best_cross = None
 
@@ -424,13 +446,13 @@ class IndicatorConfluenceDetector:
                 continue
             macd_ref = float(macd_line[ref_idx])
 
-            d_price = float(klines[d_index]['close'])
+            d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
 
             if is_bullish:
                 price_lower = d_price <= ref_price
                 macd_higher = macd_d > macd_ref
                 if price_lower and macd_higher:
-                    strength = abs(macd_d - macd_ref) / max(1e-10, abs(macd_ref))
+                    strength = _relative_difference(macd_d, macd_ref)
                     confidence = min(1.0, strength)
                     candidate = {
                         'type': 'macd_bullish_divergence',
@@ -450,7 +472,7 @@ class IndicatorConfluenceDetector:
                 price_higher = d_price >= ref_price
                 macd_lower = macd_d < macd_ref
                 if price_higher and macd_lower:
-                    strength = abs(macd_ref - macd_d) / max(1e-10, abs(macd_ref))
+                    strength = _relative_difference(macd_d, macd_ref)
                     confidence = min(1.0, strength)
                     candidate = {
                         'type': 'macd_bearish_divergence',
@@ -507,14 +529,13 @@ class IndicatorConfluenceDetector:
                 continue
             obv_ref = float(obv[ref_idx])
 
-            d_price = float(klines[d_index]['close'])
+            d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
 
             if is_bullish:
                 price_lower = d_price <= ref_price
                 obv_higher = obv_d > obv_ref
                 if price_lower and obv_higher:
-                    obv_range = max(1e-10, abs(obv_ref))
-                    strength = abs(obv_d - obv_ref) / obv_range
+                    strength = _obv_strength(obv_d, obv_ref, klines, ref_idx, d_index)
                     confidence = min(1.0, strength)
                     candidate = {
                         'type': 'obv_bullish_divergence',
@@ -534,8 +555,7 @@ class IndicatorConfluenceDetector:
                 price_higher = d_price >= ref_price
                 obv_lower = obv_d < obv_ref
                 if price_higher and obv_lower:
-                    obv_range = max(1e-10, abs(obv_ref))
-                    strength = abs(obv_ref - obv_d) / obv_range
+                    strength = _obv_strength(obv_d, obv_ref, klines, ref_idx, d_index)
                     confidence = min(1.0, strength)
                     candidate = {
                         'type': 'obv_bearish_divergence',

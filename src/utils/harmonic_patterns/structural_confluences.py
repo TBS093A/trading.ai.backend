@@ -16,8 +16,10 @@ import logging
 import math
 import numpy as np
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+from ._common import d_point_price, pattern_point_indices
 
 from .fib_confluences import (
     INTERVAL_HIERARCHY, HIGHER_TF_CONFIDENCE_MAP, _get_d_price,
@@ -51,13 +53,15 @@ def _find_swing_points(
     swing_highs: List[Tuple[int, float]] = []
     swing_lows: List[Tuple[int, float]] = []
 
+    # Środek okna musi być PIERWSZYM ekstremum w oknie: przy remisach (płaska konsolidacja) każda
+    # świeca była "swing pointem", więc 30 świec konsolidacji dawało strefę z 30 dotknięciami.
     for i in range(lookback, n - lookback):
         window_highs = highs[i - lookback: i + lookback + 1]
-        if highs[i] == np.max(window_highs):
+        if int(np.argmax(window_highs)) == lookback:
             swing_highs.append((i, float(highs[i])))
 
         window_lows = lows[i - lookback: i + lookback + 1]
-        if lows[i] == np.min(window_lows):
+        if int(np.argmin(window_lows)) == lookback:
             swing_lows.append((i, float(lows[i])))
 
     return swing_highs, swing_lows
@@ -152,6 +156,30 @@ def _get_round_levels_near(price: float) -> List[Tuple[float, str]]:
     return unique
 
 
+ROUNDNESS_BY_STEP = ((10, 1.0), (5, 0.85), (2, 0.7), (1, 0.6), (0.5, 0.45), (0.25, 0.3))
+
+
+def _roundness(level: float, price: float) -> float:
+    """0.3..1.0 - jak "okrągły" jest poziom względem rzędu wielkości ceny."""
+    magnitude = 10 ** math.floor(math.log10(price))
+    for factor, score in ROUNDNESS_BY_STEP:
+        step = magnitude * factor
+        ratio = level / step
+        if abs(ratio - round(ratio)) < 1e-9 * max(1.0, abs(ratio)):
+            return score
+    return 0.2
+
+
+def _own_points_excluded(swings, pattern_points, d_index):
+    """Szczyty/dołki bez punktów X..C samej formacji - inaczej np. dołek X w formacjach z D
+    blisko X (Bat, Shark, Alt Bat) tworzył "wsparcie", które potwierdzało formację nią samą."""
+    own = pattern_point_indices(pattern_points, d_index)
+    if not own:
+        return swings
+    highs, lows = swings
+    return [p for p in highs if p[0] not in own], [p for p in lows if p[0] not in own]
+
+
 def _calculate_pivot_points(
     prev_high: float, prev_low: float, prev_close: float,
 ) -> Dict[str, float]:
@@ -183,7 +211,7 @@ def _get_previous_period_ohlc(
     if d_time_ms == 0:
         return None
 
-    d_dt = datetime.fromtimestamp(d_time_ms / 1000)
+    d_dt = datetime.fromtimestamp(d_time_ms / 1000, tz=timezone.utc)
 
     if use_daily:
         d_date = d_dt.date()
@@ -192,15 +220,15 @@ def _get_previous_period_ohlc(
             t = klines[i].get('open_time', 0)
             if t == 0:
                 continue
-            dt = datetime.fromtimestamp(t / 1000)
+            dt = datetime.fromtimestamp(t / 1000, tz=timezone.utc)
             if dt.date() < d_date:
                 prev_candles.append(klines[i])
         # Weź tylko świece z ostatniego pełnego dnia
         if not prev_candles:
             return None
-        last_date = datetime.fromtimestamp(prev_candles[-1]['open_time'] / 1000).date()
+        last_date = datetime.fromtimestamp(prev_candles[-1]['open_time'] / 1000, tz=timezone.utc).date()
         day_candles = [c for c in prev_candles
-                       if datetime.fromtimestamp(c['open_time'] / 1000).date() == last_date]
+                       if datetime.fromtimestamp(c['open_time'] / 1000, tz=timezone.utc).date() == last_date]
     else:
         # Dla daily+ weź ostatnie 5-7 świec jako "tydzień"
         lookback = min(7, d_index)
@@ -236,11 +264,12 @@ class StructuralConfluenceDetector:
         if d_index < SR_SWING_LOOKBACK * 2:
             return None
 
-        d_price = float(klines[d_index]['close'])
+        d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
         if d_price == 0:
             return None
 
-        swing_highs, swing_lows = _find_swing_points(klines[:d_index])
+        swing_highs, swing_lows = _own_points_excluded(
+            _find_swing_points(klines[:d_index]), pattern_points, d_index)
 
         if is_bullish:
             # Bullish: szukamy wsparcia (swing lows)
@@ -306,7 +335,7 @@ class StructuralConfluenceDetector:
         if d_index < SR_SWING_LOOKBACK * 2 + TRENDLINE_MIN_POINTS:
             return None
 
-        d_price = float(klines[d_index]['close'])
+        d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
         if d_price == 0:
             return None
 
@@ -314,7 +343,8 @@ class StructuralConfluenceDetector:
         if d_timestamp == 0:
             return None
 
-        swing_highs, swing_lows = _find_swing_points(klines[:d_index])
+        swing_highs, swing_lows = _own_points_excluded(
+            _find_swing_points(klines[:d_index]), pattern_points, d_index)
 
         if is_bullish:
             points = swing_lows
@@ -391,7 +421,7 @@ class StructuralConfluenceDetector:
         if d_index < 0 or d_index >= len(klines):
             return None
 
-        d_price = float(klines[d_index]['close'])
+        d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
         if d_price <= 0:
             return None
 
@@ -413,11 +443,12 @@ class StructuralConfluenceDetector:
             return None
 
         lvl, label = best_match
-        # "Okrągłość" — im większy krok round level vs cena, tym silniejszy
-        magnitude = 10 ** math.floor(math.log10(d_price)) if d_price > 0 else 1
-        roundness = abs(lvl) / max(magnitude, 1e-10)
-        confidence = min(1.0, roundness / 10.0 * 0.5 + (ROUND_LEVEL_TOLERANCE_PCT - best_dev) / ROUND_LEVEL_TOLERANCE_PCT * 0.5)
-        confidence = max(0.2, min(1.0, confidence))
+        # "Okrągłość" = największy krok, którego wielokrotnością jest poziom (60000 przy cenie
+        # ~62000 to wielokrotność 10000, a 62500 tylko 2500). Wcześniej liczono abs(lvl) /
+        # magnitude, czyli wielkość poziomu - 62500 wychodził "okrąglejszy" niż 60000.
+        roundness = _roundness(lvl, d_price)
+        proximity = (ROUND_LEVEL_TOLERANCE_PCT - best_dev) / ROUND_LEVEL_TOLERANCE_PCT
+        confidence = max(0.2, min(1.0, roundness * 0.5 + proximity * 0.5))
 
         return {
             'type': 'round_level',
@@ -447,7 +478,7 @@ class StructuralConfluenceDetector:
         if d_index < 2 or d_index >= len(klines):
             return None
 
-        d_price = float(klines[d_index]['close'])
+        d_price = d_point_price(klines, d_index, is_bullish, pattern_points)
         if d_price <= 0:
             return None
 
