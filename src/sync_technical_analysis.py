@@ -4,61 +4,23 @@ from datetime import datetime, timedelta
 from .api import ApiFacade
 from .db.database_facade import DatabaseFacade
 from .technical_analysis.technical_analysis_facade import TechnicalAnalysisFacade
-from . import harmonic_scan, harmonic_setups
-from .utils.harmonic_patterns import (
-    ConfluenceDetector, FibClusterDetector, HigherTFFibDetector, merge_confluences,
-    HigherTFSRDetector, HigherTFTrendlineDetector,
+from .analysis_services import (
+    ConfluencePostProcessor, HarmonicScanService, KlinesSource, PatternStore, SetupTrackingService,
 )
+from .analysis_services import setup_tracking_service
 
 logger = logging.getLogger(__name__)
 
 
 class TechnicalAnalysis:
     """
-    Klasa odpowiedzialna za analizę techniczną assetów.
-    Pobiera assety z bazy danych, oblicza harmonic patterns i zapisuje je do bazy.
+    Nocny sync formacji harmonicznych (śledzone assety) i fasada dla zadań Celery / kontrolerów.
+
+    Logika siedzi w src/analysis_services: świece (KlinesSource), zapis formacji (PatternStore),
+    konfluencje po zapisie (ConfluencePostProcessor), skan zakresów (HarmonicScanService) i setupy
+    (SetupTrackingService). Serwisy powstają przy użyciu z bieżących self.db / self.api_facade.
     """
-    
-    async def cleanup_all_duplicates(self) -> Dict[str, int]:
-        """
-        Usuwa wszystkie duplikaty wzorców harmonicznych z bazy danych.
-        
-        Duplikat jest definiowany jako wzorzec o tych samych:
-        - asset_id, interval, x/a/b/c/d_point_timestamp
-        
-        Zachowuje najstarszy rekord (najniższe ID), usuwa nowsze duplikaty.
-        
-        Returns:
-            Dict z liczbą usuniętych duplikatów
-        """
-        try:
-            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
-            if not hasattr(self.db, 'factory') or self.db.factory is None:
-                await self.db.init_db()
-            
-            logger.info("=== Rozpoczęcie czyszczenia duplikatów ===")
-            
-            ta_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            
-            # Policz duplikaty przed usunięciem
-            duplicates_count = await ta_table.count_duplicates()
-            logger.info(f"Znaleziono {duplicates_count} duplikatów do usunięcia")
-            
-            if duplicates_count == 0:
-                logger.info("Brak duplikatów - baza jest czysta")
-                return {'duplicates_removed': 0}
-            
-            # Usuń duplikaty
-            removed = await ta_table.remove_duplicates()
-            
-            logger.info(f"=== Czyszczenie duplikatów zakończone: usunięto {removed} rekordów ===")
-            
-            return {'duplicates_removed': removed}
-            
-        except Exception as e:
-            logger.error(f"Błąd podczas czyszczenia duplikatów: {e}", exc_info=True)
-            return {'duplicates_removed': 0, 'error': str(e)}
-    
+
     CHART_INTERVALS = {
         "1m": timedelta(minutes=1),
         "15m": timedelta(minutes=15),
@@ -72,704 +34,192 @@ class TechnicalAnalysis:
         "3M": timedelta(days=93),
         "1Y": timedelta(days=365),
     }
-    
+
     CANDLES_COUNT = 500
-    
+    SETUP_LIVE_CANDLES = setup_tracking_service.SETUP_LIVE_CANDLES
+    SETUP_MAX_CANDLES = setup_tracking_service.SETUP_MAX_CANDLES
+
     def __init__(self, test_mode: bool = False):
         """
-        Inicjalizacja klasy TechnicalAnalysis
-        
         Args:
-            test_mode: Czy uruchamiać w trybie testowym
+            test_mode: Czy uruchamiać w trybie testowym (testowa baza)
         """
         self.test_mode = test_mode
         self.api_facade = ApiFacade()
-        self.exchanges_apis = self.api_facade.get_fabric().get_exchanges_apis()
-        
-        # Inicjalizacja bazy danych
+
         if not self.test_mode:
             self.db = DatabaseFacade().get_database_postgresql()
         else:
             self.db = DatabaseFacade().get_test_database_postgresql()
-        
-        # Inicjalizacja fasady analizy technicznej
+
         self.technical_analysis_facade = TechnicalAnalysisFacade()
         self.technical_analysis_factory = self.technical_analysis_facade.get_technical_analysis_factory()
-    
-    def _calculate_start_time(self, interval: str) -> int:
-        """
-        Oblicza start_time dla pobierania klines.
-        
-        Args:
-            interval: Interwał czasowy (np. "1h", "1D")
-            
-        Returns:
-            int: Start time w milisekundach
-        """
-        interval_timedelta = self.CHART_INTERVALS[interval]
-        # Oblicz czas startowy: teraz - (liczba świec * interwał)
-        start_datetime = datetime.now() - (interval_timedelta * self.CANDLES_COUNT)
-        return int(start_datetime.timestamp() * 1000)
-    
-    def _calculate_end_time(self) -> int:
-        """
-        Oblicza end_time dla pobierania klines.
-        
-        Returns:
-            int: End time w milisekundach (aktualny czas)
-        """
-        return int(datetime.now().timestamp() * 1000)
-    
-    def _harmonic_indicators(self) -> Dict[str, Any]:
-        return {
-            'IndicatorRSI': self.technical_analysis_factory.get_indicator_rsi_class(),
-            'IndicatorMACD': self.technical_analysis_factory.get_indicator_macd_class(),
-            'IndicatorOBV': self.technical_analysis_factory.get_indicator_obv_class()
-        }
 
-    async def record_harmonic_scan_window(self, asset_id: int, interval: str, klines: List[Dict[str, Any]],
-                                          patterns_found: int, source: str = 'sync') -> None:
-        """Zapisuje okno, które nocny sync przeszukał, jako pokrycie (patrz src/harmonic_scan.py).
+    # ─────────────────────────── serwisy ───────────────────────────
 
-        Sync liczy na ostatnich CANDLES_COUNT świecach bez zapasu po lewej, więc pokrycie zaczyna się
-        PAD_CANDLES świec później; kończy się na ostatniej zamkniętej świecy.
-        """
-        try:
-            step = harmonic_scan.interval_ms(interval)
-        except ValueError:
-            return
-        now_ms = int(datetime.now().timestamp() * 1000)
-        closed = [k['open_time'] for k in klines if k['open_time'] <= now_ms - step]
-        if len(closed) <= harmonic_scan.PAD_CANDLES + 1:
-            return
-        windows_table = self.db.get_factory().get_technical_analysis_harmonic_scan_windows_table()
-        await windows_table.create(
-            asset_id=asset_id, interval=interval, params_hash=harmonic_scan.params_hash(),
-            start_time=closed[harmonic_scan.PAD_CANDLES], end_time=closed[-1],
-            patterns_found=patterns_found, source=source,
+    def _klines_source(self) -> KlinesSource:
+        return KlinesSource(self.api_facade, self.db.get_factory())
+
+    def _scan_service(self) -> HarmonicScanService:
+        return HarmonicScanService(
+            self.db, self._klines_source(), self.technical_analysis_facade, self.technical_analysis_factory,
+            save_patterns=self.save_harmonic_patterns_to_database,
+            post_fib_cluster=self._update_fib_cluster_confluences,
         )
+
+    async def _with_db(self, coro_fn, *args):
+        # Każda instancja TechnicalAnalysis ma własne DatabasePostgreSQL - pula powstaje dopiero w
+        # init_db() i należy do pętli zdarzeń zadania Celery, więc ją też tu zamykamy.
+        opened_here = getattr(self.db, 'factory', None) is None
+        if opened_here:
+            await self.db.init_db()
+        try:
+            return await coro_fn(*args)
+        finally:
+            if opened_here:
+                await self.db.close_db()
+
+    # ─────────────────────────── fasada ───────────────────────────
 
     async def scan_harmonic_windows(self, asset_id: int, interval: str,
                                     windows: List[Tuple[int, int]]) -> List[Dict[str, Any]]:
-        """Liczy formacje w zadanych oknach (z zapasem świec), zapisuje je i zapisuje okna jako pokryte.
-
-        Wołane przez zadanie Celery analysis_tasks.scan_harmonic_windows dla brakujących fragmentów
-        zakresu z GET /harmonics/{asset_id}/{interval}.
-        """
-        # Każda instancja TechnicalAnalysis ma własne DatabasePostgreSQL - pula powstaje dopiero w
-        # init_db() i należy do pętli zdarzeń tego zadania, więc ją też tu zamykamy.
-        opened_here = getattr(self.db, 'factory', None) is None
-        if opened_here:
-            await self.db.init_db()
-        try:
-            return await self._scan_harmonic_windows(asset_id, interval, windows)
-        finally:
-            if opened_here:
-                await self.db.close_db()
+        """Formacje w brakujących fragmentach zakresu z GET /harmonics/{asset_id}/{interval}
+        (zadanie Celery analysis_tasks.scan_harmonic_windows)."""
+        return await self._with_db(self._scan_harmonic_windows, asset_id, interval, windows)
 
     async def _scan_harmonic_windows(self, asset_id: int, interval: str,
                                      windows: List[Tuple[int, int]]) -> List[Dict[str, Any]]:
-        factory = self.db.get_factory()
-        asset = await factory.get_assets_table().get_by_id(asset_id)
-        if not asset:
-            raise ValueError(f"Asset {asset_id} not found")
-        asset_exchanges = await factory.get_asset_exchanges_table().get_by_asset_id(asset_id)
-        exchange = harmonic_scan.pick_exchange(e.get('exchange_name', '') for e in asset_exchanges)
-        fabric = self.api_facade.get_fabric()
-        getters = {'BINANCE': fabric.get_binance_api, 'YAHOO': fabric.get_yahoofinance_api}
-        if exchange not in getters:
-            raise ValueError(f"Brak obsługiwanej giełdy dla assetu {asset['asset']}")
-        api = getters[exchange]()
-        windows_table = factory.get_technical_analysis_harmonic_scan_windows_table()
-        phash = harmonic_scan.params_hash()
-        symbol = f"{asset['asset']}/{asset['quote']}"
-
-        results = []
-        for window_start, window_end in windows:
-            now_ms = int(datetime.now().timestamp() * 1000)
-            fetch_start, fetch_end = harmonic_scan.padded_window(interval, (window_start, window_end), now_ms)
-            klines = harmonic_scan.fetch_klines_range(
-                api._get_klines, asset['asset'], asset['quote'], interval, fetch_start, fetch_end
-            )
-            found: List[Dict[str, Any]] = []
-            if klines:
-                harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
-                    asset_id=asset_id, interval=interval
-                )
-                self.technical_analysis_facade.calculate(
-                    klines=klines,
-                    enabled_indicators=self._harmonic_indicators(),
-                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
-                    symbol=symbol,
-                    interval=interval,
-                    find_xabcd=True,
-                    find_abcd=True,
-                    find_abc=False
-                )
-                found = harmonic_scan.patterns_inside(
-                    harmonic_patterns.get_calculated_objects(), (window_start, window_end)
-                )
-                if found:
-                    await self.save_harmonic_patterns_to_database(found)
-            # "Pusto" też jest wynikiem - okno zapisujemy zawsze, żeby nie liczyć go drugi raz.
-            await windows_table.create(
-                asset_id=asset_id, interval=interval, params_hash=phash,
-                start_time=window_start, end_time=window_end, patterns_found=len(found), source='range',
-            )
-            results.append({'window': [window_start, window_end], 'klines': len(klines), 'patterns': len(found)})
-            logger.info(f"Skan formacji {symbol} [{interval}] {window_start}..{window_end}: "
-                        f"{len(klines)} świec, {len(found)} formacji")
-
-        if any(r['patterns'] for r in results):
-            try:
-                await self._update_fib_cluster_confluences(asset_id, interval)
-            except Exception as e:
-                logger.warning(f"Fib cluster confluences po skanie zakresu nie powiodły się: {e}")
-        return results
-
-    SETUP_LIVE_CANDLES = 600              # przebieg godzinny: ostatnie świece (+ pokrycie otwartych setupów)
-    SETUP_MAX_CANDLES = 10000             # górna granica jednego przebiegu (backfill)
+        return await self._scan_service().scan_windows(asset_id, interval, windows)
 
     async def track_harmonic_setups(self, asset_id: int, interval: str, candles: int = SETUP_LIVE_CANDLES,
                                     source: str = 'live') -> Dict[str, Any]:
-        """Setupy XABCD (X..C + PRZ znane w danej chwili) i ich wyniki - patrz src/harmonic_setups.py.
-
-        source='live' (co godzinę, proces _run_harmonic_setups_tracking) dokłada świece wstecz, żeby
-        objąć najstarszy nierozstrzygnięty setup, i zapisuje zdarzenia zmian statusów (alerty);
-        source='replay' (backfill) liczy historię z `candles` ostatnich świec, bez zdarzeń.
-        """
-        opened_here = getattr(self.db, 'factory', None) is None
-        if opened_here:
-            await self.db.init_db()
-        try:
-            return await self._track_harmonic_setups(asset_id, interval, candles, source)
-        finally:
-            if opened_here:
-                await self.db.close_db()
+        """Setupy XABCD i ich wyniki (SetupTrackingService.track)."""
+        return await self._with_db(self._track_harmonic_setups, asset_id, interval, candles, source)
 
     async def _track_harmonic_setups(self, asset_id: int, interval: str, candles: int,
                                      source: str) -> Dict[str, Any]:
-        factory = self.db.get_factory()
-        asset = await factory.get_assets_table().get_by_id(asset_id)
-        if not asset:
-            raise ValueError(f"Asset {asset_id} not found")
-        asset_exchanges = await factory.get_asset_exchanges_table().get_by_asset_id(asset_id)
-        exchange = harmonic_scan.pick_exchange(e.get('exchange_name', '') for e in asset_exchanges)
-        fabric = self.api_facade.get_fabric()
-        getters = {'BINANCE': fabric.get_binance_api, 'YAHOO': fabric.get_yahoofinance_api}
-        if exchange not in getters:
-            raise ValueError(f"Brak obsługiwanej giełdy dla assetu {asset['asset']}")
-        api = getters[exchange]()
-        table = factory.get_technical_analysis_harmonic_setups_table()
-        version = harmonic_setups.params_version()
+        return await SetupTrackingService(self.db, self._klines_source()).track(asset_id, interval, candles, source)
 
-        step = harmonic_scan.interval_ms(interval)
-        now_ms = int(datetime.now().timestamp() * 1000)
-        end = harmonic_scan.last_closed_open_time(interval, now_ms)
-        candles = max(100, min(int(candles), self.SETUP_MAX_CANDLES))
-        # Yahoo: weekendy / sesje - zapas kalendarzowy, potem przycinamy do `candles` świec.
-        start = end - candles * step * (harmonic_scan.PAD_CALENDAR_FACTOR if exchange == 'YAHOO' else 1)
-        oldest_open = await table.get_oldest_unresolved_x_time(asset_id, interval, version)
-        cover_from = None
-        if oldest_open is not None:
-            # Zygzak potrzebuje kilku pivotów przed X, żeby odtworzyć ten sam setup.
-            cover_from = oldest_open - 4 * max(harmonic_setups.SPACINGS) * step
-            start = max(min(start, cover_from), end - self.SETUP_MAX_CANDLES * step)
-        klines = harmonic_scan.fetch_klines_range(
-            api._get_klines, asset['asset'], asset['quote'], interval, start, end
-        )
-        first = max(0, len(klines) - candles)
-        if cover_from is not None:
-            first = min(first, next((i for i, k in enumerate(klines) if k['open_time'] >= cover_from), first))
-        klines = klines[first:]
-        if len(klines) < 100:
-            return {'klines': len(klines), 'setups': 0, 'saved': 0}
+    async def record_harmonic_scan_window(self, asset_id: int, interval: str, klines: List[Dict[str, Any]],
+                                          patterns_found: int, source: str = 'sync') -> None:
+        await self._scan_service().record_window(asset_id, interval, klines, patterns_found, source)
 
-        final_keys = await table.get_final_keys(asset_id, interval, version, int(klines[0]['open_time']))
+    async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, Any]]) -> Dict[str, int]:
+        return await PatternStore(self.db).save(calculated_patterns)
 
-        def confluences_fn(setup, outcome, klines_to_entry):
-            pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
-            pp['D'] = {'index': outcome.entry_index, 'price': outcome.entry_price}
-            try:
-                return ConfluenceDetector.detect(klines_to_entry, pp, setup.is_bullish, outcome.entry_index, interval)
-            except Exception as e:  # konfluencje są dodatkiem - nie blokują zapisu wyniku
-                logger.debug(f"Konfluencje setupu {setup.key} nie powiodły się: {e}")
-                return None
-
-        rows = harmonic_setups.evaluate(
-            klines, asset_id, interval, source, skip_keys=final_keys,
-            targets_fn=harmonic_setups.app_targets, confluences_fn=confluences_fn,
-        )
-        events = []
-        if source == 'live':
-            # Statusy sprzed tego przebiegu - zdarzenie = setup nowy albo ze zmienionym statusem.
-            previous = await table.get_unresolved_statuses(asset_id, interval, version, int(klines[0]['open_time']))
-            events = harmonic_setups.status_events(
-                rows, previous, symbol=f"{asset['asset']}/{asset['quote']}",
-                new_since=int(klines[-1]['open_time']) - harmonic_setups.EVENT_LOOKBACK_CANDLES * step,
-            )
-        saved = await table.upsert_many(rows)
-        if events:
-            await factory.get_harmonic_setup_events_table().add_many(events)
-        by_status: Dict[str, int] = {}
-        for r in rows:
-            by_status[r['status']] = by_status.get(r['status'], 0) + 1
-        logger.info(f"Setupy {asset['asset']}/{asset['quote']} [{interval}] ({source}): {len(klines)} świec, "
-                    f"{len(rows)} nowych/otwartych, {len(final_keys)} już rozstrzygniętych, {by_status}")
-        return {'klines': len(klines), 'setups': len(rows), 'saved': saved,
-                'already_final': len(final_keys), 'by_status': by_status, 'events': len(events)}
-
-    async def save_harmonic_patterns_to_database(self, calculated_patterns: List[Dict[str, any]]) -> Dict[str, int]:
-        """
-        Zapisuje lub aktualizuje wzorce harmoniczne w bazie danych.
-
-        Klucz formacji = asset, interwał i punkty X..D (unikalny indeks, migracja 4). Istniejący wiersz
-        nadpisujemy, gdy obliczenia się zmieniły (_patterns_differ) albo policzyła go inna wersja
-        silnika (engine_version = harmonic_scan.params_hash()) - wtedy tylko podbijamy wersję.
-
-        Returns:
-            Dict[str, int]: saved (nowe), updated (zmienione), skipped (bez zmian)
-        """
-        counts = {'saved': 0, 'updated': 0, 'skipped': 0}
-        if not calculated_patterns:
-            return counts
-        try:
-            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            engine_version = harmonic_scan.params_hash()
-            existing = await table.get_existing_by_points(calculated_patterns)
-            to_write: Dict[Tuple, Dict[str, Any]] = {}
-            for pattern in calculated_patterns:
-                key = table.points_key(pattern)
-                current = existing.get(key)
-                if current is None:
-                    counts['saved'] += key not in to_write
-                elif self._patterns_differ(current.get('ta_object_json') or {}, pattern.get('ta_object_json') or {}):
-                    counts['updated'] += key not in to_write
-                elif current.get('engine_version') != engine_version:
-                    counts['skipped'] += key not in to_write   # te same obliczenia - tylko nowa wersja
-                else:
-                    counts['skipped'] += 1
-                    continue
-                to_write[key] = pattern  # ta sama formacja dwa razy w paczce - wygrywa ostatnia
-            await table.upsert_many(list(to_write.values()), engine_version)
-        except Exception as e:
-            logger.error(f"Błąd podczas zapisywania wzorców harmonicznych do bazy danych: {e}", exc_info=True)
-        logger.info(f"Sync wynik: {counts['saved']} nowych, {counts['updated']} zaktualizowanych, "
-                    f"{counts['skipped']} bez zmian")
-        return counts
-
-    def _patterns_differ(self, existing_json: Dict, new_json: Dict) -> bool:
-        """
-        Porównuje dwa ta_object_json i sprawdza czy się różnią w kluczowych polach.
-        
-        Porównywane pola:
-        - fibonacci_levels (retracement, extension, fe_extensions, all_targets)
-        - points (X, A, B, C, D ceny i indeksy)
-        - pattern_type, is_bullish, is_formed
-        - retraces
-        - completion_min_price, completion_max_price
-        
-        Args:
-            existing_json: Istniejący ta_object_json z bazy danych
-            new_json: Nowo obliczony ta_object_json
-            
-        Returns:
-            bool: True jeśli się różnią, False jeśli są identyczne
-        """
-        # Kluczowe pola do porównania
-        key_fields = [
-            'pattern_type',
-            'is_bullish',
-            'is_formed',
-            'completion_min_price',
-            'completion_max_price',
-        ]
-        
-        # Sprawdź proste pola
-        for field in key_fields:
-            if existing_json.get(field) != new_json.get(field):
-                logger.debug(f"Różnica w polu '{field}': {existing_json.get(field)} vs {new_json.get(field)}")
-                return True
-        
-        # Porównaj fibonacci_levels
-        existing_fib = existing_json.get('fibonacci_levels', {})
-        new_fib = new_json.get('fibonacci_levels', {})
-        
-        fib_sections = ['retracement', 'extension', 'fe_extensions', 'all_targets']
-        for section in fib_sections:
-            existing_section = existing_fib.get(section, {})
-            new_section = new_fib.get(section, {})
-            
-            # Sprawdź czy mają te same klucze
-            if set(existing_section.keys()) != set(new_section.keys()):
-                logger.debug(f"Różnica w kluczach fibonacci_levels.{section}")
-                return True
-            
-            # Sprawdź wartości (z tolerancją dla float)
-            for key in new_section.keys():
-                existing_val = existing_section.get(key)
-                new_val = new_section.get(key)
-                
-                # Dla słowników (jak fe_extensions) porównaj zagnieżdżone wartości
-                if isinstance(new_val, dict) and isinstance(existing_val, dict):
-                    if existing_val.get('price') != new_val.get('price'):
-                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.price")
-                        return True
-                    if existing_val.get('level') != new_val.get('level'):
-                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.level")
-                        return True
-                    # Nowe pole - leg
-                    if existing_val.get('leg') != new_val.get('leg'):
-                        logger.debug(f"Różnica w fibonacci_levels.{section}.{key}.leg")
-                        return True
-                elif existing_val != new_val:
-                    logger.debug(f"Różnica w fibonacci_levels.{section}.{key}")
-                    return True
-        
-        # Porównaj retraces
-        existing_retraces = existing_json.get('retraces', {})
-        new_retraces = new_json.get('retraces', {})
-        if existing_retraces != new_retraces:
-            logger.debug(f"Różnica w retraces")
-            return True
-        
-        return False
+    _patterns_differ = staticmethod(PatternStore.patterns_differ)
 
     async def _update_fib_cluster_confluences(self, asset_id: int, interval: str) -> int:
-        """
-        Post-processing: wykrywa klastry Fibonacci na tym samym interwale.
-        Aktualizuje confluences_json patternów, przy których D wypada w zbieżności
-        wielu poziomów Fib z innych patternów.
-
-        Returns:
-            Liczba zaktualizowanych rekordów.
-        """
-        updated = 0
-        try:
-            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            all_patterns = await table.get_by_asset_id_and_interval(asset_id, interval, limit=500)
-            if not all_patterns or len(all_patterns) < 2:
-                return 0
-
-            for pattern in all_patterns:
-                result = FibClusterDetector.detect(all_patterns, pattern['id'])
-                if result is None:
-                    continue
-
-                merged = merge_confluences(
-                    pattern.get('confluences_json'),
-                    [result],
-                    replace_types=['fib_cluster'],
-                )
-                await table.update(pattern['id'], confluences_json=merged)
-                updated += 1
-
-            if updated:
-                logger.info(f"Fib Cluster: zaktualizowano {updated} patternów (asset_id={asset_id}, interval={interval})")
-        except Exception as e:
-            logger.error(f"Błąd Fib Cluster (asset_id={asset_id}, interval={interval}): {e}", exc_info=True)
-        return updated
+        return await ConfluencePostProcessor(self.db).fib_cluster(asset_id, interval)
 
     async def _update_higher_tf_fib_confluences(self, asset_id: int) -> int:
-        """
-        Post-processing: wykrywa pokrycia D z poziomami Fib z wyższych timeframe'ów.
-        Uruchamiany po przetworzeniu WSZYSTKICH interwałów danego assetu.
-
-        Returns:
-            Liczba zaktualizowanych rekordów.
-        """
-        updated = 0
-        try:
-            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            all_patterns = await table.get_by_asset_id(asset_id, limit=2000)
-            if not all_patterns:
-                return 0
-
-            # Grupuj po interwale
-            by_interval: Dict[str, List] = {}
-            for p in all_patterns:
-                iv = p.get('interval')
-                if iv:
-                    by_interval.setdefault(iv, []).append(p)
-
-            if len(by_interval) < 2:
-                return 0
-
-            for pattern in all_patterns:
-                iv = pattern.get('interval')
-                if not iv:
-                    continue
-                result = HigherTFFibDetector.detect(by_interval, pattern, iv)
-                if result is None:
-                    continue
-
-                merged = merge_confluences(
-                    pattern.get('confluences_json'),
-                    [result],
-                    replace_types=['higher_tf_fib'],
-                )
-                await table.update(pattern['id'], confluences_json=merged)
-                updated += 1
-
-            if updated:
-                logger.info(f"Higher TF Fib: zaktualizowano {updated} patternów (asset_id={asset_id})")
-        except Exception as e:
-            logger.error(f"Błąd Higher TF Fib (asset_id={asset_id}): {e}", exc_info=True)
-        return updated
+        return await ConfluencePostProcessor(self.db).higher_tf_fib(asset_id)
 
     async def _update_higher_tf_sr_confluences(self, asset_id: int, klines_cache: Dict[str, List[Dict]]) -> int:
-        """
-        Post-processing: wykrywa S/R i trendline z wyższych timeframe'ów.
-        Wymaga klines_cache zebranego podczas sync loop.
+        return await ConfluencePostProcessor(self.db).higher_tf_sr(asset_id, klines_cache)
 
-        Returns:
-            Liczba zaktualizowanych rekordów.
-        """
-        updated = 0
-        if not klines_cache or len(klines_cache) < 2:
-            return 0
+    # ─────────────────────────── nocny sync ───────────────────────────
 
-        try:
-            table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            all_patterns = await table.get_by_asset_id(asset_id, limit=2000)
-            if not all_patterns:
-                return 0
+    def _calculate_start_time(self, interval: str) -> int:
+        """Początek pobierania świec: teraz - CANDLES_COUNT interwałów (ms)."""
+        start_datetime = datetime.now() - (self.CHART_INTERVALS[interval] * self.CANDLES_COUNT)
+        return int(start_datetime.timestamp() * 1000)
 
-            replace_types = [
-                'higher_tf_support_zone', 'higher_tf_resistance_zone',
-                'higher_tf_support_trendline', 'higher_tf_resistance_trendline',
-            ]
+    def _calculate_end_time(self) -> int:
+        """Koniec pobierania świec: teraz (ms)."""
+        return int(datetime.now().timestamp() * 1000)
 
-            for pattern in all_patterns:
-                iv = pattern.get('interval')
-                if not iv:
-                    continue
+    async def _assets_to_sync(self, limit: int, offset: int, asset_ids: Optional[List[int]]) -> List[Dict[str, Any]]:
+        factory = self.db.get_factory()
+        assets_table = factory.get_assets_table()
+        if asset_ids:
+            # Tryb bulk - assety po ID z listy, limit/offset ignorowane
+            ids = asset_ids
+        else:
+            # Nocny sync liczy tylko śledzone assety (tracked_assets.patterns_sync, ustawiane w UI);
+            # pozostałe liczy skan zakresu na żądanie z wykresu.
+            ids = (await factory.get_tracked_assets_table().get_patterns_sync_asset_ids())[offset:offset + limit]
+        assets, missing = [], []
+        for asset_id in ids:
+            asset = await assets_table.get_by_id(asset_id)
+            if asset:
+                assets.append(asset)
+            else:
+                missing.append(asset_id)
+        if missing:
+            logger.warning(f"Nie znaleziono assetów o ID: {missing}")
+        return assets
 
-                new_entries = []
-
-                sr_result = HigherTFSRDetector.detect(klines_cache, pattern, iv)
-                if sr_result is not None:
-                    new_entries.append(sr_result)
-
-                tl_result = HigherTFTrendlineDetector.detect(klines_cache, pattern, iv)
-                if tl_result is not None:
-                    new_entries.append(tl_result)
-
-                if not new_entries:
-                    continue
-
-                merged = merge_confluences(
-                    pattern.get('confluences_json'),
-                    new_entries,
-                    replace_types=replace_types,
-                )
-                await table.update(pattern['id'], confluences_json=merged)
-                updated += 1
-
-            if updated:
-                logger.info(f"Higher TF S/R: zaktualizowano {updated} patternów (asset_id={asset_id})")
-        except Exception as e:
-            logger.error(f"Błąd Higher TF S/R (asset_id={asset_id}): {e}", exc_info=True)
-        return updated
+    async def _sync_asset_interval(self, asset: Dict[str, Any], resolved, interval: str, scan: HarmonicScanService,
+                                   source: KlinesSource) -> Tuple[Optional[List[Dict]], int]:
+        """Jeden (asset, interwał): świece -> formacje -> zapis -> Fib cluster -> okno pokrycia.
+        Zwraca (świece do post-processingu wyższych TF, liczba nowych/zmienionych formacji)."""
+        klines = source.fetch_recent(
+            resolved, interval, self._calculate_start_time(interval), self._calculate_end_time(), self.CANDLES_COUNT
+        )
+        if not klines:
+            logger.warning(f"Nie udało się pobrać klines dla {resolved.symbol} [{interval}]")
+            return None, 0
+        patterns = scan.calculate_patterns(klines, asset['id'], resolved.symbol, interval)
+        result = await self.save_harmonic_patterns_to_database(patterns)
+        changed = result.get('saved', 0) + result.get('updated', 0)
+        logger.info(f"{resolved.symbol} [{interval}]: {result.get('saved', 0)} nowych, "
+                    f"{result.get('updated', 0)} zaktualizowanych, {result.get('skipped', 0)} bez zmian")
+        await self._update_fib_cluster_confluences(asset['id'], interval)
+        # Okno przeszukane przez sync jako pokrycie dla GET /harmonics
+        await scan.record_window(asset['id'], interval, klines, len(patterns))
+        return klines, changed
 
     async def sync_technical_analysis(self, limit: int = 1, offset: int = 0, asset_ids: Optional[List[int]] = None) -> None:
         """
-        Synchronizuje analizę techniczną dla assetów i interwałów.
-        Oblicza harmonic patterns i zapisuje je do bazy danych.
-        
+        Synchronizuje formacje harmoniczne dla śledzonych assetów (albo `asset_ids`) na wszystkich
+        interwałach CHART_INTERVALS, potem konfluencje z wyższych timeframe'ów.
+
         Args:
             limit: Limit assetów do przetworzenia (ignorowany gdy asset_ids != None)
             offset: Offset assetów (ignorowany gdy asset_ids != None)
             asset_ids: Opcjonalna lista ID assetów do synchronizacji (gdy podana, ignoruje limit/offset)
         """
         try:
-            # Inicjalizuj bazę danych jeśli nie została zainicjalizowana
             if not hasattr(self.db, 'factory') or self.db.factory is None:
                 await self.db.init_db()
-            
             logger.info("=== Rozpoczęcie synchronizacji analizy technicznej ===")
-            
-            # Pobierz tabele z bazy danych
-            assets_table = self.db.get_factory().get_assets_table()
-            technical_analysis_harmonic_patterns_table = self.db.get_factory().get_technical_analysis_harmonic_patterns_table()
-            
-            # Pobierz obiekty wskaźników z fabryki (używane w calculate)
-            indicators = {
-                'IndicatorRSI': self.technical_analysis_factory.get_indicator_rsi_class(),
-                'IndicatorMACD': self.technical_analysis_factory.get_indicator_macd_class(),
-                'IndicatorOBV': self.technical_analysis_factory.get_indicator_obv_class()
-            }
-            
-            processed_count = 0
-            error_count = 0
-            
-            # KROK 1: Pobierz assety z bazy danych
-            if asset_ids is not None and len(asset_ids) > 0:
-                # Tryb bulk - pobierz assety po ID z listy, ignoruj limit/offset
-                assets = []
-                not_found_ids = []
-                for asset_id in asset_ids:
-                    asset = await assets_table.get_by_id(asset_id)
-                    if asset:
-                        assets.append(asset)
-                    else:
-                        not_found_ids.append(asset_id)
-                
-                if not_found_ids:
-                    logger.warning(f"Nie znaleziono assetów o ID: {not_found_ids}")
-                
-                if assets:
-                    asset_names = [f"{a['asset']}/{a['quote']} (ID: {a['id']})" for a in assets]
-                    logger.info(f"Tryb bulk - {len(assets)} assetów: {', '.join(asset_names)}")
-            else:
-                # Tryb wielu assetów - użyj limit/offset
-                # Nocny sync liczy tylko śledzone assety (tracked_assets.patterns_sync, ustawiane w UI);
-                # pozostałe liczy skan zakresu na żądanie z wykresu.
-                tracked_ids = await self.db.get_factory().get_tracked_assets_table().get_patterns_sync_asset_ids()
-                assets = []
-                for tracked_id in tracked_ids[offset:offset + limit]:
-                    asset = await assets_table.get_by_id(tracked_id)
-                    if asset:
-                        assets.append(asset)
-            
+
+            assets = await self._assets_to_sync(limit, offset, asset_ids)
             if not assets:
                 logger.info("Brak assetów do przetworzenia")
                 return
-            
-            logger.info(f"Znaleziono {len(assets)} assetów do przetworzenia")
-            
-            # KROK 2: Pętla po assetach
+            names = ", ".join(f"{a['asset']}/{a['quote']}" for a in assets)
+            logger.info(f"Assety do przetworzenia ({len(assets)}): {names}")
+
+            scan = self._scan_service()
+            source = self._klines_source()
+            processed_count = 0
+            error_count = 0
             for asset in assets:
                 try:
-                    logger.info(f"=== Przetwarzam asset: {asset['asset']}/{asset['quote']} ===")
-                    
-                    # Cache klines per interval — do post-processingu cross-TF S/R
+                    resolved = await source.resolve(asset['id'])
+                    # Świece per interwał - do post-processingu cross-TF S/R
                     klines_cache: Dict[str, List[Dict]] = {}
-                    
-                    # KROK 3: Pętla po interwałach
-                    for interval, interval_timedelta in self.CHART_INTERVALS.items():
+                    for interval in self.CHART_INTERVALS:
                         try:
-                            logger.info(f"Przetwarzam interwał: {interval} dla assetu {asset['asset']}/{asset['quote']}")
-                            
-                            # Oblicz czasy dla pobierania klines
-                            start_time = self._calculate_start_time(interval)
-                            end_time = self._calculate_end_time()
-                            
-                            # KROK 4: Sprawdź czy są jakiekolwiek harmonic patterns (info only)
-                            existing_patterns = await technical_analysis_harmonic_patterns_table.get_by_timestamp_range_and_asset_id_and_interval(
-                                start_timestamp=start_time,
-                                end_timestamp=end_time,
-                                asset_id=asset['id'],
-                                interval=interval
-                            )
-                            
-                            existing_count = len(existing_patterns) if existing_patterns else 0
-                            if existing_count > 0:
-                                # Są już patterns - obliczamy i aktualizujemy jeśli się zmieniły
-                                logger.info(f"Znaleziono {existing_count} istniejących patternów - sprawdzam aktualizacje dla interwału {interval}")
-                            else:
-                                # Brak patterns - generujemy nowe
-                                logger.info(f"Brak harmonic patterns - generuję nowe dla interwału {interval}")
-                            
-                            # KROK 5: Pobierz klines z giełd
-                            klines = None
-                            for exchange in self.exchanges_apis:
-                                try:
-                                    logger.info(f"Pobieram klines z {exchange.__class__.__name__} dla {asset['asset']}/{asset['quote']}")
-                                    klines = exchange._get_klines(
-                                        base_currency=asset['asset'],
-                                        quote_currency=asset['quote'],
-                                        interval=interval,
-                                        start_time=start_time,
-                                        end_time=end_time,
-                                        limit=self.CANDLES_COUNT
-                                    )
-                                    
-                                    if klines and len(klines) > 0:
-                                        logger.info(f"Pobrano {len(klines)} klines z {exchange.__class__.__name__}")
-                                        break
-                                    else:
-                                        logger.warning(f"Brak klines z {exchange.__class__.__name__}")
-                                        
-                                except Exception as e:
-                                    logger.error(f"Błąd podczas pobierania klines z {exchange.__class__.__name__}: {e}")
-                                    continue
-                            
-                            if not klines or len(klines) == 0:
-                                logger.warning(f"Nie udało się pobrać klines dla assetu {asset['asset']}/{asset['quote']} i interwału {interval}")
-                                continue
-                            
-                            klines_cache[interval] = klines
-                            
-                            # KROK 6: Stwórz obiekty HarmonicPatterns
-                            harmonic_patterns = self.technical_analysis_factory.get_harmonic_patterns(
-                                asset_id=asset['id'], 
-                                interval=interval
-                            )
-                            
-                            # KROK 7: Oblicz harmonic patterns
-                            try:
-                                logger.info(f"Obliczam HarmonicPatterns dla assetu {asset['asset']} i interwału {interval}")
-                                
-                                # Oblicz wskaźniki i obiekty analizy technicznej
-                                self.technical_analysis_facade.calculate(
-                                    klines=klines,
-                                    enabled_indicators=indicators,
-                                    enabled_objects={'HarmonicPatterns': harmonic_patterns},
-                                    symbol=f"{asset['asset']}/{asset['quote']}",
-                                    interval=interval,
-                                    find_xabcd=True,
-                                    find_abcd=True,
-                                    find_abc=False
-                                )
-                                
-                                # KROK 8: Zapisz obliczone wzorce harmoniczne do bazy danych
-                                calculated_harmonic_patterns = harmonic_patterns.get_calculated_objects()
-                                sync_result = await self.save_harmonic_patterns_to_database(calculated_harmonic_patterns)
-                                
-                                saved = sync_result.get('saved', 0)
-                                updated = sync_result.get('updated', 0)
-                                skipped = sync_result.get('skipped', 0)
-                                
-                                if saved > 0 or updated > 0:
-                                    processed_count += saved + updated
-                                    logger.info(f"{asset['asset']}/{asset['quote']} [{interval}]: {saved} nowych, {updated} zaktualizowanych, {skipped} bez zmian")
-                                else:
-                                    logger.info(f"{asset['asset']}/{asset['quote']} [{interval}]: brak zmian ({skipped} wzorców bez zmian)")
-                                
-                                # KROK 8.1: Post-processing — Fib Cluster (same interval)
-                                await self._update_fib_cluster_confluences(asset['id'], interval)
-
-                                # KROK 8.2: Okno przeszukane przez sync jako pokrycie dla GET /harmonics
-                                await self.record_harmonic_scan_window(
-                                    asset['id'], interval, klines, len(calculated_harmonic_patterns)
-                                )
-                                 
-                            except Exception as e:
-                                error_count += 1
-                                logger.error(f"Błąd podczas obliczania HarmonicPatterns dla assetu {asset['asset']} i interwału {interval}: {e}")
-                                continue
-                            
+                            klines, changed = await self._sync_asset_interval(asset, resolved, interval, scan, source)
+                            if klines:
+                                klines_cache[interval] = klines
+                            processed_count += changed
                         except Exception as e:
                             error_count += 1
-                            logger.error(f"Błąd podczas przetwarzania interwału {interval} dla assetu {asset['asset']}: {e}", exc_info=True)
-                            continue
-                    
-                    # KROK 9: Post-processing — Higher TF Fib (cross-interval, po wszystkich interwałach)
+                            logger.error(f"Błąd podczas przetwarzania interwału {interval} dla assetu "
+                                         f"{asset['asset']}: {e}", exc_info=True)
+                    # Post-processing cross-interval, po wszystkich interwałach assetu
                     await self._update_higher_tf_fib_confluences(asset['id'])
-                    
-                    # KROK 10: Post-processing — Higher TF S/R i Trendline (cross-interval, wymaga klines cache)
                     await self._update_higher_tf_sr_confluences(asset['id'], klines_cache)
-                    
                 except Exception as e:
                     error_count += 1
                     logger.error(f"Błąd podczas przetwarzania assetu {asset['asset']}: {e}", exc_info=True)
-                    continue
-            
-            logger.info(f"=== Synchronizacja analizy technicznej zakończona ===")
-            logger.info(f"Zapisano: {processed_count} wzorców harmonicznych")
-            logger.info(f"Błędy: {error_count}")
-            
+
+            logger.info(f"=== Synchronizacja analizy technicznej zakończona: {processed_count} nowych/zmienionych "
+                        f"wzorców, błędy: {error_count} ===")
         except Exception as e:
             logger.error(f"Błąd podczas synchronizacji analizy technicznej: {e}", exc_info=True)
             return None

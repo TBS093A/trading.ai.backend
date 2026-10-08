@@ -244,7 +244,7 @@ class TestWorkerScan(unittest.TestCase):
         ta.save_harmonic_patterns_to_database = mock.AsyncMock()
         ta._update_fib_cluster_confluences = mock.AsyncMock()
 
-        with mock.patch("src.sync_technical_analysis.datetime") as dt:
+        with mock.patch("src.analysis_services.harmonic_scan_service.datetime") as dt:
             dt.now.return_value.timestamp.return_value = 2900 * H / 1000
             results = asyncio.run(ta.scan_harmonic_windows(7, "1h", [(1000 * H, 1500 * H), (2000 * H, 2200 * H)]))
 

@@ -262,9 +262,9 @@ class TestWorker(unittest.TestCase):
         return ta, table, all_klines, now
 
     def run_track(self, ta, now, **kw):
-        with mock.patch("src.sync_technical_analysis.datetime") as dt, \
+        with mock.patch("src.analysis_services.setup_tracking_service.datetime") as dt, \
                 mock.patch.object(hs, "app_targets", hs.fallback_targets), \
-                mock.patch("src.sync_technical_analysis.ConfluenceDetector.detect", return_value=None):
+                mock.patch("src.analysis_services.setup_tracking_service.ConfluenceDetector.detect", return_value=None):
             dt.now.return_value.timestamp.return_value = now / 1000
             return asyncio.run(ta._track_harmonic_setups(5, "1h", source="live", **kw))
 
@@ -296,9 +296,9 @@ class TestWorker(unittest.TestCase):
 
     def test_replay_records_no_events(self):
         ta, table, kl, now = self.make()
-        with mock.patch("src.sync_technical_analysis.datetime") as dt, \
+        with mock.patch("src.analysis_services.setup_tracking_service.datetime") as dt, \
                 mock.patch.object(hs, "app_targets", hs.fallback_targets), \
-                mock.patch("src.sync_technical_analysis.ConfluenceDetector.detect", return_value=None):
+                mock.patch("src.analysis_services.setup_tracking_service.ConfluenceDetector.detect", return_value=None):
             dt.now.return_value.timestamp.return_value = now / 1000
             res = asyncio.run(ta._track_harmonic_setups(5, "1h", 600, "replay"))
         self.assertEqual(res["events"], 0)
