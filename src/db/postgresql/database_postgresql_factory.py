@@ -66,6 +66,9 @@ class DatabasePostgreSQLFactory:
         'users': UsersTable,
         'user_sessions': UserSessionsTable,
         'saved_analyses': SavedAnalysesTable,
+        'tracked_assets': TrackedAssetsTable,
+        'harmonic_setup_alert_settings': HarmonicSetupAlertSettingsTable,
+        'harmonic_setup_events': HarmonicSetupEventsTable,
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -144,6 +147,16 @@ class DatabasePostgreSQLFactory:
         """Zwraca tabelę AssetCountryMap."""
         return self.get_table('asset_country_map')
     
+    def get_tracked_assets_table(self) -> TrackedAssetsTable:
+        """Assety liczone przez aplikację (nocny sync formacji, śledzenie setupów)."""
+        return self.get_table('tracked_assets')
+
+    def get_harmonic_setup_alert_settings_table(self) -> HarmonicSetupAlertSettingsTable:
+        return self.get_table('harmonic_setup_alert_settings')
+
+    def get_harmonic_setup_events_table(self) -> HarmonicSetupEventsTable:
+        return self.get_table('harmonic_setup_events')
+
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""
         return {name: self.get_table(name) for name in self._table_classes.keys()}

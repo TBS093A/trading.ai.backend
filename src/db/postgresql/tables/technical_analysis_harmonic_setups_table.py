@@ -128,14 +128,17 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
             asset_id, interval, params_version,
         )
 
-    async def get_tracked_intervals(self, asset_id: int, params_version: str) -> List[str]:
-        """Interwały, dla których asset ma już setupy (backfill) - nocny sync je aktualizuje."""
+    async def get_unresolved_statuses(self, asset_id: int, interval: str, params_version: str,
+                                      since_c_time: int) -> Dict[tuple, str]:
+        """Statusy nierozstrzygniętych setupów (klucz jak w get_final_keys) - do wykrywania zmian."""
         rows = await self.fetch_all(
-            "SELECT DISTINCT interval FROM technical_analysis_harmonic_setups "
-            "WHERE asset_id = $1 AND params_version = $2",
-            asset_id, params_version,
+            f"""SELECT pattern_type, x_time, a_time, b_time, c_time, status
+            FROM technical_analysis_harmonic_setups
+            WHERE asset_id = $1 AND interval = $2 AND params_version = $3 AND c_time >= $4
+              AND status NOT IN ({", ".join(f"'{s}'" for s in FINAL_STATUSES)})""",  # nosemgrep: stałe
+            asset_id, interval, params_version, since_c_time,
         )
-        return [r["interval"] for r in rows]
+        return {(r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"]): r["status"] for r in rows}
 
     async def tracked_assets(self, params_version: str) -> List[Dict[str, Any]]:
         return await self.fetch_all(

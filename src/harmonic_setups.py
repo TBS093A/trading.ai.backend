@@ -36,6 +36,9 @@ FIB_TOLERANCE = 0.03
 MAX_BACK_PIVOTS = 8          # ile pivotów przed C bierzemy pod uwagę jako X/A/B
 TRADE_TIMEOUT_FACTOR = 2     # czas na rozstrzygnięcie po wejściu = 2 * L świec
 FINAL_STATUSES = {"win", "loss", "expired", "no_entry", "invalidated"}
+# Nowy setup daje zdarzenie (alert), gdy jego zmiana statusu zaszła najwyżej tyle świec temu - pierwszy
+# przebieg na żywo dla świeżo dodanego assetu nie zasypie skrzynki historią.
+EVENT_LOOKBACK_CANDLES = 3
 
 SETUP_PARAMS: Dict[str, Any] = {
     "spacings": list(SPACINGS), "fib_tolerance": FIB_TOLERANCE, "max_back_pivots": MAX_BACK_PIVOTS,
@@ -405,3 +408,45 @@ def stats_row(row: Dict[str, Any]) -> Dict[str, Any]:
         if out.get(c) is not None:
             out[c] = round(float(out[c]), 4)
     return out
+
+
+def _event_time(row: Dict[str, Any]) -> int:
+    if row["status"] in FINAL_STATUSES and row.get("exit_time") is not None:
+        return row["exit_time"]
+    if row["status"] == "open" and row.get("entry_time") is not None:
+        return row["entry_time"]
+    return row["created_time"]
+
+
+def status_events(rows: List[Dict[str, Any]], previous: Dict[Tuple, str], symbol: str,
+                  new_since: int) -> List[Dict[str, Any]]:
+    """Zdarzenia z jednego przebiegu na żywo.
+
+    previous: statusy nierozstrzygniętych setupów sprzed przebiegu (klucz pattern, x, a, b, c).
+    - setup znany i status się zmienił -> zdarzenie zawsze (np. waiting -> open, open -> win);
+    - setup nowy -> zdarzenie tylko, gdy jego ostatnia zmiana zaszła od `new_since` (ms), inaczej
+      to historia doliczona przy pierwszym przebiegu.
+    """
+    events = []
+    for r in rows:
+        key = (r["pattern_type"], r["x_time"], r["a_time"], r["b_time"], r["c_time"])
+        before = previous.get(key)
+        when = _event_time(r)
+        if before == r["status"]:
+            continue
+        if before is None and when < new_since:
+            continue
+        events.append({
+            "asset_id": r["asset_id"], "interval": r["interval"], "params_version": r["params_version"],
+            "pattern_type": r["pattern_type"], "is_bullish": r["is_bullish"],
+            "x_time": r["x_time"], "c_time": r["c_time"],
+            "from_status": before, "to_status": r["status"], "event_time": when,
+            "payload": {
+                "symbol": symbol, "points": r["points_json"], "prz": [r["prz_min"], r["prz_max"]],
+                "created_time": r["created_time"], "entry_time": r["entry_time"],
+                "entry_price": r["entry_price"], "sl": r["sl"], "tp1": r["tp1"], "tp2": r["tp2"],
+                "exit_time": r["exit_time"], "r_multiple": r["r_multiple"],
+                "targets_source": r["targets_source"],
+            },
+        })
+    return events

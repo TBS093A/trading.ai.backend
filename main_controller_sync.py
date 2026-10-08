@@ -18,7 +18,10 @@ from src.db.database_facade import DatabaseFacade
 
 # Import Celery tasks
 from src.celery_tasks.sync_tasks import sync_exchanges_task
-from src.celery_tasks.analysis_tasks import sync_technical_analysis_task
+from src.celery_tasks.analysis_tasks import (
+    sync_technical_analysis_task, track_harmonic_setups_task, notify_harmonic_setup_events_task,
+)
+from src import harmonic_scan
 from src.celery_tasks.maintenance_tasks import db_janitor_task
 from src.controller_rest_celery_worker import get_celery_app
 
@@ -34,6 +37,19 @@ METHOD_TO_TASK_MAPPING = {
     '_run_db_janitor': 'maintenance_tasks.db_janitor',
     'run_full_sync_workflow': 'run_full_sync_workflow'  # Special case
 }
+
+
+def harmonic_scan_due(targets: List[Dict[str, Any]], now_ms: int, period_ms: int = 3_600_000) -> List[Dict[str, Any]]:
+    """(asset, interwał), w których w ostatnim okresie (godzinie) zamknęła się świeca."""
+    due = []
+    for t in targets:
+        try:
+            if harmonic_scan.last_closed_open_time(t['interval'], now_ms) != \
+                    harmonic_scan.last_closed_open_time(t['interval'], now_ms - period_ms):
+                due.append(t)
+        except ValueError:
+            logger.warning(f"Nieobsługiwany interwał śledzenia setupów: {t['interval']}")
+    return due
 
 
 def prevent_duplicate_tasks(func: Callable) -> Callable:
@@ -442,6 +458,15 @@ class SyncController:
         try:
             logger.info("=== WYSYŁANIE ANALIZY TECHNICZNEJ DO KOLEJKI ===")
             
+            # Nocny sync liczy śledzone assety (tracked_assets.patterns_sync) - limit = ich liczba.
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+            tracked = await self.db.get_factory().get_tracked_assets_table().get_patterns_sync_asset_ids()
+            limit = max(0, len(tracked) - offset)
+            if limit == 0:
+                logger.info("Brak śledzonych assetów do nocnego syncu formacji")
+                return []
+
             available_workers = self._get_available_celery_workers()
             chunks = self._calculate_chunk_params(limit, available_workers, offset)
             
@@ -467,6 +492,37 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
+    # Opóźnienie maili po zleceniu śledzenia - zadania śledzenia zwykle kończą się w kilka minut.
+    SETUP_ALERTS_DELAY_S = 600
+
+    @sync_with_cron_db
+    @prevent_duplicate_tasks
+    async def _run_harmonic_setups_tracking(self) -> List[AsyncResult]:
+        """Co godzinę: śledzenie setupów dla śledzonych (asset, interwał), w których od ostatniej
+        godziny zamknęła się świeca, a potem maile ze zdarzeń (src/harmonic_alerts.py)."""
+        try:
+            if not hasattr(self.db, 'factory') or self.db.factory is None:
+                await self.db.init_db()
+            targets = await self.db.get_factory().get_tracked_assets_table().get_setup_targets()
+            now_ms = int(datetime.now().timestamp() * 1000)
+            due = harmonic_scan_due(targets, now_ms)
+            tasks = [
+                track_harmonic_setups_task.apply_async(
+                    kwargs={'asset_id': t['asset_id'], 'interval': t['interval'], 'source': 'live'},
+                    queue='analysis_queue', priority=6,
+                )
+                for t in due
+            ]
+            if tasks:
+                tasks.append(notify_harmonic_setup_events_task.apply_async(
+                    queue='analysis_queue', countdown=self.SETUP_ALERTS_DELAY_S, priority=5))
+            logger.info(f"✅ Śledzenie setupów: {len(due)}/{len(targets)} par (asset, interwał) z nową świecą")
+            return tasks
+        except Exception as e:
+            logger.error(f"Błąd podczas zlecania śledzenia setupów: {e}")
+            logger.error(traceback.format_exc())
+            return []
+
     @sync_with_cron_db
     @prevent_duplicate_tasks
     async def _run_db_janitor(self) -> List[AsyncResult]:
