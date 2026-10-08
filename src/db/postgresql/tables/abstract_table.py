@@ -1,12 +1,27 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Tuple
 import asyncpg
 import logging
 
 logger = logging.getLogger(__name__)
 
+@dataclass(frozen=True)
+class CleanupRule:
+    """Reguła janitora (src/db/janitor.py): usuń z `table` wiersze spełniające `where`."""
+    name: str
+    table: str
+    description: str
+    where: str                       # warunek SQL ze stałych w kodzie; wartości wyłącznie przez args
+    args: Tuple[Any, ...] = ()
+
+
 class AbstractTable(ABC):
     """Abstrakcyjna klasa bazowa dla wszystkich tabel."""
+
+    def cleanup_rules(self) -> List[CleanupRule]:
+        """Dane tej tabeli, które straciły znaczenie - janitor je liczy i (poza dry-run) usuwa."""
+        return []
     
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool

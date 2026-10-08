@@ -4,11 +4,16 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
 from .database_postgresql_factory import DatabasePostgreSQLFactory
+from . import migrations
 
 logger = logging.getLogger(__name__)
 
 class DatabasePostgreSQL:
     """Klasa do obsługi połączenia z bazą danych PostgreSQL."""
+
+    # Bazy (URL), dla których ten proces już przygotował schemat. Zadania Celery tworzą nową
+    # instancję na każde zadanie - bez tego każde zadanie powtarzało CREATE TABLE i seed.
+    _schema_ready: set = set()
     
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -27,75 +32,49 @@ class DatabasePostgreSQL:
                 # Inicjalizuj fabrykę
                 self.factory = DatabasePostgreSQLFactory(self.pool)
                 
-                # Utwórz wszystkie tabele
-                await self._create_all_tables()
-                logger.info("Sprawdzono/utworzono wszystkie tabele.")
+                if self.database_url not in DatabasePostgreSQL._schema_ready:
+                    await self._prepare_schema()
+                    DatabasePostgreSQL._schema_ready.add(self.database_url)
             except Exception as e:
                 logger.error(f"Błąd podczas inicjalizacji puli połączeń z bazą danych: {e}", exc_info=True)
                 self.pool = None
                 self.factory = None
                 raise
     
-    async def _create_all_tables(self):
-        """Tworzy wszystkie tabele używając fabryki."""
+    async def _prepare_schema(self):
+        """Tabele, migracje i dane startowe - pod blokadą doradczą, jeden proces naraz."""
+        async with self.pool.acquire() as connection:
+            await connection.execute("SELECT pg_advisory_lock($1)", migrations.SCHEMA_LOCK_KEY)
+            try:
+                await self._create_all_tables(connection)
+                executed = await migrations.run_pending(connection)
+                if executed:
+                    logger.info(f"Wykonane migracje: {executed}")
+            finally:
+                await connection.execute("SELECT pg_advisory_unlock($1)", migrations.SCHEMA_LOCK_KEY)
+        logger.info("Sprawdzono/utworzono wszystkie tabele.")
+        await self._seed_initial_data()
+
+    async def _create_all_tables(self, connection=None):
+        """Tworzy wszystkie tabele (kolejność z kluczy obcych - factory.get_creation_order)."""
         if self.factory is None:
             raise RuntimeError("Fabryka nie została zainicjalizowana")
-        
-        async with self.pool.acquire() as connection:
-            # Pobierz wszystkie zapytania CREATE TABLE
-            create_queries = self.factory.get_create_table_queries()
-            
-            # Wykonaj zapytania w odpowiedniej kolejności (z uwzględnieniem zależności)
-            table_order = [
-                'system_sync_job',
-                'cron_system_sync_job',
-                'users',
-                'user_sessions',
-                'saved_analyses',
-                'assets',
-                'exchanges',
-                'asset_exchanges',
-                'asset_kinds',
-                'countries',
-                'asset_kind_map',
-                'asset_country_map',
-                'technical_analysis_harmonic_patterns',
-                'technical_analysis_harmonic_scan_windows',
-                'technical_analysis_harmonic_setups',
-            ]
-            
-            for table_name in table_order:
-                if table_name in create_queries:
-                    # Podziel zapytania na poszczególne polecenia SQL (oddzielone przez ;)
-                    create_query = create_queries[table_name]
-                    sql_statements = [stmt.strip() for stmt in create_query.split(';') if stmt.strip()]
-                    
-                    for sql_statement in sql_statements:
-                        try:
-                            await connection.execute(sql_statement)
-                        except Exception as e:
-                            logger.error(f"Błąd podczas wykonywania SQL dla tabeli {table_name}: {sql_statement[:100]}...")
-                            logger.error(f"Błąd: {e}")
-                            # Kontynuuj dla pozostałych poleceń
-                    
-                    logger.info(f"Sprawdzono/utworzono tabelę: {table_name}")
-            
-            await self._run_migrations(connection)
-            
-            # Inicjalizuj domyślne dane po utworzeniu wszystkich tabel
-            await self._seed_initial_data()
-    
-    @staticmethod
-    async def _run_migrations(connection) -> None:
-        """Migracje schematu — idempotentne ALTER TABLE dla istniejących baz."""
-        migrations = [
-            "ALTER TABLE assets ADD COLUMN IF NOT EXISTS full_name TEXT",
-        ]
-        for sql in migrations:
-            try:
-                await connection.execute(sql)
-            except Exception as e:
-                logger.warning(f"Migracja pominięta: {e}")
+        if connection is None:
+            async with self.pool.acquire() as connection:
+                return await self._create_all_tables(connection)
+
+        create_queries = self.factory.get_create_table_queries()
+        for table_name in self.factory.get_creation_order():
+            # Podziel zapytania na poszczególne polecenia SQL (oddzielone przez ;)
+            sql_statements = [stmt.strip() for stmt in create_queries[table_name].split(';') if stmt.strip()]
+            for sql_statement in sql_statements:
+                try:
+                    await connection.execute(sql_statement)
+                except Exception as e:
+                    logger.error(f"Błąd podczas wykonywania SQL dla tabeli {table_name}: {sql_statement[:100]}...")
+                    logger.error(f"Błąd: {e}")
+                    # Kontynuuj dla pozostałych poleceń
+            logger.debug(f"Sprawdzono/utworzono tabelę: {table_name}")
 
     async def _seed_initial_data(self):
         """Inicjalizuje domyślne dane we wszystkich tabelach używając abstrakcyjnej metody seed_default_records."""
@@ -348,36 +327,13 @@ class DatabasePostgreSQL:
             await self.init_db()
         
         async with self.pool.acquire() as connection:
-            # Kolejność usuwania (odwrotna do tworzenia - z uwzględnieniem zależności)
-            table_order = [
-                'saved_analyses',  # Usuń przed users z powodu foreign key
-                'user_sessions',  # Usuń przed users z powodu foreign key
-                'cron_system_sync_job',  # Usuń przed system_sync_job z powodu foreign key
-                'system_sync_job',
-                'chart_images_harmonic_patterns',
-                'technical_analysis_interpretation_chart_images',  # Tabela pośrednia
-                'chart_images',
-                'general_interpretation',
-                'investment_strategies',
-                'technical_analysis_interpretation_harmonic_patterns',  # Tabela pośrednia
-                'technical_analysis_interpretation',
-                'fundamental_analysis_interpretation_analyses',  # Tabela pośrednia
-                'fundamental_analysis_interpretation_assets',  # Tabela pośrednia
-                'fundamental_analysis_interpretation',
-                'technical_analysis_harmonic_setups',
-                'technical_analysis_harmonic_scan_windows',
-                'technical_analysis_harmonic_patterns',
-                'fundamental_analysis_assets',  # Tabela pośrednia
-                'fundamental_analysis',
-                'asset_exchanges',
-                'exchanges',
-                'assets',
-                'users'
-            ]
-            
+            # Odwrotność kolejności tworzenia + dawne tabele (database_postgresql_factory.LEGACY_TABLES)
+            table_order = self.get_factory().get_drop_order()
+            table_order.append(migrations.MIGRATIONS_TABLE)
+
             for table_name in table_order:
                 try:
-                    # table_name pochodzi wyłącznie z hardcoded table_order powyżej, nie z inputu
+                    # table_name pochodzi wyłącznie z rejestru tabel / LEGACY_TABLES, nie z inputu
                     await connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")  # nosemgrep
                     logger.info(f"Usunięto tabelę: {table_name}")
                 except Exception as e:
@@ -389,7 +345,9 @@ class DatabasePostgreSQL:
         """Usuwa wszystkie tabele i tworzy je na nowo."""
         logger.info("Rozpoczynam reset bazy danych...")
         await self.drop_all_tables()
-        await self._create_all_tables()
+        DatabasePostgreSQL._schema_ready.discard(self.database_url)
+        await self._prepare_schema()
+        DatabasePostgreSQL._schema_ready.add(self.database_url)
         logger.info("Reset bazy danych zakończony.")
     
     async def test_connection(self) -> Dict[str, Any]:

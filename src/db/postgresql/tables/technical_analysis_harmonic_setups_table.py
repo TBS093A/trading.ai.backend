@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import json
 import logging
 
-from .abstract_table import AbstractTable
+from .abstract_table import AbstractTable, CleanupRule
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,23 @@ class TechnicalAnalysisHarmonicSetupsTable(AbstractTable):
         CREATE INDEX IF NOT EXISTS idx_harmonic_setups_stats
             ON technical_analysis_harmonic_setups (params_version, pattern_type, interval, status);
         """
+
+    # Ile serii (params_version) zostaje: bieżąca + tyle najnowszych poprzednich (do porównań).
+    KEEP_PREVIOUS_VERSIONS = 1
+
+    def cleanup_rules(self) -> List[CleanupRule]:
+        from ....harmonic_setups import params_version
+
+        return [CleanupRule(
+            name="harmonic_setups.old_versions",
+            table="technical_analysis_harmonic_setups",
+            description=f"setupy ze starych reguł symulacji (zostaje bieżąca i {self.KEEP_PREVIOUS_VERSIONS} poprzednia seria)",
+            where="""params_version <> $1 AND params_version NOT IN (
+                SELECT params_version FROM technical_analysis_harmonic_setups
+                WHERE params_version <> $1 GROUP BY params_version
+                ORDER BY MAX(updated_at) DESC LIMIT $2)""",
+            args=(params_version(), self.KEEP_PREVIOUS_VERSIONS),
+        )]
 
     async def upsert_many(self, rows: Sequence[Dict[str, Any]]) -> int:
         """Wstawia nowe setupy i aktualizuje wynik tych, które nie są jeszcze rozstrzygnięte."""

@@ -104,6 +104,9 @@ class Config:
         self.local_storage_is_enabled = os.getenv("LOCAL_STORAGE_IS_ENABLED", "false").lower() == "true"
         self.local_storage_path = os.getenv("LOCAL_STORAGE_PATH")
 
+        # Janitor bazy (src/db/janitor.py): bez "true" tylko liczy, co by usunął (dry-run)
+        self.db_janitor_enabled = os.getenv("DB_JANITOR_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+
         # Celery konfiguracja
         self.celery_broker_url = os.getenv("CELERY_BROKER_URL")
         self.celery_result_backend = os.getenv("CELERY_RESULT_BACKEND")

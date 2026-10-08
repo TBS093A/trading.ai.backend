@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 import logging
 
-from .abstract_table import AbstractTable
+from .abstract_table import AbstractTable, CleanupRule
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,67 @@ class TechnicalAnalysisHarmonicScanWindowsTable(AbstractTable):
             ORDER BY start_time""",
             asset_id, interval, params_hash, start_time, end_time,
         )
+
+    def cleanup_rules(self) -> List[CleanupRule]:
+        from ....harmonic_scan import params_hash
+
+        return [CleanupRule(
+            name="harmonic_scan_windows.old_params",
+            table="technical_analysis_harmonic_scan_windows",
+            description="okna przeskanowane innymi parametrami silnika (nie liczą się do pokrycia)",
+            where="params_hash <> $1",
+            args=(params_hash(),),
+        )]
+
+    async def compact(self, dry_run: bool = True) -> int:
+        """Zastępuje okna jednego (asset, interwał) ich łańcuchami (harmonic_scan._merge ze span).
+
+        missing_windows i tak najpierw łączy okna w łańcuchy tą samą funkcją, więc pokrycie się
+        nie zmienia - znika tylko rozdrobnienie (każdy request z wykresu dopisywał okno).
+        Zwraca, o ile wierszy ubyło (albo by ubyło w dry-run).
+        """
+        from .... import harmonic_scan
+
+        phash = harmonic_scan.params_hash()
+        groups = await self.fetch_all(
+            """SELECT asset_id, interval FROM technical_analysis_harmonic_scan_windows
+            WHERE params_hash = $1 GROUP BY asset_id, interval HAVING COUNT(*) > 1""",
+            phash,
+        )
+        removed = 0
+        for g in groups:
+            try:
+                span = harmonic_scan.max_pattern_span_ms(g["interval"])
+            except ValueError:
+                continue
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    rows = await conn.fetch(
+                        """SELECT id, start_time, end_time, patterns_found
+                        FROM technical_analysis_harmonic_scan_windows
+                        WHERE asset_id = $1 AND interval = $2 AND params_hash = $3
+                        FOR UPDATE""",
+                        g["asset_id"], g["interval"], phash,
+                    )
+                    chains = harmonic_scan._merge([(r["start_time"], r["end_time"]) for r in rows], span)
+                    if len(chains) >= len(rows):
+                        continue
+                    removed += len(rows) - len(chains)
+                    if dry_run:
+                        continue
+                    await conn.execute(
+                        "DELETE FROM technical_analysis_harmonic_scan_windows WHERE id = ANY($1::int[])",
+                        [r["id"] for r in rows],
+                    )
+                    for cs, ce in chains:
+                        found = sum(r["patterns_found"] for r in rows if cs <= r["start_time"] and r["end_time"] <= ce)
+                        await conn.execute(
+                            """INSERT INTO technical_analysis_harmonic_scan_windows
+                            (asset_id, interval, params_hash, start_time, end_time, patterns_found, source)
+                            VALUES ($1, $2, $3, $4, $5, $6, 'merged')""",
+                            g["asset_id"], g["interval"], phash, cs, ce, found,
+                        )
+        return removed
 
     async def get_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetch_one(

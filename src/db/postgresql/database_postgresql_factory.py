@@ -1,9 +1,51 @@
-from typing import Dict, Type
+import re
+from typing import Dict, List, Type
 from .tables import *
 import asyncpg
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Tabele z dawnych wersji aplikacji - kod już ich nie tworzy ani nie używa. Zostają tylko na liście
+# do usunięcia przy reset_database; janitor raportuje je jako nieznane (patrz src/db/janitor.py).
+LEGACY_TABLES = (
+    'chart_images_harmonic_patterns',
+    'technical_analysis_interpretation_chart_images',
+    'chart_images',
+    'general_interpretation',
+    'investment_strategies',
+    'technical_analysis_interpretation_harmonic_patterns',
+    'technical_analysis_interpretation',
+    'fundamental_analysis_interpretation_analyses',
+    'fundamental_analysis_interpretation_assets',
+    'fundamental_analysis_interpretation',
+    'fundamental_analysis_assets',
+    'fundamental_analysis',
+)
+
+_REFERENCES = re.compile(r"REFERENCES\s+([a-z_][a-z0-9_]*)", re.IGNORECASE)
+
+
+def creation_order(create_queries: Dict[str, str]) -> List[str]:
+    """Kolejność tworzenia tabel: najpierw te, do których inne mają klucze obce (REFERENCES).
+
+    Zależności czytane z SQL tabel, więc nowa tabela nie wymaga dopisywania jej do żadnej listy.
+    Przy remisie zostaje kolejność z rejestru - wynik jest deterministyczny.
+    """
+    deps = {
+        name: {ref.lower() for ref in _REFERENCES.findall(sql) if ref.lower() != name and ref.lower() in create_queries}
+        for name, sql in create_queries.items()
+    }
+    order: List[str] = []
+    remaining = list(create_queries)
+    while remaining:
+        ready = [n for n in remaining if deps[n] <= set(order)]
+        if not ready:
+            raise ValueError(f"cykl kluczy obcych między tabelami: {remaining}")
+        order.extend(ready)
+        remaining = [n for n in remaining if n not in ready]
+    return order
+
 
 class DatabasePostgreSQLFactory:
     """Fabryka do tworzenia obiektów tabel."""
@@ -108,4 +150,15 @@ class DatabasePostgreSQLFactory:
     
     def get_create_table_queries(self) -> Dict[str, str]:
         """Zwraca wszystkie zapytania CREATE TABLE."""
-        return {name: self.get_table(name).create_table() for name in self._table_classes.keys()} 
+        return {name: self.get_table(name).create_table() for name in self._table_classes.keys()}
+
+    def get_creation_order(self) -> List[str]:
+        return creation_order(self.get_create_table_queries())
+
+    def get_drop_order(self) -> List[str]:
+        """Odwrotność kolejności tworzenia + dawne tabele (CASCADE i tak zdejmie zależności)."""
+        return list(reversed(self.get_creation_order())) + list(LEGACY_TABLES)
+
+    @classmethod
+    def registered_table_names(cls) -> List[str]:
+        return list(cls._table_classes)

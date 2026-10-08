@@ -6,7 +6,7 @@ Pozwala na weryfikację czy użytkownik jest wciąż zalogowany.
 """
 
 from typing import Optional, Dict, Any, List
-from .abstract_table import AbstractTable
+from .abstract_table import AbstractTable, CleanupRule
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -365,6 +365,18 @@ class UserSessionsTable(AbstractTable):
             user_id, limit, offset
         )
     
+    # Wygasła sesja zostaje kilka dni (podgląd ostatnich logowań w panelu), potem znika.
+    EXPIRED_SESSION_GRACE_DAYS = 7
+
+    def cleanup_rules(self) -> List[CleanupRule]:
+        return [CleanupRule(
+            name="user_sessions.expired",
+            table="user_sessions",
+            description=f"sesje wygasłe ponad {self.EXPIRED_SESSION_GRACE_DAYS} dni temu",
+            where="expires_at < CURRENT_TIMESTAMP - make_interval(days => $1)",
+            args=(self.EXPIRED_SESSION_GRACE_DAYS,),
+        )]
+
     async def cleanup_expired_sessions(self) -> int:
         """
         Usuwa wszystkie wygasłe sesje.
