@@ -24,6 +24,8 @@ POST /harmonics/setups/backfill  (admin)
 GET  /harmonics/tracked-assets                  śledzone assety (nocny sync formacji + setupy co godzinę)
 PUT  /harmonics/tracked-assets/{asset_id}       (admin) dodaj / zmień; nowe interwały -> backfill setupów
 DELETE /harmonics/tracked-assets/{asset_id}     (admin) przestań śledzić (historia zostaje)
+GET  /harmonics/strength/model                  aktywny model siły formacji (metryki walidacji, najważniejsze wagi)
+POST /harmonics/strength/fit                    (admin) naucz model od nowa na wynikach setupów
 GET  /harmonics/alerts/settings                 alerty mailowe zalogowanego użytkownika
 PUT  /harmonics/alerts/settings                 zapis (e-mail, statusy, assety, interwały)
 GET  /harmonics/alerts/events?asset_id=&interval=&limit=   ostatnie zmiany setupów (historia alertów)
@@ -43,13 +45,21 @@ from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
 from . import harmonic_alerts, harmonic_scan, harmonic_setups
 from .config import config
+from .analysis_services.strength_service import (
+    pattern_strength_or_none, refresh_cached_model, setup_strength_or_none,
+)
+from . import pattern_strength
 from .harmonic_validation import Point, ValidationError, validate_xabcd
 from .db.postgresql.tables.harmonic_setup_alerts_table import ALERT_STATUSES, DEFAULT_ALERT_STATUSES
 from .db.postgresql.tables.tracked_assets_table import DEFAULT_SETUP_INTERVALS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(require_auth)])
+async def _strength_model_cache() -> None:
+    await refresh_cached_model(await get_db())
+
+
+router = APIRouter(dependencies=[Depends(require_auth), Depends(_strength_model_cache)])
 PREFIX = "/harmonics"
 TAGS = ["Harmonics"]
 
@@ -168,8 +178,10 @@ async def get_harmonic_setups(
     db = await get_db()
     table = db.get_factory().get_technical_analysis_harmonic_setups_table()
     version = harmonic_setups.params_version()
-    return {"params_version": version,
-            "setups": await table.list(asset_id, interval, version, status=status, limit=limit)}
+    setups = await table.list(asset_id, interval, version, status=status, limit=limit)
+    for row in setups:
+        row["strength"] = setup_strength_or_none(row)
+    return {"params_version": version, "setups": setups}
 
 
 class BackfillRequest(BaseModel):
@@ -220,6 +232,28 @@ def _valid_intervals(intervals: List[str]) -> List[str]:
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
     return sorted(set(intervals), key=intervals.index)
+
+
+@router.get("/strength/model")
+async def get_strength_model():
+    """Aktywny model siły: kiedy uczony, metryki walidacji (AUC, kwintyle) i najważniejsze wagi."""
+    model = await refresh_cached_model(await get_db(), force=True)
+    if model is None:
+        return {"model": None}
+    return {"model": {"trained_at": model.trained_at, "params_version": model.params_version,
+                      "features": len(model.feature_names), "metrics": model.metrics,
+                      "top_weights": pattern_strength.top_weights(model, 25)}}
+
+
+def _enqueue_strength_fit() -> str:
+    from .celery_tasks.analysis_tasks import fit_strength_model_task
+
+    return fit_strength_model_task.apply_async(queue="analysis_queue").id
+
+
+@router.post("/strength/fit")
+async def fit_strength_model(current_user: AuthUser = Depends(require_admin)):
+    return {"task_id": await asyncio.to_thread(_enqueue_strength_fit)}
 
 
 @router.get("/tracked-assets")
@@ -380,6 +414,8 @@ async def get_harmonic_patterns_in_range(
     patterns = await factory.get_technical_analysis_harmonic_patterns_table().get_within_range(
         asset_id, interval, start, end
     )
+    for p in patterns:
+        p["strength"] = pattern_strength_or_none(p)
 
     body: Dict[str, Any] = {
         "asset_id": asset_id,

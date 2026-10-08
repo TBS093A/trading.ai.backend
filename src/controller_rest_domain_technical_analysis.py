@@ -21,7 +21,7 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Import Database
 from .db.database_facade import DatabaseFacade
@@ -33,12 +33,18 @@ from .sync_technical_analysis import TechnicalAnalysis
 
 # Import Auth
 from .auth import require_auth, require_admin, AuthUser
+from .analysis_services.strength_service import pattern_strength_or_none, refresh_cached_model
 
 logger = logging.getLogger(__name__)
 
 # Konfiguracja routera
 # Wszystkie endpointy w tym routerze wymagają autentykacji
-router = APIRouter(dependencies=[Depends(require_auth)])
+async def _strength_model_cache() -> None:
+    # Model siły formacji odświeżany w tle cache'u procesu (co StrengthService.CACHE_TTL_S).
+    await refresh_cached_model(await get_db())
+
+
+router = APIRouter(dependencies=[Depends(require_auth), Depends(_strength_model_cache)])
 PREFIX = "/analysis/technical"
 TAGS = ["Technical Analysis"]
 
@@ -59,6 +65,14 @@ class TechnicalAnalysisResponse(BaseModel):
     d_point_timestamp: Optional[int] = None
     ta_object_json: Dict[str, Any]
     confluences_json: Optional[Dict[str, Any]] = None
+    # Siła formacji 0-100 z modelu (src/pattern_strength.py): {score, p_win, factors[], model_trained_at}
+    strength: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def _fill_strength(self):
+        if self.strength is None:
+            self.strength = pattern_strength_or_none(self.model_dump(exclude={"strength"}))
+        return self
 
 
 
