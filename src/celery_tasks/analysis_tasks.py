@@ -216,3 +216,22 @@ def scan_harmonic_windows_task(self, asset_id: int, interval: str, windows: List
         'windows': results,
         'duration': str(datetime.now() - start),
     }
+
+
+@celery.task(bind=True, name='analysis_tasks.track_harmonic_setups')
+def track_harmonic_setups_task(self, asset_id: int, interval: str, candles: int = 600,
+                               source: str = 'replay') -> Dict[str, Any]:
+    """
+    Setupy XABCD i ich wyniki (src/harmonic_setups.py) dla jednego assetu i interwału.
+    source='replay' - backfill historii z POST /harmonics/setups/backfill; nocny sync woła
+    TechnicalAnalysis._track_harmonic_setups_live bezpośrednio.
+    """
+    logger.info(f"📈 track_harmonic_setups asset={asset_id} interval={interval} candles={candles} "
+                f"source={source} (ID: {self.request.id})")
+    start = datetime.now()
+    result = run_async_task_safely(
+        TechnicalAnalysis().track_harmonic_setups,
+        asset_id=asset_id, interval=interval, candles=candles, source=source,
+    )
+    return {'success': True, 'task_id': self.request.id, 'asset_id': asset_id, 'interval': interval,
+            'result': result, 'duration': str(datetime.now() - start)}

@@ -15,6 +15,7 @@ Bez D zwracane są strefy, w których D musiałoby wypaść dla każdej formacji
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
 from pyharmonics import constants, utils
@@ -36,7 +37,9 @@ class Point:
     price: float
 
 
+@lru_cache(maxsize=16)
 def _definitions(fib_tolerance: float) -> Dict[str, Dict[str, Dict[str, float]]]:
+    # Cache: generator setupów (src/harmonic_setups.py) woła walidację dziesiątki tysięcy razy.
     return utils.get_pattern_definition(fib_tolerance, constants.MATRIX_PATTERNS)
 
 
