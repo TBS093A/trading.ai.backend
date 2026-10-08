@@ -19,6 +19,7 @@ from src.db.database_facade import DatabaseFacade
 # Import Celery tasks
 from src.celery_tasks.sync_tasks import sync_exchanges_task
 from src.celery_tasks.analysis_tasks import sync_technical_analysis_task
+from src.celery_tasks.maintenance_tasks import db_janitor_task
 from src.controller_rest_celery_worker import get_celery_app
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ _skip_cron_check_context: ContextVar[bool] = ContextVar('skip_cron_check', defau
 METHOD_TO_TASK_MAPPING = {
     '_run_exchanges_sync': 'sync_tasks.sync_exchanges',
     '_run_technical_analysis_sync': 'analysis_tasks.sync_technical_analysis',
+    '_run_db_janitor': 'maintenance_tasks.db_janitor',
     'run_full_sync_workflow': 'run_full_sync_workflow'  # Special case
 }
 
@@ -465,6 +467,19 @@ class SyncController:
             logger.error(traceback.format_exc())
             return []
     
+    @sync_with_cron_db
+    @prevent_duplicate_tasks
+    async def _run_db_janitor(self) -> List[AsyncResult]:
+        """Sprzątanie bazy (src/db/janitor.py); tryb usuwania wg DB_JANITOR_ENABLED."""
+        try:
+            task_result = db_janitor_task.apply_async(queue='sync_queue', priority=1)
+            logger.info(f"✅ Wysłano db_janitor: task_id={task_result.id}")
+            return [task_result]
+        except Exception as e:
+            logger.error(f"Błąd podczas wysyłania zadania janitora bazy: {e}")
+            logger.error(traceback.format_exc())
+            return []
+
     async def sync_scheduler_with_database(self) -> bool:
         """
         Synchronizuje APScheduler z bazą danych - dodaje, usuwa i modyfikuje joby zgodnie z bazą.

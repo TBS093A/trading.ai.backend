@@ -36,6 +36,7 @@ def create_celery_app() -> Celery:
         include=[
             'src.celery_tasks.sync_tasks',
             'src.celery_tasks.analysis_tasks',
+            'src.celery_tasks.maintenance_tasks',
         ]
     )
     
