@@ -1,7 +1,7 @@
 """
 REST API Controller - trading z sygnałów setupów (src/trading), dashboard „Trading”.
 
-Konta (paper; Binance USDT-M Futures w kolejnym PR):
+Konta (paper; binance_futures_testnet - Binance USDT-M Futures testnet, saldo startowe z giełdy):
 GET    /trading/accounts                         lista kont z podsumowaniem (kapitał, wynik, otwarte pozycje)
 POST   /trading/accounts                         (admin) nowe konto: nazwa, kapitał, wariant ryzyka albo własne
 PATCH  /trading/accounts/{id}                    (admin) ryzyko, filtry, włącz / wyłącz
@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from .auth import AuthUser, require_admin, require_auth
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
+from .trading import binance_futures
 from .trading import risk as risk_mod
 from .trading.paper_exchange import pnl as position_pnl
 
@@ -35,7 +36,7 @@ router = APIRouter(dependencies=[Depends(require_auth)])
 PREFIX = "/trading"
 TAGS = ["Trading"]
 
-EXCHANGES = ("paper",)            # binance_futures_testnet / binance_futures - kolejny PR
+EXCHANGES = ("paper", "binance_futures_testnet")   # "binance_futures" (live) - po próbie na testnecie
 ENTRY_MODES = ("touch",)          # "confirm" - po wyborze wariantu z raportu Benchmarków
 
 db_instance: Optional[DatabasePostgreSQL] = None
@@ -149,14 +150,25 @@ async def create_account(request: AccountIn = Body(...), current_user: AuthUser 
     if request.entry_mode not in ENTRY_MODES:
         raise HTTPException(status_code=422, detail=f"tryb wejścia: {ENTRY_MODES}")
     settings = _settings_from(request.preset, request.risk)
+    starting_equity = request.starting_equity
+    if request.exchange in binance_futures.LIVE_EXCHANGES:
+        if not binance_futures.credentials_configured(request.exchange):
+            raise HTTPException(status_code=422, detail=f"{request.exchange}: brak klucza API w konfiguracji serwera")
+        try:
+            starting_equity = await binance_futures.from_env(request.exchange).balance()
+        except Exception as e:
+            logger.warning(f"Trading: saldo {request.exchange} niedostępne: {type(e).__name__}")
+            raise HTTPException(status_code=502, detail=f"{request.exchange}: nie udało się pobrać salda")
+        if starting_equity <= 0:
+            raise HTTPException(status_code=422, detail=f"{request.exchange}: saldo konta futures jest zerowe")
     table = await _table()
     try:
-        account = await table.create_account(request.name, request.exchange, request.starting_equity,
+        account = await table.create_account(request.name, request.exchange, starting_equity,
                                              request.entry_mode, settings.as_dict(), request.filters)
     except Exception as e:
         raise HTTPException(status_code=409, detail=f"nie udało się utworzyć konta: {e}")
     await table.log_event(account["id"], "account_created",
-                          f"Konto {request.name} ({request.exchange}), kapitał {request.starting_equity}",
+                          f"Konto {request.name} ({request.exchange}), kapitał {starting_equity}",
                           data={"risk": settings.as_dict(), "filters": request.filters})
     return await _summary(table, account)
 

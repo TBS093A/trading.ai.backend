@@ -26,6 +26,7 @@ class RiskSettings:
     min_ev: Optional[float] = None
     fee_pct: float = 0.04
     slippage_pct: float = 0.02
+    leverage: int = 1
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -68,6 +69,11 @@ RISK_FIELDS: List[Dict[str, Any]] = [
     {"key": "slippage_pct", "label": "Poślizg na zleceniach stop / market (%)", "min": 0.0, "max": 1.0, "step": 0.01,
      "description": "Ile gorzej od ceny SL / rynku realnie wypełnia się zlecenie. Tylko konto paper - na giełdzie "
                     "poślizg wynika z wypełnień."},
+    {"key": "leverage", "label": "Dźwignia na giełdzie (margin isolated)", "min": 1, "max": 2, "step": 1,
+     "description": "Tylko Binance Futures: dźwignia ustawiana na symbolu przed wejściem (margin isolated). Ryzyko "
+                    "transakcji się nie zmienia (wielkość liczona z odległości do SL) - dźwignia tylko obniża depozyt. "
+                    "1x = pozycja nie większa niż saldo; 2x pozwala na pozycję do 2x salda (patrz maks. wartość "
+                    "pozycji). Paper ignoruje to pole."},
 ]
 
 RISK_PRESETS: List[Dict[str, Any]] = [

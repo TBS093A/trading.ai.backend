@@ -1,5 +1,6 @@
 """
-Silnik tradingu z setupów XABCD (konta paper; prawdziwe giełdy - ten sam przepływ, inny adapter).
+Silnik tradingu z setupów XABCD: konta paper (wypełnienia na świecach) i Binance USDT-M Futures
+(src/trading/live.py + binance_futures.py - ten sam przepływ, wypełnienia z giełdy, rekoncyliacja co przebieg).
 
 Wołany po każdym godzinnym przebiegu śledzenia setupów dla pary (asset, interwał) z zamkniętymi świecami:
 
@@ -23,7 +24,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .. import harmonic_setups
 from ..harmonic_setups import Pivot, Setup
+from . import binance_futures
 from . import paper_exchange as px
+from .live import LiveTrader
 from .risk import RiskSettings, position_size
 
 logger = logging.getLogger(__name__)
@@ -57,20 +60,29 @@ def _day_start_ms(ms: int) -> int:
 
 
 class TradingEngine:
-    def __init__(self, db, strength_fn: Optional[Callable] = None, targets_fn: Optional[Callable] = None):
+    def __init__(self, db, strength_fn: Optional[Callable] = None, targets_fn: Optional[Callable] = None,
+                 exchange_factory: Optional[Callable[[str], Any]] = None):
         self.db = db
         self.table = db.get_factory().get_trading_table()
         self.setups = db.get_factory().get_technical_analysis_harmonic_setups_table()
         self.strength_fn = strength_fn
         self.targets_fn = targets_fn
+        self.exchange_factory = exchange_factory or binance_futures.from_env
+        self._exchanges: Dict[str, Any] = {}
+
+    def _live(self, exchange: str) -> LiveTrader:
+        if exchange not in self._exchanges:
+            self._exchanges[exchange] = self.exchange_factory(exchange)
+        return LiveTrader(self, self._exchanges[exchange])
 
     async def process_pair(self, asset_id: int, interval: str, symbol: str, klines: List[Dict]) -> Dict[str, Any]:
         out = {}
         for account in await self.table.list_accounts(enabled_only=True):
-            if account["exchange"] != "paper":
-                continue   # prawdziwe giełdy - osobny adapter (kolejny PR)
+            if account["exchange"] != "paper" and account["exchange"] not in binance_futures.LIVE_EXCHANGES:
+                continue
             try:
-                out[account["id"]] = await self._process_account(account, asset_id, interval, symbol, klines)
+                live = self._live(account["exchange"]) if account["exchange"] != "paper" else None
+                out[account["id"]] = await self._process_account(account, asset_id, interval, symbol, klines, live)
             except Exception as e:
                 logger.error(f"Trading: konto {account['id']} {symbol} [{interval}] nie powiodło się: {e}", exc_info=True)
                 await self.table.log_event(account["id"], "error", f"{symbol} [{interval}]: {e}")
@@ -79,20 +91,28 @@ class TradingEngine:
     # ─────────── konto na parze ───────────
 
     async def _process_account(self, account: Dict[str, Any], asset_id: int, interval: str, symbol: str,
-                               klines: List[Dict]) -> Dict[str, int]:
+                               klines: List[Dict], live: Optional[LiveTrader] = None) -> Dict[str, int]:
         risk = RiskSettings.from_dict(account["risk_json"])
         counts = {"filled": 0, "closed": 0, "cancelled": 0, "signals": 0, "rejected": 0}
         now = int(klines[-1]["open_time"]) if klines else 0
         for sig in await self.table.open_signals(account["id"], asset_id, interval):
-            if sig["status"] == "armed":
+            if live:
+                update = live.update_armed if sig["status"] == "armed" else live.update_entered
+                result = await update(account, sig, risk, now)
+            elif sig["status"] == "armed":
                 result = await self._update_armed(account, sig, klines, risk)
             else:
                 result = await self._update_entered(account, sig, klines, risk)
             if result:
                 counts[result] += 1
             account = await self.table.get_account(account["id"])
+        if live:
+            found = await live.reconcile(account, symbol, now, float(klines[-1]["close"]) if klines else None)
+            counts["discrepancies"] = sum(found.values())
+            account = await self.table.get_account(account["id"])
         if not account["kill_switch"]:
-            for key, n in (await self._new_signals(account, asset_id, interval, symbol, klines, risk, now)).items():
+            new = await self._new_signals(account, asset_id, interval, symbol, klines, risk, now, live)
+            for key, n in new.items():
                 counts[key] += n
         return counts
 
@@ -158,10 +178,6 @@ class TradingEngine:
                 await self.table.mark_position(position["id"], float(klines[-1]["close"]), int(klines[-1]["open_time"]))
             return None
         exit_fee = px.fee(fill.price, position["qty"], risk.fee_pct)
-        fees = position["fees"] + exit_fee
-        pnl = px.pnl(sig["direction"], position["entry_price"], fill.price, position["qty"]) - fees
-        r_multiple = pnl / position["risk_amount"] if position["risk_amount"] else 0.0
-        await self.table.close_position(position["id"], fill.price, reason, fill.time, fees, pnl, round(r_multiple, 4))
         for o in await self.table.orders_for_signal(sig["id"]):
             if o["status"] != "open":
                 continue
@@ -179,23 +195,36 @@ class TradingEngine:
             )
             if close:
                 await self.table.fill_order(close["id"], fill.price, position["qty"], exit_fee, fill.time)
+        await self._finish_close(account, sig, position, fill.price, fill.time, reason, exit_fee, risk)
+        return "closed"
+
+    async def _finish_close(self, account, sig, position, price: float, closed_time: int, reason: str,
+                            exit_fee: float, risk: Optional[RiskSettings], qty: Optional[float] = None) -> None:
+        """Wspólne dla paper i giełdy: wynik, zamknięcie pozycji i sygnału, gotówka, szczyt, kill switch."""
+        risk = risk or RiskSettings.from_dict(account["risk_json"])
+        qty = position["qty"] if qty is None else qty
+        fees = position["fees"] + exit_fee
+        pnl = px.pnl(sig["direction"], position["entry_price"], price, qty) - fees
+        r_multiple = pnl / position["risk_amount"] if position["risk_amount"] else 0.0
+        await self.table.close_position(position["id"], price, reason, closed_time, fees, pnl, round(r_multiple, 4))
         await self.table.set_signal_status(sig["id"], "closed", reason)
+        account = await self.table.get_account(account["id"])
         cash = account["cash"] + pnl
         peak = max(account["peak_equity"], cash)
         await self.table.update_account(account["id"], cash=cash, peak_equity=peak)
         await self.table.log_event(account["id"], "position_closed",
                                    f"{sig['symbol']} {reason.upper()} {pnl:+.2f} {account['base_currency']} ({r_multiple:+.2f} R)",
-                                   sig["id"], position_id=position["id"], market_time=fill.time,
+                                   sig["id"], position_id=position["id"], market_time=closed_time,
                                    data={"pnl": pnl, "r": r_multiple, "fees": fees})
         if peak > 0 and (peak - cash) / peak * 100.0 >= risk.max_drawdown_stop_pct and not account["kill_switch"]:
             msg = f"Obsunięcie {(peak - cash) / peak * 100:.1f}% >= {risk.max_drawdown_stop_pct}% - kill switch"
             await self.table.update_account(account["id"], kill_switch=True, kill_reason=msg)
-            await self.table.log_event(account["id"], "kill_switch", msg, market_time=fill.time)
-        return "closed"
+            await self.table.log_event(account["id"], "kill_switch", msg, market_time=closed_time)
 
     # ─────────── nowe sygnały ───────────
 
-    async def _new_signals(self, account, asset_id, interval, symbol, klines, risk, now) -> Dict[str, int]:
+    async def _new_signals(self, account, asset_id, interval, symbol, klines, risk, now,
+                           live: Optional[LiveTrader] = None) -> Dict[str, int]:
         counts = {"signals": 0, "rejected": 0}
         if not klines:
             return counts
@@ -226,14 +255,19 @@ class TradingEngine:
                 continue   # filtr jakości - nie zapisujemy (to większość setupów)
             if risk.min_ev is not None and (ev is None or ev < risk.min_ev):
                 continue
-            base = dict(account_id=account["id"], setup_id=row["id"], asset_id=asset_id, symbol=symbol,
-                        interval=interval, pattern_type=row["pattern_type"], direction=plan["direction"],
-                        entry_price=plan["entry"], sl=plan["sl"], tp=plan["tp"], strength=score, p_win=p_win, ev=ev,
-                        setup_created_time=row["created_time"])
             reason = await self._risk_rejection(account, asset_id, risk, now)
             size = position_size(account["cash"], plan["entry"], plan["sl"], risk)
             if reason is None and size["qty"] <= 0:
                 reason = "wielkość pozycji 0 (brak kapitału albo SL w cenie wejścia)"
+            if reason is None and live:
+                # tickSize / stepSize / min notional / depozyt - sygnał zapisany z cenami, które pójdą na giełdę
+                plan, qty, reason = await live.conform(account, symbol, plan, size["qty"], risk)
+                size = {**size, "qty": qty, "notional": qty * plan["entry"],
+                        "risk_pct": qty * abs(plan["entry"] - plan["sl"]) / account["cash"] * 100.0}
+            base = dict(account_id=account["id"], setup_id=row["id"], asset_id=asset_id, symbol=symbol,
+                        interval=interval, pattern_type=row["pattern_type"], direction=plan["direction"],
+                        entry_price=plan["entry"], sl=plan["sl"], tp=plan["tp"], strength=score, p_win=p_win, ev=ev,
+                        setup_created_time=row["created_time"])
             if reason:
                 sig = await self.table.create_signal(**base, status="rejected", reason=reason)
                 if sig:
@@ -246,12 +280,15 @@ class TradingEngine:
                 continue
             order = await self.table.create_order(
                 account_id=account["id"], signal_id=sig["id"], position_id=None,
-                client_order_id=f"pa{account['id']}-s{sig['id']}-entry", symbol=symbol,
+                client_order_id=(live.client_id(account["id"], sig["id"], "entry") if live
+                                 else f"pa{account['id']}-s{sig['id']}-entry"), symbol=symbol,
                 side="buy" if plan["direction"] == "long" else "sell", position_side=plan["direction"],
                 order_type="limit", purpose="entry", price=plan["entry"], qty=size["qty"], status="open",
                 placed_time=now,
             )
             counts["signals"] += 1
+            if live and order:
+                await live.submit_entry(account, sig, order, risk, now)
             await self.table.log_event(
                 account["id"], "signal_armed",
                 f"{plan['direction'].upper()} {symbol} [{interval}] {row['pattern_type']}: limit {plan['entry']:.8g}, "
