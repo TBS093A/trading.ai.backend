@@ -252,6 +252,21 @@ class TradingTable(AbstractTable):
             "UPDATE trading_orders SET status = $2, updated_at = NOW() WHERE id = $1", order_id, status
         )
 
+    async def update_order(self, order_id: int, **fields) -> None:
+        """Stan z giełdy (src/trading/live.py): id zlecenia na giełdzie, status, wypełnienie."""
+        allowed = {"exchange_order_id", "status", "filled_qty", "avg_fill_price", "fee", "filled_time", "qty", "price"}
+        sets, args = [], [order_id]
+        for k, v in fields.items():
+            if k not in allowed:
+                raise ValueError(f"pole zlecenia nieobsługiwane: {k}")
+            args.append(v)
+            sets.append(f"{k} = ${len(args)}")
+        if sets:
+            await self.execute_query(
+                f"UPDATE trading_orders SET {', '.join(sets)}, updated_at = NOW() WHERE id = $1",  # nosemgrep: kolumny z allowlisty
+                *args,
+            )
+
     async def orders_for_signal(self, signal_id: int) -> List[Dict[str, Any]]:
         return await self.fetch_all("SELECT * FROM trading_orders WHERE signal_id = $1 ORDER BY id", signal_id)
 
@@ -279,6 +294,21 @@ class TradingTable(AbstractTable):
                 fees = $5, pnl = $6, r_multiple = $7 WHERE id = $1""",
             position_id, exit_price, exit_reason, closed_time, fees, pnl, r_multiple,
         )
+
+    async def update_position(self, position_id: int, **fields) -> None:
+        """Korekta z rekoncyliacji z giełdą (ilość / cena wejścia - giełda wygrywa)."""
+        allowed = {"qty", "entry_price", "risk_amount"}
+        sets, args = [], [position_id]
+        for k, v in fields.items():
+            if k not in allowed:
+                raise ValueError(f"pole pozycji nieobsługiwane: {k}")
+            args.append(v)
+            sets.append(f"{k} = ${len(args)}")
+        if sets:
+            await self.execute_query(
+                f"UPDATE trading_positions SET {', '.join(sets)} WHERE id = $1",  # nosemgrep: kolumny z allowlisty
+                *args,
+            )
 
     async def mark_position(self, position_id: int, price: float, market_time: int) -> None:
         await self.execute_query(
