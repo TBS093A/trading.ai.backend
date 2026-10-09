@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from .. import harmonic_scan, harmonic_setups, pattern_strength, setup_variants
 from ..pattern_strength import StrengthModel
 from .klines_source import KlinesSource
-from .setup_tracking_service import SetupTrackingService, entry_confluences
+from .setup_tracking_service import SetupTrackingService, entry_confluences, pre_entry_confluences
 from .strength_service import StrengthService, cached_model, refresh_cached_model
 
 logger = logging.getLogger(__name__)
@@ -28,14 +28,15 @@ class VariantReportService:
         active = cached_model("entry")
         cutoff_iso = (active.metrics or {}).get("test_from") if active else None
         cutoff_ms = int(datetime.fromisoformat(cutoff_iso).timestamp() * 1000) if cutoff_iso else None
-        model_json = None
+        models_json: Dict[str, Any] = {}
         if cutoff_ms is not None:
             rows = await StrengthService(self.db)._decided_setups(harmonic_setups.params_version())
-            model = pattern_strength.fit_before(pattern_strength.training_samples(rows, "entry"), cutoff_ms)
-            model_json = model.as_dict()
+            for kind in pattern_strength.KINDS:
+                model = pattern_strength.fit_before(pattern_strength.training_samples(rows, kind), cutoff_ms, kind)
+                models_json[kind] = model.as_dict()
         targets = await factory.get_tracked_assets_table().get_setup_targets()
         params = {"candles": candles, "variants": [v.__dict__ for v in setup_variants.VARIANTS],
-                  "strength_model": model_json}
+                  "strength_models": models_json}
         report_id = await factory.get_harmonic_variant_reports_table().create_report(
             harmonic_setups.params_version(), params, cutoff_ms, len(targets)
         )
@@ -45,8 +46,7 @@ class VariantReportService:
         table = self.db.get_factory().get_harmonic_variant_reports_table()
         report = await table.get_report(report_id)
         params = report["params_json"]
-        model = StrengthModel.from_dict(params["strength_model"]) if params.get("strength_model") else None
-
+        models = {kind: StrengthModel.from_dict(m) for kind, m in (params.get("strength_models") or {}).items()}
         resolved = await self.klines.resolve(asset_id)
         self.klines.require_api(resolved)
         step = harmonic_scan.interval_ms(interval)
@@ -61,19 +61,28 @@ class VariantReportService:
         context = await SetupTrackingService(self.db, self.klines)._confluence_context(resolved, asset_id, interval, klines)
         score_cache: Dict[tuple, Optional[Dict[str, Any]]] = {}
 
-        def score_fn(setup, e_idx, entry, sl, tp1):
+        def score_fn(setup, e_idx, entry, sl, tp1, kind):
+            model = models.get(kind)
             if model is None:
                 return None
-            key = (setup.key, e_idx, round(entry, 10))
+            key = (setup.key, e_idx, round(entry, 10), kind)
             if key not in score_cache:
-                confluences = entry_confluences(setup, e_idx, entry, klines[: e_idx + 1], interval, context)
+                points = {n: {"time": int(klines[p.index]["open_time"]), "price": p.price}
+                          for n, p in setup.points.items()}
                 row = {"pattern_type": setup.pattern, "is_bullish": setup.is_bullish, "interval": interval,
-                       "spacing": setup.spacing,
-                       "points_json": {n: {"time": int(klines[p.index]["open_time"]), "price": p.price}
-                                       for n, p in setup.points.items()},
-                       "entry_time": int(klines[e_idx]["open_time"]), "entry_price": entry,
-                       "confluences_json": confluences}
-                score_cache[key] = model.score(pattern_strength.setup_features(row, "entry"))
+                       "spacing": setup.spacing, "points_json": points,
+                       "prz_min": setup.prz_min, "prz_max": setup.prz_max}
+                if kind == "pre":
+                    # Wejście przy dotknięciu: znamy tylko świece przed świecą wejścia.
+                    known = klines[:e_idx]
+                    row.update(status="waiting", entry_time=None, entry_price=None,
+                               created_time=int(known[-1]["open_time"]),
+                               pre_confluences_json=pre_entry_confluences(setup, known, interval, context, step))
+                else:
+                    row.update(entry_time=int(klines[e_idx]["open_time"]), entry_price=entry,
+                               confluences_json=entry_confluences(setup, e_idx, entry, klines[: e_idx + 1],
+                                                                  interval, context))
+                score_cache[key] = model.score(pattern_strength.setup_features(row, kind))
             return score_cache[key]
 
         trades: List[Dict[str, Any]] = []

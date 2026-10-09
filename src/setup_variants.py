@@ -14,8 +14,10 @@ się tylko tym, kiedy wchodzi i jak prowadzi pozycję:
 - min_ev           - tylko setupy z wartością oczekiwaną p_win*R:R - (1-p_win) >= progu.
 
 Konserwatywnie jak w serii produkcyjnej: SL i TP w tej samej świecy -> SL; limit czasu 2 x rozpiętość X..C.
-Siła liczona przyczynowo (konfluencje do świecy wejścia) modelem uczonym tylko na danych sprzed
-cutoff - wyniki "out" (po cutoff) są uczciwe, "in" dla wariantów z siłą są optymistyczne.
+Siła liczona przyczynowo: przy dotknięciu PRZ model wstępny na konfluencjach poziomowych do świecy przed
+dotknięciem (świeca wejścia nie jest jeszcze zamknięta), po potwierdzeniu model pełny na zamkniętej świecy
+potwierdzenia. Oba modele uczone tylko na danych sprzed cutoff - wyniki "out" (po cutoff) są uczciwe,
+"in" dla wariantów z siłą są optymistyczne.
 """
 
 import math
@@ -40,6 +42,12 @@ class Variant:
     def needs_strength(self) -> bool:
         return self.min_strength is not None or self.min_ev is not None
 
+    @property
+    def strength_kind(self) -> str:
+        """Przy dotknięciu wejście jest w trakcie świecy - znamy tylko konfluencje poziomowe sprzed niej
+        (model "pre"); po potwierdzeniu świeca jest zamknięta - pełny model "entry" jest uczciwy."""
+        return "entry" if self.entry == "confirm" else "pre"
+
 
 VARIANTS: Tuple[Variant, ...] = (
     Variant("baseline", "dotknięcie PRZ, całość na TP1 (jak dziś)"),
@@ -49,10 +57,16 @@ VARIANTS: Tuple[Variant, ...] = (
     Variant("confirm", "wejście po świecy odwrócenia w PRZ", entry="confirm"),
     Variant("confirm_be", "potwierdzenie + SL na wejście po +1R", entry="confirm", breakeven_at=1.0),
     Variant("confirm_cap_2", "potwierdzenie + TP1 najwyżej 2R", entry="confirm", rr_cap=2.0),
-    Variant("strength_60", "baseline, tylko siła >= 60", min_strength=60),
-    Variant("strength_80", "baseline, tylko siła >= 80", min_strength=80),
-    Variant("ev_positive", "baseline, tylko EV >= 0", min_ev=0.0),
+    # Wejście przy dotknięciu: siła WSTĘPNA (model "pre", konfluencje poziomowe do świecy przed
+    # dotknięciem) - to samo, co widzi konto paper w chwili wystawienia zlecenia.
+    Variant("pre_strength_60", "dotknięcie, siła wstępna >= 60 (jak konto paper)", min_strength=60),
+    Variant("pre_strength_70", "dotknięcie, siła wstępna >= 70", min_strength=70),
+    Variant("pre_strength_80", "dotknięcie, siła wstępna >= 80", min_strength=80),
+    Variant("pre_ev_positive", "dotknięcie, EV wstępne >= 0", min_ev=0.0),
+    # Wejście po potwierdzeniu: siła PEŁNA na zamkniętej świecy potwierdzenia - uczciwa.
     Variant("confirm_strength_60", "potwierdzenie + siła >= 60", entry="confirm", min_strength=60),
+    Variant("confirm_strength_70", "potwierdzenie + siła >= 70", entry="confirm", min_strength=70),
+    Variant("confirm_strength_80", "potwierdzenie + siła >= 80", entry="confirm", min_strength=80),
     Variant("confirm_ev_be", "potwierdzenie + EV >= 0 + SL na wejście po +1R", entry="confirm", min_ev=0.0,
             breakeven_at=1.0),
 )
@@ -60,8 +74,9 @@ VARIANTS_BY_NAME = {v.name: v for v in VARIANTS}
 
 SL_BUFFER = 0.001   # SL wariantu "confirm": 0.1% za ekstremum od dotknięcia
 
-# score_fn(setup, entry_index, entry, sl, tp1) -> {"score": 0-100, "p_win": 0-1} albo None
-ScoreFn = Callable[[Setup, int, float, float, float], Optional[Dict[str, Any]]]
+# score_fn(setup, entry_index, entry, sl, tp1, kind) -> {"score": 0-100, "p_win": 0-1} albo None;
+# kind = Variant.strength_kind ("pre" przy dotknięciu, "entry" po potwierdzeniu)
+ScoreFn = Callable[[Setup, int, float, float, float, str], Optional[Dict[str, Any]]]
 
 
 @dataclass
@@ -157,7 +172,7 @@ def simulate_variant(setup: Setup, klines: List[Dict], variant: Variant, targets
 
     strength = p_win = ev = None
     if variant.needs_strength or score_fn is not None:
-        scored = score_fn(setup, e_idx, entry, sl, tp1) if score_fn else None
+        scored = score_fn(setup, e_idx, entry, sl, tp1, variant.strength_kind) if score_fn else None
         if scored is not None:
             strength, p_win = int(scored["score"]), float(scored["p_win"])
             ev = round(p_win * abs(tp1 - entry) / risk - (1 - p_win), 4)
