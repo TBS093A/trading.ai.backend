@@ -338,6 +338,16 @@ class TestEngine(unittest.TestCase):
         self.run_pair(engine, flat(11))
         self.assertEqual(len(table.signals), 1)
 
+    def test_trend_filter_on_the_account(self):
+        row = waiting_setup()
+        row["pre_confluences_json"] = {"confluences": [{"type": "higher_tf_downtrend"}]}   # przeciw longowi
+        engine, table, _ = make_engine([row], rk.RiskSettings(trend_filter="not_against", fee_pct=0))
+        self.run_pair(engine, flat(11))
+        self.assertEqual(table.signals, {})
+        table.accounts[1]["risk_json"] = rk.RiskSettings(trend_filter="off", fee_pct=0).as_dict()
+        self.run_pair(engine, flat(11))
+        self.assertEqual(len(table.signals), 1)
+
     def test_tables_are_known_to_the_janitor(self):
         names = DatabasePostgreSQLFactory.registered_table_names()
         for t in ("trading_accounts", "trading_signals", "trading_orders", "trading_positions", "trading_events"):

@@ -6,6 +6,7 @@ from .structural_confluences import (
 )
 from .volume_confluences import VolumeConfluenceDetector
 from .fib_confluences import FibClusterDetector, HigherTFFibDetector, merge_confluences
+from .trend_confluences import HigherTFTrendDetector
 
 __all__ = [
     'ConfluenceDetector',
@@ -18,4 +19,5 @@ __all__ = [
     'FibClusterDetector',
     'HigherTFFibDetector',
     'merge_confluences',
+    'HigherTFTrendDetector',
 ]

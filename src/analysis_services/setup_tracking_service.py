@@ -9,7 +9,7 @@ from ..utils.harmonic_patterns import ConfluenceDetector, merge_confluences
 from ..utils.harmonic_patterns.fib_confluences import INTERVAL_HIERARCHY
 from .confluence_postprocessor import HIGHER_TF_KLINES_WINDOW, POST_PROCESSING_TYPES, post_processing_entries
 from .strength_service import cached_model, refresh_cached_model, setup_strength_or_none
-from ..pattern_strength import setup_features
+from ..pattern_strength import setup_features, trend_alignment
 from ..pattern_strength import LEVEL_TYPES
 from .klines_source import KlinesSource
 
@@ -151,16 +151,17 @@ class SetupTrackingService:
 
                 def entry_strength_fn(setup, j, entry, kl):
                     # Tryb "confirm": siła pełna na zamkniętej świecy potwierdzenia (ta sama co w raporcie).
-                    model = cached_model("entry")
-                    if model is None:
-                        return None
+                    confluences = entry_confluences(setup, j, entry, kl[: j + 1], interval, context)
                     row = {"pattern_type": setup.pattern, "is_bullish": setup.is_bullish, "interval": interval,
                            "spacing": setup.spacing,
                            "points_json": {n: {"time": int(kl[p.index]["open_time"]), "price": p.price}
                                            for n, p in setup.points.items()},
                            "entry_time": int(kl[j]["open_time"]), "entry_price": entry,
-                           "confluences_json": entry_confluences(setup, j, entry, kl[: j + 1], interval, context)}
-                    return model.score(setup_features(row, "entry"))
+                           "confluences_json": confluences}
+                    model = cached_model("entry")
+                    scored = dict(model.score(setup_features(row, "entry"))) if model else {}
+                    scored["trend"] = trend_alignment(confluences, setup.is_bullish)
+                    return scored
 
                 await TradingEngine(self.db, strength_fn=setup_strength_or_none,
                                     entry_strength_fn=entry_strength_fn).process_pair(

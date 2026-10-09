@@ -22,7 +22,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from .. import harmonic_setups, setup_variants
+from .. import harmonic_setups, pattern_strength, setup_variants
 from ..harmonic_setups import Pivot, Setup
 from . import binance_futures
 from . import paper_exchange as px
@@ -305,8 +305,9 @@ class TradingEngine:
             if row["created_time"] < now - NEW_SETUP_LOOKBACK_CANDLES * step:
                 continue
             strength = self.strength_fn(row) if self.strength_fn else None
+            trend = pattern_strength.trend_alignment(row.get("pre_confluences_json"), bool(row["is_bullish"]))
             out.append({"row": row, "plan": plan_from_setup(row, self.targets_fn), "strength": strength,
-                        "order_type": "limit", "fill": None})
+                        "trend": trend, "order_type": "limit", "fill": None})
         return out
 
     async def _confirm_candidates(self, asset_id, interval, klines, now, step) -> List[Dict[str, Any]]:
@@ -337,11 +338,11 @@ class TradingEngine:
             # Wejście po zamknięciu świecy potwierdzenia = otwarcie następnej; SL/TP od niej.
             opened = int(klines[j]["open_time"]) + step
             out.append({"row": row, "plan": plan, "strength": strength, "order_type": "market",
-                        "fill": {"price": plan["entry"], "time": opened}})
+                        "trend": (strength or {}).get("trend"), "fill": {"price": plan["entry"], "time": opened}})
         return sorted(out, key=lambda c: c["fill"]["time"])
 
     async def _open_signal(self, account, asset_id, interval, symbol, risk, now, live, row, plan, strength,
-                           order_type, fill) -> Optional[str]:
+                           order_type, fill, trend: Optional[str] = None) -> Optional[str]:
         score = strength.get("score") if strength else None
         p_win = strength.get("p_win") if strength else None
         rr = abs(plan["tp"] - plan["entry"]) / abs(plan["entry"] - plan["sl"])
@@ -350,6 +351,8 @@ class TradingEngine:
             return None   # filtr jakości - nie zapisujemy (to większość setupów)
         if risk.min_ev is not None and (ev is None or ev < risk.min_ev):
             return None
+        if (risk.trend_filter == "with" and trend != "with") or (risk.trend_filter == "not_against" and trend == "against"):
+            return None   # filtr trendu wyższego TF - jak filtr jakości, bez zapisu
         reason = await self._risk_rejection(account, asset_id, risk, now)
         size = position_size(account["cash"], plan["entry"], plan["sl"], risk)
         if reason is None and size["qty"] <= 0:
@@ -389,7 +392,8 @@ class TradingEngine:
             f"SL {plan['sl']:.8g}, TP {plan['tp']:.8g}, ryzyko {size['risk_pct']:.2f}%",
             sig["id"], order["id"] if order else None, market_time=now,
             data={"strength": score, "p_win": p_win, "ev": ev, "qty": size["qty"], "notional": size["notional"],
-                  "targets_source": plan.get("targets_source"), "entry_mode": "confirm" if fill else "touch"},
+                  "targets_source": plan.get("targets_source"), "entry_mode": "confirm" if fill else "touch",
+                  "htf_trend": trend},
         )
         if live and order:
             await live.submit_entry(account, sig, order, risk, now)

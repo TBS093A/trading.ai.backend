@@ -37,10 +37,11 @@ class Variant:
     rr_cap: Optional[float] = None
     min_strength: Optional[int] = None
     min_ev: Optional[float] = None
+    trend: Optional[str] = None      # "with" - tylko z trendem wyższego TF, "not_against" - nie przeciw niemu
 
     @property
     def needs_strength(self) -> bool:
-        return self.min_strength is not None or self.min_ev is not None
+        return self.min_strength is not None or self.min_ev is not None or self.trend is not None
 
     @property
     def strength_kind(self) -> str:
@@ -69,6 +70,15 @@ VARIANTS: Tuple[Variant, ...] = (
     Variant("confirm_strength_80", "potwierdzenie + siła >= 80", entry="confirm", min_strength=80),
     Variant("confirm_ev_be", "potwierdzenie + EV >= 0 + SL na wejście po +1R", entry="confirm", min_ev=0.0,
             breakeven_at=1.0),
+    # Filtr trendu z wyższego TF (EMA 200, utils/harmonic_patterns/trend_confluences.py)
+    Variant("baseline_trend", "dotknięcie, tylko z trendem wyższego TF", trend="with"),
+    Variant("baseline_not_against", "dotknięcie, nie przeciw trendowi wyższego TF", trend="not_against"),
+    Variant("pre_strength_70_trend", "dotknięcie, siła wstępna >= 70, z trendem", min_strength=70, trend="with"),
+    Variant("confirm_trend", "potwierdzenie, tylko z trendem", entry="confirm", trend="with"),
+    Variant("confirm_strength_80_trend", "potwierdzenie + siła >= 80, z trendem", entry="confirm", min_strength=80,
+            trend="with"),
+    Variant("confirm_strength_70_not_against", "potwierdzenie + siła >= 70, nie przeciw trendowi", entry="confirm",
+            min_strength=70, trend="not_against"),
 )
 VARIANTS_BY_NAME = {v.name: v for v in VARIANTS}
 
@@ -173,9 +183,13 @@ def simulate_variant(setup: Setup, klines: List[Dict], variant: Variant, targets
     strength = p_win = ev = None
     if variant.needs_strength or score_fn is not None:
         scored = score_fn(setup, e_idx, entry, sl, tp1, variant.strength_kind) if score_fn else None
-        if scored is not None:
+        if scored is not None and scored.get("score") is not None:
             strength, p_win = int(scored["score"]), float(scored["p_win"])
             ev = round(p_win * abs(tp1 - entry) / risk - (1 - p_win), 4)
+        if variant.trend is not None:
+            trend = (scored or {}).get("trend")
+            if (variant.trend == "with" and trend != "with") or (variant.trend == "not_against" and trend == "against"):
+                return None
         if variant.min_strength is not None and (strength is None or strength < variant.min_strength):
             return None
         if variant.min_ev is not None and (ev is None or ev < variant.min_ev):

@@ -45,7 +45,8 @@ SETUP_PARAMS: Dict[str, Any] = {
     "trade_timeout_factor": TRADE_TIMEOUT_FACTOR, "entry": "near PRZ edge or open",
     "exit": "all at TP1", "same_candle": "SL first",
     # 2: konfluencje setupów = pełny zestaw z sidebara (+ Fib cluster, wyższe TF), przyczynowe.
-    "confluences": "sidebar set, causal", "version": 2,
+    # 3: + trend wyższego TF (EMA 200) w konfluencjach - nowa seria, model uczy się jego wagi.
+    "confluences": "sidebar set, causal, htf trend", "version": 3,
 }
 
 

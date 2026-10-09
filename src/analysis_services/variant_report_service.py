@@ -62,9 +62,8 @@ class VariantReportService:
         score_cache: Dict[tuple, Optional[Dict[str, Any]]] = {}
 
         def score_fn(setup, e_idx, entry, sl, tp1, kind):
-            model = models.get(kind)
-            if model is None:
-                return None
+            # {"score", "p_win"} z modelu danego rodzaju (jeśli jest) + "trend" (with / against / None)
+            # z tych samych konfluencji - filtr trendu działa także bez modelu.
             key = (setup.key, e_idx, round(entry, 10), kind)
             if key not in score_cache:
                 points = {n: {"time": int(klines[p.index]["open_time"]), "price": p.price}
@@ -75,14 +74,17 @@ class VariantReportService:
                 if kind == "pre":
                     # Wejście przy dotknięciu: znamy tylko świece przed świecą wejścia.
                     known = klines[:e_idx]
+                    confluences = pre_entry_confluences(setup, known, interval, context, step)
                     row.update(status="waiting", entry_time=None, entry_price=None,
-                               created_time=int(known[-1]["open_time"]),
-                               pre_confluences_json=pre_entry_confluences(setup, known, interval, context, step))
+                               created_time=int(known[-1]["open_time"]), pre_confluences_json=confluences)
                 else:
+                    confluences = entry_confluences(setup, e_idx, entry, klines[: e_idx + 1], interval, context)
                     row.update(entry_time=int(klines[e_idx]["open_time"]), entry_price=entry,
-                               confluences_json=entry_confluences(setup, e_idx, entry, klines[: e_idx + 1],
-                                                                  interval, context))
-                score_cache[key] = model.score(pattern_strength.setup_features(row, kind))
+                               confluences_json=confluences)
+                model = models.get(kind)
+                scored = dict(model.score(pattern_strength.setup_features(row, kind))) if model else {}
+                scored["trend"] = pattern_strength.trend_alignment(confluences, setup.is_bullish)
+                score_cache[key] = scored
             return score_cache[key]
 
         trades: List[Dict[str, Any]] = []
