@@ -4,8 +4,10 @@ import logging
 from typing import Dict, List
 
 from ..utils.harmonic_patterns import (
-    FibClusterDetector, HigherTFFibDetector, HigherTFSRDetector, HigherTFTrendlineDetector, merge_confluences,
+    FibClusterDetector, HigherTFFibDetector, HigherTFSRDetector, HigherTFTrendDetector, HigherTFTrendlineDetector,
+    merge_confluences,
 )
+from ..utils.harmonic_patterns.trend_confluences import TREND_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +118,7 @@ class ConfluencePostProcessor:
 
             replace_types = [
                 'higher_tf_support_zone', 'higher_tf_resistance_zone',
-                'higher_tf_support_trendline', 'higher_tf_resistance_trendline',
+                'higher_tf_support_trendline', 'higher_tf_resistance_trendline', *TREND_TYPES,
             ]
 
             for pattern in all_patterns:
@@ -133,6 +135,10 @@ class ConfluencePostProcessor:
                 tl_result = HigherTFTrendlineDetector.detect(klines_cache, pattern, iv)
                 if tl_result is not None:
                     new_entries.append(tl_result)
+
+                trend_result = HigherTFTrendDetector.detect(klines_cache, pattern, iv)
+                if trend_result is not None:
+                    new_entries.append(trend_result)
 
                 if not new_entries:
                     continue
@@ -157,6 +163,7 @@ POST_PROCESSING_TYPES = [
     'fib_cluster', 'higher_tf_fib',
     'higher_tf_support_zone', 'higher_tf_resistance_zone',
     'higher_tf_support_trendline', 'higher_tf_resistance_trendline',
+    *TREND_TYPES,
 ]
 HIGHER_TF_KLINES_WINDOW = 500   # tyle świec wyższego TF widzi nocny sync (TechnicalAnalysis.CANDLES_COUNT)
 
@@ -181,7 +188,7 @@ def post_processing_entries(target: Dict, interval: str, patterns_by_interval: D
     d_ts = target.get('d_point_timestamp')
     # Jak w nocnym syncu: ostatnie HIGHER_TF_KLINES_WINDOW świec wyższego TF - ale zamkniętych przed D.
     window = {iv: klines_closed_before(kl, iv, d_ts)[-HIGHER_TF_KLINES_WINDOW:] for iv, kl in klines_by_interval.items()}
-    for detector in (HigherTFSRDetector, HigherTFTrendlineDetector):
+    for detector in (HigherTFSRDetector, HigherTFTrendlineDetector, HigherTFTrendDetector):
         result = detector.detect(window, target, interval)
         if result is not None:
             entries.append(result)

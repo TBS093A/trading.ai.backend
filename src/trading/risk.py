@@ -27,6 +27,7 @@ class RiskSettings:
     fee_pct: float = 0.04
     slippage_pct: float = 0.02
     leverage: int = 1
+    trend_filter: str = "off"        # off | with | not_against - trend wyższego TF (EMA 200)
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -76,6 +77,15 @@ RISK_FIELDS: List[Dict[str, Any]] = [
                     "pozycji). Paper ignoruje to pole."},
 ]
 
+RISK_FIELDS.append(
+    {"key": "trend_filter", "label": "Filtr trendu wyższego TF", "type": "select",
+     "options": [{"value": "off", "label": "wyłączony"},
+                 {"value": "with", "label": "tylko z trendem"},
+                 {"value": "not_against", "label": "nie przeciw trendowi"}],
+     "description": "Trend z najbliższego wyższego interwału (EMA 200 i jej nachylenie, świece zamknięte przed "
+                    "wejściem): long tylko w trendzie wzrostowym itd. „Nie przeciw” przepuszcza też rynek bez "
+                    "wyraźnego trendu. Porównaj warianty *_trend w Benchmarkach. Podgląd skutków go nie uwzględnia."})
+
 RISK_PRESETS: List[Dict[str, Any]] = [
     {"key": "conservative", "label": "Ostrożny",
      "description": "Na start i na live z prawdziwymi pieniędzmi: małe ryzyko, mało pozycji naraz, wcześnie "
@@ -101,6 +111,10 @@ def validate(settings: Dict[str, Any]) -> RiskSettings:
     out = RiskSettings.from_dict(settings)
     for f in RISK_FIELDS:
         value = getattr(out, f["key"])
+        if f.get("options"):
+            if value not in [o["value"] for o in f["options"]]:
+                raise ValueError(f"{f['label']}: nieznana wartość {value}")
+            continue
         if value is None:
             if not f.get("nullable"):
                 raise ValueError(f"{f['label']}: wymagane")

@@ -45,15 +45,18 @@ CONFLUENCE_CATALOG: Dict[str, Tuple[str, str]] = {
     "macd_histogram_reversal": ("volume", "both"),
     "macd_bullish_divergence": ("volume", "bullish"), "macd_bearish_divergence": ("volume", "bearish"),
     "obv_bullish_divergence": ("volume", "bullish"), "obv_bearish_divergence": ("volume", "bearish"),
+    # trend z wyższego TF (utils/harmonic_patterns/trend_confluences.py)
+    "higher_tf_uptrend": ("trend", "bullish"), "higher_tf_downtrend": ("trend", "bearish"),
 }
-CATEGORIES = ("momentum", "candles", "fibonacci", "structure", "volume")
+CATEGORIES = ("momentum", "candles", "fibonacci", "structure", "volume", "trend")
 # Konfluencje poziomowe - znane, zanim cena dojdzie do PRZ (siła wstępna setupu "waiting").
 # Pozostałe (świece, RSI/stochastic, dywergencje, wolumen, MACD) to reakcja ceny w strefie.
-LEVEL_TYPES = frozenset(t for t, (cat, _) in CONFLUENCE_CATALOG.items() if cat in ("fibonacci", "structure")) | {
-    "volume_profile"}
+LEVEL_TYPES = frozenset(t for t, (cat, _) in CONFLUENCE_CATALOG.items()
+                        if cat in ("fibonacci", "structure", "trend")) | {"volume_profile"}
 KINDS = ("entry", "pre")   # siła pełna (od wejścia) i wstępna (setup czeka na PRZ)
 CATEGORY_LABELS = {"momentum": "RSI / Stochastic", "candles": "świece", "fibonacci": "Fibonacci",
-                   "structure": "S/R / trendline", "volume": "wolumen / MACD / OBV"}
+                   "structure": "S/R / trendline", "volume": "wolumen / MACD / OBV",
+                   "trend": "trend wyższego TF"}
 
 MODEL_VERSION = 1
 L2 = 2.0                 # siła regularyzacji (na cechę)
@@ -362,3 +365,13 @@ def fit_before(samples: Sequence[Tuple[Dict[str, float], int, float, int]], cuto
                          quantiles=[float(v) for v in np.quantile(z, np.linspace(0, 1, 101))],
                          metrics={"train": len(train), "cutoff_ms": cutoff_ms}, kind=kind,
                          trained_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+
+def trend_alignment(confluences: Any, is_bullish: bool) -> Optional[str]:
+    """"with" / "against" - trend wyższego TF względem kierunku formacji; None - brak wyraźnego trendu."""
+    types = {c.get("type") for c in _confluence_list(confluences) if isinstance(c, dict)}
+    if "higher_tf_uptrend" in types:
+        return "with" if is_bullish else "against"
+    if "higher_tf_downtrend" in types:
+        return "against" if is_bullish else "with"
+    return None
