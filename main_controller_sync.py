@@ -20,7 +20,7 @@ from src.db.database_facade import DatabaseFacade
 from src.celery_tasks.sync_tasks import sync_exchanges_task
 from src.celery_tasks.analysis_tasks import (
     sync_technical_analysis_task, track_harmonic_setups_task, notify_harmonic_setup_events_task,
-    fit_strength_model_task,
+    fit_strength_model_task, snapshot_trading_equity_task,
 )
 from src import harmonic_scan
 from src.celery_tasks.maintenance_tasks import db_janitor_task
@@ -517,6 +517,8 @@ class SyncController:
             ]
             if tasks:
                 tasks.append(notify_harmonic_setup_events_task.apply_async(
+                    queue='analysis_queue', countdown=self.SETUP_ALERTS_DELAY_S, priority=5))
+                tasks.append(snapshot_trading_equity_task.apply_async(
                     queue='analysis_queue', countdown=self.SETUP_ALERTS_DELAY_S, priority=5))
             logger.info(f"✅ Śledzenie setupów: {len(due)}/{len(targets)} par (asset, interwał) z nową świecą")
             return tasks
