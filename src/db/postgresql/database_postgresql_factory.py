@@ -54,6 +54,7 @@ class DatabasePostgreSQLFactory:
         'harmonic_setup_events': HarmonicSetupEventsTable,
         'harmonic_strength_models': HarmonicStrengthModelsTable,
         'harmonic_variant_reports': HarmonicVariantReportsTable,
+        'trading_accounts': TradingTable,
     }
     
     def __init__(self, pool: asyncpg.Pool):
@@ -147,6 +148,10 @@ class DatabasePostgreSQLFactory:
 
     def get_harmonic_variant_reports_table(self) -> HarmonicVariantReportsTable:
         return self.get_table('harmonic_variant_reports')
+
+    def get_trading_table(self) -> TradingTable:
+        """Trading z sygnałów setupów (src/trading): konta, sygnały, zlecenia, pozycje, dziennik."""
+        return self.get_table('trading_accounts')
 
     def get_all_tables(self) -> Dict[str, AbstractTable]:
         """Zwraca wszystkie tabele."""

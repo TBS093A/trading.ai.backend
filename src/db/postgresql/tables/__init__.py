@@ -18,6 +18,7 @@ from .tracked_assets_table import TrackedAssetsTable
 from .harmonic_setup_alerts_table import HarmonicSetupAlertSettingsTable, HarmonicSetupEventsTable
 from .harmonic_strength_models_table import HarmonicStrengthModelsTable
 from .harmonic_variant_reports_table import HarmonicVariantReportsTable
+from .trading_table import TradingTable
 
 __all__ = [
     'AbstractTable',
@@ -41,4 +42,5 @@ __all__ = [
     'HarmonicSetupEventsTable',
     'HarmonicStrengthModelsTable',
     'HarmonicVariantReportsTable',
+    'TradingTable',
 ] 

@@ -137,6 +137,14 @@ class SetupTrackingService:
         saved = await table.upsert_many(rows)
         if events:
             await factory.get_harmonic_setup_events_table().add_many(events)
+        if source == 'live':
+            # Konta paper: sygnały z setupów, wypełnienia i wyjścia na tych samych świecach (src/trading).
+            try:
+                from ..trading.engine import TradingEngine
+                await TradingEngine(self.db, strength_fn=setup_strength_or_none).process_pair(
+                    asset_id, interval, resolved.symbol, klines)
+            except Exception as e:
+                logger.error(f"Trading po śledzeniu {resolved.symbol} [{interval}] nie powiódł się: {e}", exc_info=True)
         by_status: Dict[str, int] = {}
         for r in rows:
             by_status[r['status']] = by_status.get(r['status'], 0) + 1

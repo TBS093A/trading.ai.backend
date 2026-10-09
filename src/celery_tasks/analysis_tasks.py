@@ -292,3 +292,21 @@ def run_variant_pair_task(self, report_id: int, asset_id: int, interval: str) ->
             await db.close_db()
 
     return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}
+
+
+@celery.task(bind=True, name='analysis_tasks.snapshot_trading_equity')
+def snapshot_trading_equity_task(self) -> Dict[str, Any]:
+    """Migawka kapitału kont tradingowych (gotówka + niezrealizowany wynik po ostatniej cenie)."""
+    from ..db.database_facade import DatabaseFacade
+    from ..trading.engine import TradingEngine
+
+    async def run() -> Dict[str, Any]:
+        db = DatabaseFacade().get_database_postgresql()
+        await db.init_db()
+        try:
+            now_ms = int(datetime.now().timestamp() * 1000)
+            return {'accounts': await TradingEngine(db).snapshot(now_ms)}
+        finally:
+            await db.close_db()
+
+    return {'success': True, 'task_id': self.request.id, 'result': run_async_task_safely(run)}
