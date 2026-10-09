@@ -80,16 +80,25 @@ class TestFilters(unittest.TestCase):
     def test_strength_threshold(self):
         weak = lambda *a: {"score": 55, "p_win": 0.3}
         strong = lambda *a: {"score": 85, "p_win": 0.5}
-        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["strength_60"], TARGETS, weak))
-        t = sv.simulate_variant(gartley(), self.kl, V["strength_60"], TARGETS, strong)
+        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["pre_strength_60"], TARGETS, weak))
+        t = sv.simulate_variant(gartley(), self.kl, V["pre_strength_60"], TARGETS, strong)
         self.assertEqual((t.strength, t.p_win), (85, 0.5))
-        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["strength_60"], TARGETS, None))
+        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["pre_strength_60"], TARGETS, None))
+
+    def test_touch_variants_use_pre_entry_strength_and_confirm_the_full_model(self):
+        kinds = []
+        score = lambda *a: kinds.append(a[-1]) or {"score": 90, "p_win": 0.5}
+        sv.simulate_variant(gartley(), self.kl, V["pre_strength_60"], TARGETS, score)
+        confirm_kl = after([(150, 151, 119, 120), (120, 121.5, 116, 121), (121, 141, 120, 140)])
+        sv.simulate_variant(gartley(), confirm_kl, V["confirm_strength_60"], TARGETS, score)
+        self.assertEqual(kinds, ["pre", "entry"])
+        self.assertFalse([v for v in sv.VARIANTS if v.needs_strength and v.entry == "touch" and v.strength_kind != "pre"])
 
     def test_expected_value_filter(self):
         # R:R = 18/12 = 1.5; EV = p*1.5 - (1-p): p=0.3 -> -0.25, p=0.5 -> +0.25
-        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["ev_positive"], TARGETS,
+        self.assertIsNone(sv.simulate_variant(gartley(), self.kl, V["pre_ev_positive"], TARGETS,
                                               lambda *a: {"score": 90, "p_win": 0.3}))
-        t = sv.simulate_variant(gartley(), self.kl, V["ev_positive"], TARGETS, lambda *a: {"score": 90, "p_win": 0.5})
+        t = sv.simulate_variant(gartley(), self.kl, V["pre_ev_positive"], TARGETS, lambda *a: {"score": 90, "p_win": 0.5})
         self.assertEqual(t.ev, 0.25)
 
 

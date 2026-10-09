@@ -47,6 +47,36 @@ def entry_confluences(setup, entry_index: int, entry_price: float, klines_to_ent
     return merge_confluences(base, extra, replace_types=POST_PROCESSING_TYPES)
 
 
+def pre_entry_confluences(setup, klines_known, interval: str, context: Dict[str, Any],
+                          step: int) -> Optional[Dict[str, Any]]:
+    """Setup czeka na PRZ: tylko konfluencje poziomowe (LEVEL_TYPES), D = bliższa krawędź PRZ,
+    dane do ostatniej świecy w klines_known (zamkniętej przed chwilą oceny)."""
+    near_edge = setup.prz_max if setup.is_bullish else setup.prz_min
+    last = len(klines_known) - 1
+    pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
+    pp['D'] = {'index': last, 'price': near_edge}
+    try:
+        base = ConfluenceDetector.detect(klines_known, pp, setup.is_bullish, last, interval) or {}
+    except Exception as e:
+        logger.debug(f"Konfluencje wstępne setupu {setup.key} nie powiodły się: {e}")
+        base = {'total_score': 0, 'confluences': []}
+    now_ts = int(klines_known[-1]['open_time']) + step   # zamknięcie ostatniej znanej świecy
+    target = {
+        'id': -1, 'interval': interval, 'd_point_timestamp': now_ts,
+        'c_point_timestamp': int(klines_known[setup.points['C'].index]['open_time']),
+        'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
+                           'points': {'D': {'price': near_edge, 'open_time': now_ts}},
+                           'fibonacci_levels': {}},
+    }
+    try:
+        extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
+    except Exception as e:
+        logger.debug(f"Post-processing wstępny setupu {setup.key} nie powiódł się: {e}")
+        extra = []
+    levels = [c for c in base.get('confluences', []) if c.get('type') in LEVEL_TYPES]
+    return merge_confluences({'confluences': levels}, extra, replace_types=POST_PROCESSING_TYPES)
+
+
 class SetupTrackingService:
     def __init__(self, db, klines: KlinesSource):
         self.db = db
@@ -93,31 +123,7 @@ class SetupTrackingService:
                                      context)
 
         def pre_confluences_fn(setup, all_klines):
-            # Setup czeka na PRZ: tylko konfluencje poziomowe, D = bliższa krawędź PRZ, dane do teraz.
-            near_edge = setup.prz_max if setup.is_bullish else setup.prz_min
-            last = len(all_klines) - 1
-            pp = {n: {'index': p.index, 'price': p.price} for n, p in setup.points.items()}
-            pp['D'] = {'index': last, 'price': near_edge}
-            try:
-                base = ConfluenceDetector.detect(all_klines, pp, setup.is_bullish, last, interval) or {}
-            except Exception as e:
-                logger.debug(f"Konfluencje wstępne setupu {setup.key} nie powiodły się: {e}")
-                base = {'total_score': 0, 'confluences': []}
-            now_ts = int(all_klines[-1]['open_time']) + step   # zamknięcie ostatniej świecy
-            target = {
-                'id': -1, 'interval': interval, 'd_point_timestamp': now_ts,
-                'c_point_timestamp': int(all_klines[setup.points['C'].index]['open_time']),
-                'ta_object_json': {'is_bullish': setup.is_bullish, 'pattern_type': setup.pattern,
-                                   'points': {'D': {'price': near_edge, 'open_time': now_ts}},
-                                   'fibonacci_levels': {}},
-            }
-            try:
-                extra = post_processing_entries(target, interval, context['patterns'], context['klines'])
-            except Exception as e:
-                logger.debug(f"Post-processing wstępny setupu {setup.key} nie powiódł się: {e}")
-                extra = []
-            levels = [c for c in base.get('confluences', []) if c.get('type') in LEVEL_TYPES]
-            return merge_confluences({'confluences': levels}, extra, replace_types=POST_PROCESSING_TYPES)
+            return pre_entry_confluences(setup, all_klines, interval, context, step)
 
         rows = harmonic_setups.evaluate(
             klines, asset_id, interval, source, skip_keys=final_keys,
