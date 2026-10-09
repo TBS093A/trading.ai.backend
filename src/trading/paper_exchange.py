@@ -36,8 +36,12 @@ def match_limit_entry(candles: List[Dict], direction: str, price: float) -> Opti
 
 
 def match_exit(candles: List[Dict], direction: str, sl: float, tp: float, entry_time: int,
-               slippage_pct: float = 0.0) -> Optional[Dict]:
-    """Pierwsze wyjście po wejściu: {"reason": "sl"|"tp", "fill": Fill} albo None (pozycja otwarta)."""
+               slippage_pct: float = 0.0, entered_at_open: bool = False) -> Optional[Dict]:
+    """Pierwsze wyjście po wejściu: {"reason": "sl"|"tp", "fill": Fill} albo None (pozycja otwarta).
+
+    entered_at_open: wejście na otwarciu świecy entry_time (tryb "confirm" - rynek po zamknięciu poprzedniej),
+    więc TP w tej świecy też się liczy; przy limicie dotkniętym w trakcie świecy - tylko SL.
+    """
     slip = slippage_pct / 100.0
     for i, k in enumerate(candles):
         t = int(k["open_time"])
@@ -47,12 +51,12 @@ def match_exit(candles: List[Dict], direction: str, sl: float, tp: float, entry_
         if direction == "long":
             if l <= sl:
                 return {"reason": "sl", "fill": Fill(min(o, sl) * (1 - slip), t, i)}
-            if t > entry_time and h >= tp:
+            if (t > entry_time or entered_at_open) and h >= tp:
                 return {"reason": "tp", "fill": Fill(max(o, tp) if o > tp else tp, t, i)}
         else:
             if h >= sl:
                 return {"reason": "sl", "fill": Fill(max(o, sl) * (1 + slip), t, i)}
-            if t > entry_time and l <= tp:
+            if (t > entry_time or entered_at_open) and l <= tp:
                 return {"reason": "tp", "fill": Fill(min(o, tp) if o < tp else tp, t, i)}
     return None
 

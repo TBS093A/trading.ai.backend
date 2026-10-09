@@ -99,6 +99,7 @@ class TestPaperExchange(unittest.TestCase):
         self.assertAlmostEqual(slip, 90 * 0.999)
         self.assertEqual(px.match_exit(c, "short", 112.5, 95, 0)["reason"], "tp")
         self.assertIsNone(px.match_exit(c[:1], "long", 90, 110, 0))
+        self.assertEqual(px.match_exit(c[:1], "long", 90, 110, 0, entered_at_open=True)["reason"], "tp")
 
     def test_pnl_and_fee(self):
         self.assertEqual(px.pnl("long", 100, 110, 2), 20)
@@ -209,8 +210,9 @@ class FakeSetups:
     def __init__(self, rows):
         self.rows = {r["id"]: r for r in rows}
 
-    async def list(self, asset_id, interval, version, status=None, limit=200):
-        return [dict(r) for r in self.rows.values() if r["status"] == status and r["asset_id"] == asset_id]
+    async def list(self, asset_id, interval, version, status=None, limit=200, statuses=None):
+        wanted = set(statuses) if statuses else {status}
+        return [dict(r) for r in self.rows.values() if r["status"] in wanted and r["asset_id"] == asset_id]
 
     async def get_by_id(self, i):
         return dict(self.rows[i]) if i in self.rows else None
@@ -290,6 +292,52 @@ class TestEngine(unittest.TestCase):
         self.assertTrue(table.accounts[1]["kill_switch"])
         self.assertIn("kill_switch", [e[0] for e in table.events_])
 
+    def test_confirm_mode_enters_after_the_reversal_candle_close(self):
+        # setup na świecach: X..C w świecach 0..3, powstał w świecy 10, dotknięcie PRZ w 11, odwrócenie w 12
+        row = waiting_setup(created=10 * H, status="open")
+        row["entry_time"] = 11 * H
+        row["points_json"] = {n: {"time": i * H, "price": GARTLEY[n]["price"]} for i, n in enumerate("XABC")}
+        engine, table, _ = make_engine([row])
+        engine.entry_strength_fn = lambda setup, j, entry, kl: {"score": 85, "p_win": 0.5}
+        table.accounts[1]["entry_mode"] = "confirm"
+        klines = flat(11) + [k(150, 151, 119, 120, 11 * H), k(120, 121.5, 116, 121, 12 * H)]
+        self.run_pair(engine, klines)
+        sig = next(iter(table.signals.values()))
+        self.assertEqual(sig["status"], "entered")
+        pos = next(iter(table.positions_.values()))
+        self.assertEqual((pos["entry_price"], pos["opened_time"]), (121.0, 13 * H))   # zamknięcie 12 = otwarcie 13
+        self.assertAlmostEqual(pos["sl"], 110.0)                                     # reguły dalej niż 116
+        entry = next(o for o in table.orders.values() if o["purpose"] == "entry")
+        self.assertEqual((entry["order_type"], entry["price"], entry["status"]), ("market", None, "filled"))
+        self.run_pair(engine, klines + [k(121, 141, 120, 140, 13 * H)])
+        self.assertEqual(table.signals[sig["id"]]["status"], "closed")
+
+    def test_confirm_mode_needs_a_reversal_and_full_strength(self):
+        row = waiting_setup(created=10 * H, status="open")
+        row["entry_time"] = 11 * H
+        row["points_json"] = {n: {"time": i * H, "price": GARTLEY[n]["price"]} for i, n in enumerate("XABC")}
+        engine, table, _ = make_engine([row])
+        table.accounts[1]["entry_mode"] = "confirm"
+        engine.entry_strength_fn = lambda *a: {"score": 85, "p_win": 0.5}
+        no_reversal = flat(11) + [k(150, 151, 119, 120, 11 * H), k(120, 120.5, 117, 118, 12 * H)]
+        self.run_pair(engine, no_reversal)
+        self.assertEqual(table.signals, {})
+        engine.entry_strength_fn = lambda *a: {"score": 50, "p_win": 0.3}          # siła pełna poniżej progu
+        self.run_pair(engine, flat(11) + [k(150, 151, 119, 120, 11 * H), k(120, 121.5, 116, 121, 12 * H)])
+        self.assertEqual(table.signals, {})
+
+    def test_account_filters_limit_patterns_and_direction(self):
+        engine, table, _ = make_engine([waiting_setup()])
+        table.accounts[1]["filters_json"] = {"patterns": ["bat"]}
+        self.run_pair(engine, flat(11))
+        self.assertEqual(table.signals, {})
+        table.accounts[1]["filters_json"] = {"patterns": ["gartley"], "direction": "short"}
+        self.run_pair(engine, flat(11))
+        self.assertEqual(table.signals, {})
+        table.accounts[1]["filters_json"] = {"patterns": ["gartley"], "direction": "long", "intervals": ["1h"]}
+        self.run_pair(engine, flat(11))
+        self.assertEqual(len(table.signals), 1)
+
     def test_tables_are_known_to_the_janitor(self):
         names = DatabasePostgreSQLFactory.registered_table_names()
         for t in ("trading_accounts", "trading_signals", "trading_orders", "trading_positions", "trading_events"):
@@ -315,6 +363,9 @@ class TestApi(unittest.TestCase):
         factory = mock.MagicMock()
         factory.get_trading_table.return_value = self.table
         factory.get_harmonic_variant_reports_table.return_value = self.reports
+        factory.get_assets_table.return_value.get_by_id = mock.AsyncMock(return_value={"id": 3})
+        factory.get_tracked_assets_table.return_value.list_with_assets = mock.AsyncMock(return_value=[
+            {"asset_id": 1, "asset": "BTC", "quote": "USDT", "setup_intervals": ["4h", "1h"]}])
         p = mock.patch.object(trading_api, "get_db", mock.AsyncMock(
             return_value=mock.MagicMock(get_factory=mock.MagicMock(return_value=factory))))
         p.start()
@@ -327,7 +378,9 @@ class TestApi(unittest.TestCase):
 
     def test_fields_and_presets(self):
         body = self.client.get("/trading/risk/fields").json()
-        self.assertEqual([p["key"] for p in body["presets"]], ["conservative", "balanced", "aggressive"])
+        self.assertEqual([p["key"] for p in body["presets"]], ["conservative", "balanced", "confirm_strong", "aggressive"])
+        self.assertEqual(body["entry_modes"], ["touch", "confirm"])
+        self.assertTrue(all(o["description"] for o in body["entry_mode_options"]))
 
     def test_create_account_from_preset_with_override(self):
         r = self.client.post("/trading/accounts", json={"name": "paper-1", "preset": "conservative",
@@ -338,6 +391,32 @@ class TestApi(unittest.TestCase):
         self.assertEqual(self.client.post("/trading/accounts", json={"name": "x", "exchange": "binance"}).status_code, 422)
         self.assertEqual(self.client.post("/trading/accounts", json={"name": "x", "risk": {"risk_per_trade_pct": 50}}
                                           ).status_code, 422)
+
+    def test_patch_filters_and_entry_mode_are_validated(self):
+        self.table.get_account = mock.AsyncMock(return_value={
+            "id": 1, "name": "a", "exchange": "paper", "starting_equity": 1.0, "cash": 1.0, "peak_equity": 1.0,
+            "entry_mode": "touch", "risk_json": {}, "filters_json": {}, "kill_switch": False})
+        self.table.update_account = mock.AsyncMock(side_effect=lambda i, **f: {**{
+            "id": 1, "name": "a", "exchange": "paper", "starting_equity": 1.0, "cash": 1.0, "peak_equity": 1.0,
+            "entry_mode": "touch", "risk_json": {}, "filters_json": {}, "kill_switch": False}, **f})
+        r = self.client.patch("/trading/accounts/1", json={"entry_mode": "confirm",
+                                                           "filters": {"intervals": ["4h", "1h", "4h"],
+                                                                       "patterns": ["gartley"], "direction": "long",
+                                                                       "asset_ids": [3, 3]}})
+        self.assertEqual(r.status_code, 200)
+        kw = self.table.update_account.await_args.kwargs
+        self.assertEqual(kw["entry_mode"], "confirm")
+        self.assertEqual(kw["filters_json"], {"asset_ids": [3], "intervals": ["4h", "1h"], "patterns": ["gartley"],
+                                              "direction": "long"})
+        for bad in ({"entry_mode": "yolo"}, {"filters": {"intervals": ["7x"]}}, {"filters": {"patterns": ["moon"]}},
+                    {"filters": {"direction": "up"}}, {"filters": {"leverage": 5}}):
+            self.assertEqual(self.client.patch("/trading/accounts/1", json=bad).status_code, 422, bad)
+
+    def test_filter_options(self):
+        body = self.client.get("/trading/filter-options").json()
+        self.assertIn("gartley", body["patterns"])
+        self.assertEqual(body["intervals"], ["1h", "4h"])
+        self.assertEqual(body["assets"][0]["symbol"], "BTC/USDT")
 
     def test_preview_on_report_trades(self):
         body = self.client.post("/trading/risk/preview", json={"preset": "balanced", "simulations": 20,
