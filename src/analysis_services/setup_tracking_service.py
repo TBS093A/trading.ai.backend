@@ -8,7 +8,8 @@ from .. import harmonic_scan, harmonic_setups
 from ..utils.harmonic_patterns import ConfluenceDetector, merge_confluences
 from ..utils.harmonic_patterns.fib_confluences import INTERVAL_HIERARCHY
 from .confluence_postprocessor import HIGHER_TF_KLINES_WINDOW, POST_PROCESSING_TYPES, post_processing_entries
-from .strength_service import refresh_cached_model, setup_strength_or_none
+from .strength_service import cached_model, refresh_cached_model, setup_strength_or_none
+from ..pattern_strength import setup_features
 from ..pattern_strength import LEVEL_TYPES
 from .klines_source import KlinesSource
 
@@ -147,7 +148,22 @@ class SetupTrackingService:
             # Konta paper: sygnały z setupów, wypełnienia i wyjścia na tych samych świecach (src/trading).
             try:
                 from ..trading.engine import TradingEngine
-                await TradingEngine(self.db, strength_fn=setup_strength_or_none).process_pair(
+
+                def entry_strength_fn(setup, j, entry, kl):
+                    # Tryb "confirm": siła pełna na zamkniętej świecy potwierdzenia (ta sama co w raporcie).
+                    model = cached_model("entry")
+                    if model is None:
+                        return None
+                    row = {"pattern_type": setup.pattern, "is_bullish": setup.is_bullish, "interval": interval,
+                           "spacing": setup.spacing,
+                           "points_json": {n: {"time": int(kl[p.index]["open_time"]), "price": p.price}
+                                           for n, p in setup.points.items()},
+                           "entry_time": int(kl[j]["open_time"]), "entry_price": entry,
+                           "confluences_json": entry_confluences(setup, j, entry, kl[: j + 1], interval, context)}
+                    return model.score(setup_features(row, "entry"))
+
+                await TradingEngine(self.db, strength_fn=setup_strength_or_none,
+                                    entry_strength_fn=entry_strength_fn).process_pair(
                     asset_id, interval, resolved.symbol, klines)
             except Exception as e:
                 logger.error(f"Trading po śledzeniu {resolved.symbol} [{interval}] nie powiódł się: {e}", exc_info=True)

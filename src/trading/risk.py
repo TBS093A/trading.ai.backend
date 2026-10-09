@@ -85,6 +85,11 @@ RISK_PRESETS: List[Dict[str, Any]] = [
      "description": "Domyślny dla paper: 0,5% na transakcję, do 5 pozycji, filtr siły 60. Kompromis między "
                     "liczbą transakcji a stabilnością.",
      "settings": RiskSettings().as_dict()},
+    {"key": "confirm_strong", "label": "Potwierdzenie + siła 80",
+     "description": "Do trybu wejścia „po potwierdzeniu”: najlepszy wariant raportu #3 poza próbką "
+                    "(+0,05 R na 900 transakcjach, przedział ufności jeszcze obejmuje zero). Mało transakcji, "
+                    "0,5% ryzyka, do 5 pozycji.",
+     "settings": RiskSettings(0.5, 5, 1, 2.0, 15.0, 100.0, 80, None).as_dict()},
     {"key": "aggressive", "label": "Agresywny",
      "description": "Do testów na paper: 1% na transakcję, do 10 pozycji, bez filtra siły. Szybciej pokazuje, "
                     "jak strategia zachowuje się przy dużej liczbie transakcji - obsunięcia będą głębokie.",

@@ -4,14 +4,16 @@ REST API Controller - trading z sygnałów setupów (src/trading), dashboard „
 Konta (paper; binance_futures_testnet - Binance USDT-M Futures testnet, saldo startowe z giełdy):
 GET    /trading/accounts                         lista kont z podsumowaniem (kapitał, wynik, otwarte pozycje)
 POST   /trading/accounts                         (admin) nowe konto: nazwa, kapitał, wariant ryzyka albo własne
-PATCH  /trading/accounts/{id}                    (admin) ryzyko, filtry, włącz / wyłącz
+PATCH  /trading/accounts/{id}                    (admin) ryzyko, filtry (assety, interwały, formacje, kierunek),
+                                                 tryb wejścia, włącz / wyłącz
 POST   /trading/accounts/{id}/kill-switch        (admin) włącz / wyłącz wyłącznik awaryjny
 GET    /trading/accounts/{id}/equity             krzywa kapitału (migawki co godzinę)
 GET    /trading/accounts/{id}/signals|positions|orders|events   dzienniki konta
 GET    /trading/accounts/{id}/compare            wynik konta vs backtest tych samych setupów
 GET    /trading/signals/{id}/trace               ścieżka sygnału: setup -> sygnał -> zlecenia -> pozycja -> zdarzenia
 Ryzyko:
-GET    /trading/risk/fields                      pola ustawień z opisem i zakresem + gotowe warianty
+GET    /trading/risk/fields                      pola ustawień z opisem i zakresem + gotowe warianty + tryby wejścia
+GET    /trading/filter-options                   śledzone assety, interwały i formacje do filtrów konta
 POST   /trading/risk/preview                     skutki ustawień na transakcjach z raportu wariantów (+ bootstrap)
 """
 
@@ -24,6 +26,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from .auth import AuthUser, require_admin, require_auth
+from . import harmonic_scan
 from .db.database_facade import DatabaseFacade
 from .db.postgresql.database_postgresql import DatabasePostgreSQL
 from .trading import binance_futures
@@ -37,7 +40,14 @@ PREFIX = "/trading"
 TAGS = ["Trading"]
 
 EXCHANGES = ("paper", "binance_futures_testnet")   # "binance_futures" (live) - po próbie na testnecie
-ENTRY_MODES = ("touch",)          # "confirm" - po wyborze wariantu z raportu Benchmarków
+ENTRY_MODES = ("touch", "confirm")   # dotknięcie PRZ (limit) / świeca odwrócenia w PRZ (rynek po zamknięciu)
+ENTRY_MODE_DESCRIPTIONS = {
+    "touch": "Zlecenie limit na bliższej krawędzi PRZ, wystawiane, gdy setup powstaje (siła wstępna). "
+             "Raport #3: −0,05..−0,08 R z filtrem siły - bez przewagi.",
+    "confirm": "Czeka na świecę odwrócenia w PRZ (do 3 świec po dotknięciu) i wchodzi po jej zamknięciu, SL za "
+               "ekstremum. Siła pełna na zamkniętej świecy. Raport #3: siła ≥ 80 → +0,05 R (900 transakcji).",
+}
+DIRECTIONS = ("long", "short")
 
 db_instance: Optional[DatabasePostgreSQL] = None
 db_lock: asyncio.Lock = asyncio.Lock()
@@ -85,7 +95,63 @@ async def _summary(table, account: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/risk/fields")
 async def get_risk_fields():
     return {"fields": risk_mod.RISK_FIELDS, "presets": risk_mod.RISK_PRESETS,
-            "defaults": risk_mod.RiskSettings().as_dict(), "exchanges": list(EXCHANGES), "entry_modes": list(ENTRY_MODES)}
+            "defaults": risk_mod.RiskSettings().as_dict(), "exchanges": list(EXCHANGES),
+            "entry_modes": list(ENTRY_MODES),
+            "entry_mode_options": [{"key": k, "description": ENTRY_MODE_DESCRIPTIONS[k]} for k in ENTRY_MODES]}
+
+
+def pattern_names() -> List[str]:
+    """Formacje XABCD, które generuje silnik setupów (te same definicje co ręczna walidacja)."""
+    from pyharmonics import constants
+    from .harmonic_validation import DEFAULT_FIB_TOLERANCE, _definitions
+
+    return sorted(_definitions(DEFAULT_FIB_TOLERANCE)[constants.XAB])
+
+
+async def validate_filters(db, filters: Dict[str, Any]) -> Dict[str, Any]:
+    """Filtry konta: asset_ids (istniejące assety), intervals, patterns, direction. Puste listy = bez filtra."""
+    allowed = {"asset_ids", "intervals", "patterns", "direction"}
+    unknown = set(filters) - allowed
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"nieznane filtry: {sorted(unknown)}")
+    out: Dict[str, Any] = {}
+    if filters.get("asset_ids"):
+        ids = sorted({int(i) for i in filters["asset_ids"]})
+        assets = db.get_factory().get_assets_table()
+        missing = [i for i in ids if not await assets.get_by_id(i)]
+        if missing:
+            raise HTTPException(status_code=422, detail=f"nie ma assetów: {missing}")
+        out["asset_ids"] = ids
+    if filters.get("intervals"):
+        for iv in filters["intervals"]:
+            try:
+                harmonic_scan.interval_ms(iv)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+        out["intervals"] = list(dict.fromkeys(filters["intervals"]))
+    if filters.get("patterns"):
+        known = set(pattern_names())
+        bad = [p for p in filters["patterns"] if p not in known]
+        if bad:
+            raise HTTPException(status_code=422, detail=f"nieznane formacje: {bad}")
+        out["patterns"] = list(dict.fromkeys(filters["patterns"]))
+    if filters.get("direction"):
+        if filters["direction"] not in DIRECTIONS:
+            raise HTTPException(status_code=422, detail=f"kierunek: {DIRECTIONS}")
+        out["direction"] = filters["direction"]
+    return out
+
+
+@router.get("/filter-options")
+async def get_filter_options():
+    """Wartości do filtrów konta: śledzone assety (tylko na nich powstają setupy), ich interwały, formacje."""
+    db = await get_db()
+    tracked = await db.get_factory().get_tracked_assets_table().list_with_assets()
+    intervals = sorted({iv for t in tracked for iv in (t.get("setup_intervals") or [])},
+                       key=lambda iv: harmonic_scan.interval_ms(iv))
+    return {"assets": [{"asset_id": t["asset_id"], "symbol": f"{t['asset']}/{t['quote']}",
+                        "intervals": t.get("setup_intervals") or []} for t in tracked],
+            "intervals": intervals, "patterns": pattern_names(), "directions": list(DIRECTIONS)}
 
 
 class RiskPreviewRequest(BaseModel):
@@ -150,6 +216,7 @@ async def create_account(request: AccountIn = Body(...), current_user: AuthUser 
     if request.entry_mode not in ENTRY_MODES:
         raise HTTPException(status_code=422, detail=f"tryb wejścia: {ENTRY_MODES}")
     settings = _settings_from(request.preset, request.risk)
+    filters = await validate_filters(await get_db(), request.filters)
     starting_equity = request.starting_equity
     if request.exchange in binance_futures.LIVE_EXCHANGES:
         if not binance_futures.credentials_configured(request.exchange):
@@ -164,18 +231,19 @@ async def create_account(request: AccountIn = Body(...), current_user: AuthUser 
     table = await _table()
     try:
         account = await table.create_account(request.name, request.exchange, starting_equity,
-                                             request.entry_mode, settings.as_dict(), request.filters)
+                                             request.entry_mode, settings.as_dict(), filters)
     except Exception as e:
         raise HTTPException(status_code=409, detail=f"nie udało się utworzyć konta: {e}")
     await table.log_event(account["id"], "account_created",
                           f"Konto {request.name} ({request.exchange}), kapitał {starting_equity}",
-                          data={"risk": settings.as_dict(), "filters": request.filters})
+                          data={"risk": settings.as_dict(), "filters": filters})
     return await _summary(table, account)
 
 
 class AccountPatch(BaseModel):
     name: Optional[str] = None
     enabled: Optional[bool] = None
+    entry_mode: Optional[str] = None
     preset: Optional[str] = None
     risk: Optional[Dict[str, Any]] = None
     filters: Optional[Dict[str, Any]] = None
@@ -194,8 +262,13 @@ async def patch_account(account_id: int = Path(..., ge=1), request: AccountPatch
     if request.preset is not None or request.risk is not None:
         base = account["risk_json"] if request.preset is None else {}
         fields["risk_json"] = _settings_from(request.preset, {**base, **(request.risk or {})}).as_dict()
+    if request.entry_mode is not None:
+        if request.entry_mode not in ENTRY_MODES:
+            raise HTTPException(status_code=422, detail=f"tryb wejścia: {ENTRY_MODES}")
+        fields["entry_mode"] = request.entry_mode
     if request.filters is not None:
-        fields["filters_json"] = request.filters
+        # Zmiana filtrów działa od następnego przebiegu - otwarte sygnały i pozycje prowadzone są dalej.
+        fields["filters_json"] = await validate_filters(await get_db(), request.filters)
     updated = await table.update_account(account_id, **fields)
     await table.log_event(account_id, "account_updated", f"Zmienione: {', '.join(fields) or 'nic'}",
                           data={k: v for k, v in fields.items()})
