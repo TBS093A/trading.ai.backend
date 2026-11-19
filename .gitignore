@@ -23,3 +23,5 @@ image.tar
 *.log
 *.json
 *.png
+# agent factory (agent-core) run reports and audit logs
+.agent-runs/

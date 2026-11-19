@@ -1,0 +1,81 @@
+apiVersion: agent-core/v1
+name: tab-implementer
+description: Implements one GitHub issue in a worktree of trading.ai.backend. Edits files; cannot run code, push or reach the network.
+
+model:
+  id: claude-opus-5-5
+  fallback: claude-sonnet-5-5
+  effort: high
+
+role:
+  system_prompt_file: prompt.md
+  extend_claude_code_preset: true     # keep Claude Code's coding behaviour, add project rules on top
+
+builtin_tools: [Read, Grep, Glob, Edit, Write, Bash]
+
+policy:
+  default: deny
+  rules:
+    # --- read the repo ---------------------------------------------------------
+    - { tool: Read, decision: allow }
+    - { tool: Grep, decision: allow }
+    - { tool: Glob, decision: allow }
+
+    # --- write only inside the worktree ({cwd} = the worktree path) ------------
+    - tool: Edit
+      when: { file_path: '^{cwd}/' }
+      decision: allow
+    - tool: Write
+      when: { file_path: '^{cwd}/' }
+      decision: allow
+
+    # --- the only shell commands: inspect git state, lint, syntax-check --------
+    # None of these execute project code. Tests are run by the harness, outside the agent.
+    - tool: Bash
+      when: { command: '^git (status|diff|log|show)\b[^;&|`$<>\n\\]*$' }
+      decision: allow
+    - tool: Bash
+      when: { command: '^ruff check\b[^;&|`$<>\n\\]*$' }
+      decision: allow
+    - tool: Bash
+      when: { command: '^python3? -m py_compile [^;&|`$<>\n\\]*$' }
+      decision: allow
+
+    # --- hard denies ----------------------------------------------------------
+    - tool: "*"
+      when: { "*": '\.\./|/\.git/|"\.git"|\.git$' }
+      decision: deny
+      reason: no path traversal and no access to git internals (credentials live there)
+    - tool: "*"
+      when: { "*": '(^|[/"])(\.env[^/"]*|config-env\.yml|[^/"]*\.session(-journal)?|user_session[^/"]*|local_storage)([/"]|$)' }
+      decision: deny
+      reason: secrets, session files and local data are off limits
+    - tool: Edit
+      when: { file_path: '/(\.github|\.agent|k8s\.manifests)/|/(Jenkinsfile[^/]*|ci-gate\.py|gitea\.py|[^/]*-pr-comment\.py|tox\.ini|Dockerfile|docker-entrypoint\.sh|docker\.compose\.sh|set\.envs\.sh|cosign\.pub)$' }
+      decision: deny
+      reason: protected path (CI, deploy, dependencies); ask a human in the summary instead
+    - tool: Write
+      when: { file_path: '/(\.github|\.agent|k8s\.manifests)/|/(Jenkinsfile[^/]*|ci-gate\.py|gitea\.py|[^/]*-pr-comment\.py|tox\.ini|Dockerfile|docker-entrypoint\.sh|docker\.compose\.sh|set\.envs\.sh|cosign\.pub)$' }
+      decision: deny
+      reason: protected path (CI, deploy, dependencies); ask a human in the summary instead
+
+approval:
+  mode: deny          # unattended: nothing waits for a human mid-run
+
+limits:
+  max_turns: 80
+  max_budget_usd: 5.0  # the factory hands each run min(this, what is left of factory budget_usd)
+  timeout_s: 2400
+
+guardrails:
+  redact_secrets: true
+  detect_injection: true
+  block_secret_exfiltration: true
+
+sandbox:
+  # The only allowed commands do not execute project code; the CI runner VM is ephemeral.
+  # Turn on where bubblewrap works (self-hosted runner) for an extra layer.
+  enabled: false
+
+audit:
+  path: ../../.agent-runs/audit/{agent}.jsonl

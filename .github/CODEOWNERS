@@ -1,0 +1,12 @@
+# Changes here need the owner's review once "Require review from Code Owners" is on for master.
+# The agent factory refuses to touch these paths anyway (.agent/factory.yaml gates.protected_paths).
+/.github/            @TBS093A
+/.agent/             @TBS093A
+/Jenkinsfile*        @TBS093A
+/ci-gate.py          @TBS093A
+/gitea.py            @TBS093A
+/*-pr-comment.py     @TBS093A
+/tox.ini             @TBS093A
+/Dockerfile          @TBS093A
+/k8s.manifests/      @TBS093A
+/cosign.pub          @TBS093A
