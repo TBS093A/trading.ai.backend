@@ -8,7 +8,7 @@
 #   AGENT_GH_TOKEN           optional fine-grained PAT for THIS repo: contents rw, pull requests rw,
 #                            issues rw. Without it the default GITHUB_TOKEN is used, and GitHub does
 #                            not start other workflows (the pre-merge gate) for PRs it opens.
-#   AGENT_CORE_READ_TOKEN    only while TBS093A/agent.core is private: fine-grained PAT, contents read.
+#   AGENT_CORE_DEPLOY_KEY    SSH private key of a read-only deploy key on TBS093A/agent.core.
 name: agent-factory
 
 on:
@@ -49,11 +49,15 @@ jobs:
 
       - name: Install agent-core, tox, ruff
         env:
-          READ_TOKEN: ${{ secrets.AGENT_CORE_READ_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.AGENT_CORE_DEPLOY_KEY }}
         run: |
-          url="https://github.com/TBS093A/agent.core"
-          if [ -n "$READ_TOKEN" ]; then url="https://x-access-token:${READ_TOKEN}@github.com/TBS093A/agent.core"; fi
-          pip install --quiet "agent-core @ git+${url}@${AGENT_CORE_REF}" tox ruff==0.16.10
+          set -euo pipefail
+          # The key lives only in this step and is deleted before the agent runs.
+          key="$RUNNER_TEMP/agent-core-key"
+          (umask 077; printf '%s\n' "$DEPLOY_KEY" > "$key")
+          trap 'rm -f "$key"' EXIT
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            pip install --quiet "agent-core @ git+ssh://git@github.com/TBS093A/agent.core@${AGENT_CORE_REF}" tox ruff==0.16.10
 
       - name: Run factory
         env:
