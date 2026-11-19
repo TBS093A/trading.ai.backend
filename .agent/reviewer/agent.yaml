@@ -1,0 +1,45 @@
+apiVersion: agent-core/v1
+name: tab-reviewer
+description: Reviews the implementer's diff for trading.ai.backend. Read-only, returns a structured verdict.
+
+model:
+  id: claude-opus-5-5
+  fallback: claude-sonnet-5-5
+  effort: medium
+
+role:
+  system_prompt_file: prompt.md
+
+builtin_tools: [Read, Grep, Glob, Bash]
+
+policy:
+  default: deny
+  rules:
+    - { tool: Read, decision: allow }
+    - { tool: Grep, decision: allow }
+    - { tool: Glob, decision: allow }
+    - tool: Bash
+      when: { command: '^git (status|diff|log|show)\b[^;&|`$<>\n\\]*$' }
+      decision: allow
+    - tool: "*"
+      when: { "*": '\.\./|/\.git/|"\.git"|\.git$' }
+      decision: deny
+      reason: no path traversal and no access to git internals
+    - tool: "*"
+      when: { "*": '(^|[/"])(\.env[^/"]*|config-env\.yml|[^/"]*\.session(-journal)?|user_session[^/"]*|local_storage)([/"]|$)' }
+      decision: deny
+      reason: secrets, session files and local data are off limits
+
+approval:
+  mode: deny
+
+limits:
+  max_turns: 40
+  max_budget_usd: 1.5
+  timeout_s: 900
+
+sandbox:
+  enabled: false
+
+audit:
+  path: ../../.agent-runs/audit/{agent}.jsonl

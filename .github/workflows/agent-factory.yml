@@ -1,0 +1,79 @@
+# Issue -> draft PR, via agent-core (.agent/factory.yaml).
+#
+# Trigger: add the `agent` label to an issue (only people with triage/write access can label,
+# and the harness also checks .agent/factory.yaml trusted_actors), or run it manually.
+#
+# Secrets:
+#   ANTHROPIC_API_KEY        model access (or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`)
+#   AGENT_GH_TOKEN           optional fine-grained PAT for THIS repo: contents rw, pull requests rw,
+#                            issues rw. Without it the default GITHUB_TOKEN is used, and GitHub does
+#                            not start other workflows (pr-checks) for PRs it opens.
+#   AGENT_CORE_READ_TOKEN    only while TBS093A/agent.core is private: fine-grained PAT, contents read.
+name: agent-factory
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+
+concurrency:
+  group: agent-factory-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  AGENT_CORE_REF: 9b4aa6855761d457d99ea8053b7210915d1c31b0   # pin to a commit, bump deliberately
+
+jobs:
+  factory:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'agent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false   # no token in .git/config for the agent to find
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"       # tox.ini basepython
+
+      - name: Install agent-core, tox, ruff
+        env:
+          READ_TOKEN: ${{ secrets.AGENT_CORE_READ_TOKEN }}
+        run: |
+          url="https://github.com/TBS093A/agent.core"
+          if [ -n "$READ_TOKEN" ]; then url="https://x-access-token:${READ_TOKEN}@github.com/TBS093A/agent.core"; fi
+          pip install --quiet "agent-core @ git+${url}@${AGENT_CORE_REF}" tox ruff==0.16.10
+
+      - name: Run factory
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN || github.token }}
+          # Values from the event go through env, never straight into the script (injection-safe).
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
+          ACTOR: ${{ github.event.sender.login || github.actor }}
+        run: |
+          gh auth setup-git    # git push authenticates through gh, which reads GH_TOKEN at push time
+          agent-core factory .agent --issue "$ISSUE" --actor "$ACTOR" --report agent-report.json
+
+      - name: Upload report and audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-run-${{ github.run_id }}
+          path: |
+            agent-report.json
+            .agent-runs/audit/
+          retention-days: 30
+          if-no-files-found: ignore

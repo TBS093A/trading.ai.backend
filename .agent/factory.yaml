@@ -1,0 +1,67 @@
+# Software factory for trading.ai.backend (agent-core, https://github.com/TBS093A/agent.core).
+#
+#   issue labelled `agent` by a trusted maintainer
+#     -> fresh git worktree from origin/master (one branch per run)
+#     -> implementer agent (Opus, edits only inside the worktree, cannot run code)
+#     -> harness runs the checks below with a minimal env (no model key, no GitHub token)
+#     -> deterministic gates on the diff (protected paths, test tampering, size, secrets)
+#     -> reviewer agent (read-only, structured verdict)
+#     -> failures go back to the implementer, up to max_rounds
+#     -> commit as bot, push agent/* branch, open a DRAFT PR, comment on the issue
+#   Merging stays human.
+#
+# Run locally without pushing:
+#   agent-core factory .agent --task "Add X" --dry-run --keep-worktree
+apiVersion: agent-core/factory/v1
+repo: TBS093A/trading.ai.backend
+base_branch: master
+remote: origin
+branch_prefix: agent/
+
+implementer: implementer
+reviewer: reviewer
+
+# Only these accounts can start a run, and they also need write access to the repo.
+# The repo is public: anyone can open an issue, so the trigger is the LABEL, not the issue.
+trusted_actors: [TBS093A]
+
+# Same checks as the Gitea/Jenkins pre-merge gate (lint + unit tests), run by the harness.
+verify:
+  - name: lint
+    run: ruff check --no-cache --output-format concise --select E9,F63,F7,F82 .
+    timeout_s: 120
+  - name: unit-tests
+    run: tox -e unit-tests
+    timeout_s: 1800
+
+max_rounds: 3
+budget_usd: 8.0               # hard cap for the whole run (implementer + reviewer, all rounds)
+
+gates:
+  max_changed_lines: 600
+  tests_glob: ["tests/**"]
+  protected_paths:
+    - ".github/**"            # CI and this factory's trigger
+    - ".agent/**"             # the factory's own config and policies
+    - "Jenkinsfile*"
+    - "ci-gate.py"
+    - "gitea.py"
+    - "*-pr-comment.py"
+    - "tox.ini"               # dependencies and test envs: new deps need a human
+    - "Dockerfile"
+    - "docker-entrypoint.sh"
+    - "docker.compose.sh"
+    - "set.envs.sh"
+    - "k8s.manifests/**"
+    - "cosign.pub"
+    - "*.session"
+    - "*.session-journal"
+
+pr:
+  draft: true
+  labels: [agent]
+  reviewers: []
+
+bot:
+  name: trading-ai-agent[bot]
+  email: trading-ai-agent@users.noreply.github.com

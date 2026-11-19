@@ -1,0 +1,44 @@
+# GitHub-side PR gate (the full Jenkins gate runs on Gitea). Same lint + unit tests as
+# Jenkinsfile.build PRE-MERGE. Make "pr-checks / checks" a required status check on master.
+name: pr-checks
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install --quiet tox ruff==0.16.10
+      - name: Lint (ruff, same selection as Jenkins)
+        run: ruff check --no-cache --output-format concise --select E9,F63,F7,F82 .
+      - name: Unit tests
+        run: tox -e unit-tests
+      - name: Factory policy tests (no tokens)
+        if: hashFiles('.agent/implementer/evals.yaml') != ''
+        env:
+          READ_TOKEN: ${{ secrets.AGENT_CORE_READ_TOKEN }}
+        run: |
+          ref=$(grep -oE 'AGENT_CORE_REF: [0-9a-f]{40}' .github/workflows/agent-factory.yml | cut -d' ' -f2)
+          url="https://github.com/TBS093A/agent.core"
+          if [ -n "$READ_TOKEN" ]; then url="https://x-access-token:${READ_TOKEN}@github.com/TBS093A/agent.core"; fi
+          if pip install --quiet "agent-core @ git+${url}@${ref}"; then
+            agent-core eval .agent/implementer .agent/implementer/evals.yaml
+          else
+            echo "::warning::agent-core not installable (private repo without AGENT_CORE_READ_TOKEN?); skipping policy tests"
+          fi
