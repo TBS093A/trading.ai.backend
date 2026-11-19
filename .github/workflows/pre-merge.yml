@@ -1,0 +1,302 @@
+# PRE-MERGE DevSecOps gate on GitHub: a port of the PRE-MERGE stages of Jenkinsfile.build
+# (which runs on Gitea). Same tools, versions, thresholds and verdict script (ci-gate.py):
+#
+#   secret scan (gitleaks + tracked *.session) | lint (ruff) | unit tests + coverage threshold
+#   | SAST (Semgrep) | SCA deps (Trivy fs) | image build + scan (Trivy image) | agent factory policy
+#   -> "pre-merge gate" job: merges the verdicts, writes the table to the run summary and to a
+#      sticky PR comment, fails if any gate failed.
+#
+# Make "pre-merge / pre-merge gate" a required status check on master (branch protection),
+# otherwise a red run is advisory only.
+#
+# Trust model: on pull_request, GitHub runs the workflow file from the PR itself, so a PR can
+# change its own checks. .github/ and ci-gate.py are in CODEOWNERS (require code owner review),
+# and the agent factory refuses to touch them. Fork PRs get a read-only token and no secrets.
+# Post-merge (push, SBOM, cosign, deploy) stays on Jenkins.
+name: pre-merge
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-merge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MIN_COVERAGE: "25"            # Jenkins MIN_COVERAGE: raise as unit tests are added, never lower
+  FAIL_SEVERITIES: CRITICAL     # Jenkins FAIL_ON_HIGH=false; use CRITICAL,HIGH once the exchange-SDK pins are lifted
+  RUFF_VERSION: "0.16.10"
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  TRIVY_IMAGE: aquasec/trivy:0.75.0
+  SEMGREP_IMAGE: semgrep/semgrep
+
+jobs:
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: gitleaks on tracked files + tracked Telethon sessions
+        run: |
+          set -euo pipefail
+          # Exactly the tracked files of the commit under test, not the workspace.
+          mkdir .gitleaks-src
+          git archive HEAD | tar -x -C .gitleaks-src
+          rc=0
+          docker run --rm -v "$PWD:/src" "$GITLEAKS_IMAGE" \
+            dir /src/.gitleaks-src --redact --no-banner \
+            --report-format json --report-path /src/gitleaks-report.json || rc=$?
+          rm -rf .gitleaks-src
+          leaks=$(python3 -c "import json; print(len(json.load(open('gitleaks-report.json'))))" 2>/dev/null || echo "?")
+          detail="$leaks leaks in tracked files"
+          # *.session files are binary SQLite with a live Telegram auth_key; gitleaks skips binaries.
+          sessions=$(git ls-files -- '*.session' | tr '\n' ' ')
+          if [ -n "$sessions" ]; then
+            echo "Tracked Telethon session files: $sessions"
+            rc=1
+            detail="$detail; tracked *.session files: $sessions"
+          fi
+          python3 ci-gate.py result secrets "$rc" "$detail"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-secrets
+          path: |
+            gate-results.json
+            gitleaks-report.json
+          if-no-files-found: ignore
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: ruff (fatal-error rule set, same as Jenkins)
+        run: |
+          set -euo pipefail
+          pip install --quiet "ruff==$RUFF_VERSION"
+          rc=0
+          ruff check --no-cache --output-format github --select E9,F63,F7,F82 . || rc=$?
+          python3 ci-gate.py result lint "$rc" "ruff E9,F63,F7,F82"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: gate-lint, path: gate-results.json, if-no-files-found: ignore }
+
+  tests:
+    name: unit tests & coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/cache@v4
+        with:
+          path: .tox
+          key: tox-unit-${{ runner.os }}-py313-${{ hashFiles('tox.ini') }}
+      - name: tox -e unit-tests + coverage threshold
+        run: |
+          set -euo pipefail
+          pip install --quiet tox
+          rc=0
+          tox -e unit-tests || rc=$?
+          # Resolved dependency list for Trivy fs: tox.ini is not a format Trivy reads, and Trivy
+          # only recognises the exact name requirements.txt, hence the subdirectory.
+          if [ "$rc" -eq 0 ]; then
+            mkdir -p sca-deps
+            .tox/unit-tests/bin/python -m pip freeze > sca-deps/requirements.txt
+          fi
+          gate=0
+          python3 ci-gate.py result tests "$rc" "tox -e unit-tests" || gate=1
+          python3 ci-gate.py coverage coverage.xml --min "$MIN_COVERAGE" || gate=1
+          exit "$gate"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-tests
+          path: |
+            gate-results.json
+            coverage.xml
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: sca-deps, path: sca-deps/requirements.txt, if-no-files-found: ignore }
+
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: semgrep --config=auto, fail on ERROR
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/src" "$SEMGREP_IMAGE" \
+            semgrep scan --config=auto --json --output=/src/semgrep-report.json /src
+          python3 ci-gate.py semgrep semgrep-report.json --fail-on ERROR
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-semgrep
+          path: |
+            gate-results.json
+            semgrep-report.json
+          if-no-files-found: ignore
+
+  sca-fs:
+    name: SCA dependencies (Trivy fs)
+    needs: tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: sca-deps, path: sca-deps }
+      - name: trivy fs (HIGH/CRITICAL, fail on FAIL_SEVERITIES with a fix)
+        run: |
+          set -euo pipefail
+          if [ ! -s sca-deps/requirements.txt ]; then
+            # No resolved dependency list = no evidence; never a silent pass.
+            python3 ci-gate.py result sca-fs 1 "no resolved dependency list (unit tests job failed)"
+          fi
+          docker run --rm -v "$PWD:/src" "$TRIVY_IMAGE" fs \
+            --skip-dirs /src/.tox \
+            --format json --output /src/trivy-fs-report.json \
+            --severity HIGH,CRITICAL /src
+          python3 ci-gate.py trivy trivy-fs-report.json --name sca-fs \
+            --fail-on "$FAIL_SEVERITIES" --ignore-unfixed
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-sca-fs
+          path: |
+            gate-results.json
+            trivy-fs-report.json
+          if-no-files-found: ignore
+
+  image:
+    name: image build & scan (Trivy image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: docker build, scan the local tarball (nothing is pushed)
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build -t "trading-ai-backend:$SHA" .
+          docker save -o image.tar "trading-ai-backend:$SHA"
+          docker run --rm -v "$PWD:/out" "$TRIVY_IMAGE" image \
+            --input /out/image.tar \
+            --format json --output /out/trivy-image-report.json \
+            --severity HIGH,CRITICAL
+          rm -f image.tar
+          python3 ci-gate.py trivy trivy-image-report.json --name sca-image \
+            --fail-on "$FAIL_SEVERITIES" --ignore-unfixed
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-image
+          path: |
+            gate-results.json
+            trivy-image-report.json
+          if-no-files-found: ignore
+
+  agent-policy:
+    name: agent factory policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: agent-core policy tests (no tokens)
+        env:
+          READ_TOKEN: ${{ secrets.AGENT_CORE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .agent/implementer/evals.yaml ]; then echo "no factory config"; exit 0; fi
+          ref=$(grep -oE 'AGENT_CORE_REF: [0-9a-f]{40}' .github/workflows/agent-factory.yml | cut -d' ' -f2)
+          url="https://github.com/TBS093A/agent.core"
+          if [ -n "$READ_TOKEN" ]; then url="https://x-access-token:${READ_TOKEN}@github.com/TBS093A/agent.core"; fi
+          if ! pip install --quiet "agent-core @ git+${url}@${ref}"; then
+            echo "::warning::agent-core not installable (private repo without AGENT_CORE_READ_TOKEN?); policy tests skipped"
+            exit 0
+          fi
+          for d in .agent/*/; do agent-core validate "$d"; done
+          agent-core eval .agent/implementer .agent/implementer/evals.yaml
+
+  gate:
+    name: pre-merge gate
+    needs: [secrets, lint, tests, semgrep, sca-fs, image, agent-policy]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false, sparse-checkout: build-pr-comment.py, sparse-checkout-cone-mode: false }
+      - uses: actions/download-artifact@v4
+        with: { pattern: gate-*, path: gates }
+      - name: Merge verdicts and render the table
+        env:
+          CI_MODE: gate
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_RESULT: ${{ contains(needs.*.result, 'failure') && 'FAILURE' || (contains(needs.*.result, 'cancelled') && 'ABORTED' || 'SUCCESS') }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find gates -name gate-results.json)
+          if [ "${#files[@]}" -gt 0 ]; then jq -s 'add' "${files[@]}" > gate-results.json; else echo '{}' > gate-results.json; fi
+          python3 build-pr-comment.py > comment.json
+          jq -r .body comment.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request'
+        continue-on-error: true      # fork PRs get a read-only token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          marker='<!-- pre-merge-gate -->'
+          body="$(jq -r .body comment.json)"$'\n'"$marker"
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+                 -q ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | tail -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
+      - name: Verdict
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then echo "::error::PRE-MERGE gate failed - do not merge"; exit 1; fi
+          done
+          echo "PRE-MERGE gate passed"

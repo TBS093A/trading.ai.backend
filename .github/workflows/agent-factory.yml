@@ -7,7 +7,7 @@
 #   ANTHROPIC_API_KEY        model access (or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`)
 #   AGENT_GH_TOKEN           optional fine-grained PAT for THIS repo: contents rw, pull requests rw,
 #                            issues rw. Without it the default GITHUB_TOKEN is used, and GitHub does
-#                            not start other workflows (pr-checks) for PRs it opens.
+#                            not start other workflows (the pre-merge gate) for PRs it opens.
 #   AGENT_CORE_READ_TOKEN    only while TBS093A/agent.core is private: fine-grained PAT, contents read.
 name: agent-factory
 
